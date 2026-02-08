@@ -10,6 +10,8 @@ A native macOS menu-bar application that syncs tasks between an [Obsidian](https
 
 > Since the app is not notarized, right-click the app and select **Open** on first launch to bypass Gatekeeper.
 
+> **Transparency note:** AI (Claude) was used as a development tool during the creation of this app. The code has been reviewed, tested on real data, and the full source is open for anyone to audit. The app is sandboxed, creates automatic backups before every file modification, and includes a dry run mode for safe testing.
+
 ---
 
 ## Table of Contents
