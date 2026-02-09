@@ -1,14 +1,14 @@
 import Foundation
 
 /// Append-only text log that records every file modification for audit/debugging.
-/// Stored at ~/Library/Application Support/Obsync/audit.log
+/// Stored at ~/Library/Application Support/Remindian/audit.log
 class AuditLog {
     static let shared = AuditLog()
     private let maxLogSize: UInt64 = 5 * 1024 * 1024 // 5 MB
 
     private var logURL: URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = appSupport.appendingPathComponent("Obsync", isDirectory: true)
+        let dir = appSupport.appendingPathComponent("Remindian", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("audit.log")
     }

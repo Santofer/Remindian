@@ -25,10 +25,13 @@
 		016 /* SyncLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 118; };
 		017 /* SyncHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 119; };
 		018 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 120; };
+		019 /* FileWatcherService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 121; };
+		020 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 122; };
+		021 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 123; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		100 /* Obsync.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Obsync.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		100 /* Remindian.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Remindian.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		101 /* ObsyncApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObsyncApp.swift; sourceTree = "<group>"; };
 		102 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		103 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -41,7 +44,7 @@
 		110 /* SyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncEngine.swift; sourceTree = "<group>"; };
 		111 /* SyncManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncManager.swift; sourceTree = "<group>"; };
 		112 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		113 /* Obsync.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Obsync.entitlements; sourceTree = "<group>"; };
+		113 /* Remindian.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Remindian.entitlements; sourceTree = "<group>"; };
 		114 /* FileBackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileBackupService.swift; sourceTree = "<group>"; };
 		115 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		116 /* HotKeyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKeyService.swift; sourceTree = "<group>"; };
@@ -49,6 +52,9 @@
 		118 /* SyncLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncLog.swift; sourceTree = "<group>"; };
 		119 /* SyncHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncHistoryView.swift; sourceTree = "<group>"; };
 		120 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		121 /* FileWatcherService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileWatcherService.swift; sourceTree = "<group>"; };
+		122 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		123 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -65,12 +71,12 @@
 		300 = {
 			isa = PBXGroup;
 			children = (
-				301 /* Obsync */,
+				301 /* Remindian */,
 				302 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		301 /* Obsync */ = {
+		301 /* Remindian */ = {
 			isa = PBXGroup;
 			children = (
 				101 /* ObsyncApp.swift */,
@@ -79,7 +85,7 @@
 				305 /* Services */,
 				120 /* Assets.xcassets */,
 				112 /* Info.plist */,
-				113 /* Obsync.entitlements */,
+				113 /* Remindian.entitlements */,
 			);
 			path = Obsync;
 			sourceTree = "<group>";
@@ -87,7 +93,7 @@
 		302 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				100 /* Obsync.app */,
+				100 /* Remindian.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -99,6 +105,8 @@
 				103 /* SettingsView.swift */,
 				104 /* MenuBarView.swift */,
 				119 /* SyncHistoryView.swift */,
+				122 /* OnboardingView.swift */,
+				123 /* AboutView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -125,6 +133,7 @@
 				115 /* NotificationService.swift */,
 				116 /* HotKeyService.swift */,
 				117 /* AuditLog.swift */,
+				121 /* FileWatcherService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -132,7 +141,7 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		400 /* Obsync */ = {
+		400 /* Remindian */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 500;
 			buildPhases = (
@@ -144,9 +153,9 @@
 			);
 			dependencies = (
 			);
-			name = Obsync;
-			productName = Obsync;
-			productReference = 100 /* Obsync.app */;
+			name = Remindian;
+			productName = Remindian;
+			productReference = 100 /* Remindian.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -177,7 +186,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				400 /* Obsync */,
+				400 /* Remindian */,
 			);
 		};
 /* End PBXProject section */
@@ -215,6 +224,9 @@
 				015 /* AuditLog.swift in Sources */,
 				016 /* SyncLog.swift in Sources */,
 				017 /* SyncHistoryView.swift in Sources */,
+				019 /* FileWatcherService.swift in Sources */,
+				020 /* OnboardingView.swift in Sources */,
+				021 /* AboutView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -344,7 +356,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = Obsync/Obsync.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Obsync/Remindian.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -354,13 +366,13 @@
 				INFOPLIST_FILE = Obsync/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSRemindersUsageDescription = "Obsync needs access to Reminders to sync your tasks with Obsidian.";
+				INFOPLIST_KEY_NSRemindersUsageDescription = "Remindian needs access to Reminders to sync your tasks with Obsidian.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 3.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.obsync.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -372,7 +384,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = Obsync/Obsync.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Obsync/Remindian.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -382,13 +394,13 @@
 				INFOPLIST_FILE = Obsync/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSRemindersUsageDescription = "Obsync needs access to Reminders to sync your tasks with Obsidian.";
+				INFOPLIST_KEY_NSRemindersUsageDescription = "Remindian needs access to Reminders to sync your tasks with Obsidian.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 3.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.obsync.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -398,7 +410,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		500 /* Build configuration list for PBXNativeTarget "Obsync" */ = {
+		500 /* Build configuration list for PBXNativeTarget "Remindian" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				702 /* Debug */,
@@ -407,7 +419,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		601 /* Build configuration list for PBXProject "Obsync" */ = {
+		601 /* Build configuration list for PBXProject "Remindian" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				700 /* Debug */,

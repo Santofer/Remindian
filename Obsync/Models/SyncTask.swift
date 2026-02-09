@@ -133,19 +133,40 @@ extension SyncTask {
         let scheduledDate = extractDate(from: &content, emoji: "⏳")
         let completedDate = extractDate(from: &content, emoji: "✅")
         
-        // Parse priority
+        // Parse priority (handle optional FE0F variation selector)
         var priority: Priority = .none
-        if content.contains("⏫") {
-            priority = .high
-            content = content.replacingOccurrences(of: "⏫", with: "")
-        } else if content.contains("🔼") {
-            priority = .medium
-            content = content.replacingOccurrences(of: "🔼", with: "")
-        } else if content.contains("🔽") {
-            priority = .low
-            content = content.replacingOccurrences(of: "🔽", with: "")
+        let priorityEmojis: [(emoji: String, level: Priority)] = [
+            ("⏫", .high), ("🔼", .medium), ("🔽", .low)
+        ]
+        for (emoji, level) in priorityEmojis {
+            let pattern = "\(emoji)\u{FE0F}?"
+            if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+                let nsRange = NSRange(content.startIndex..., in: content)
+                if let match = regex.firstMatch(in: content, options: [], range: nsRange),
+                   let matchRange = Range(match.range, in: content) {
+                    priority = level
+                    content.removeSubrange(matchRange)
+                    break
+                }
+            }
         }
         
+        // Strip recurrence markers from content before tag/title parsing
+        // Case 1: Emoji-based recurrence (🔁/🔂 + optional FE0F + everything after until next emoji/tag/date)
+        for recEmoji in ["🔁", "🔂"] {
+            let recPattern = "\(recEmoji)\u{FE0F}?\\s*[^📅🛫⏳✅⏫🔼🔽#]*"
+            if let recRegex = try? NSRegularExpression(pattern: recPattern, options: []) {
+                let recRange = NSRange(content.startIndex..., in: content)
+                content = recRegex.stringByReplacingMatches(in: content, options: [], range: recRange, withTemplate: "")
+            }
+        }
+        // Case 2: Plain-text recurrence (e.g. "every month on the 1st when done")
+        let plainRecPattern = "\\bevery\\s+(?:month|week|day|year|other|january|february|march|april|may|june|july|august|september|october|november|december|\\d+\\s+days?)\\b[^📅🛫⏳✅⏫🔼🔽#]*"
+        if let plainRecRegex = try? NSRegularExpression(pattern: plainRecPattern, options: [.caseInsensitive]) {
+            let recRange = NSRange(content.startIndex..., in: content)
+            content = plainRecRegex.stringByReplacingMatches(in: content, options: [], range: recRange, withTemplate: "")
+        }
+
         // Parse tags and find target list
         // Supports hierarchical tags like #work/clients/somfy
         var tags: [String] = []
@@ -179,11 +200,33 @@ extension SyncTask {
             title = title.replacingOccurrences(of: tag, with: "")
         }
         
-        // Remove recurrence info from title (🔁 and everything after)
+        // Remove recurrence info from title
+        // Case 1: 🔁/🔂 emoji (with optional FE0F variation selector) and everything after
+        var recurrenceStripped = false
         let recurrenceEmojis = ["🔁", "🔂"]
         for emoji in recurrenceEmojis {
-            if let recurrenceRange = title.range(of: emoji) {
-                title = String(title[..<recurrenceRange.lowerBound])
+            let pattern = "\(emoji)\u{FE0F}?"
+            if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+                let nsRange = NSRange(title.startIndex..., in: title)
+                if let match = regex.firstMatch(in: title, options: [], range: nsRange),
+                   let matchRange = Range(match.range, in: title) {
+                    title = String(title[..<matchRange.lowerBound])
+                    recurrenceStripped = true
+                    break
+                }
+            }
+        }
+
+        // Case 2: Plain-text recurrence rules without emoji
+        // Matches patterns like "every month on the 1st when done", "every week", "every 90 days when done"
+        if !recurrenceStripped {
+            let plainRecurrencePattern = "\\bevery\\s+(?:month|week|day|year|other|\\d+\\s+days?)\\b.*?(?:when done)?.*$"
+            if let regex = try? NSRegularExpression(pattern: plainRecurrencePattern, options: [.caseInsensitive]) {
+                let nsRange = NSRange(title.startIndex..., in: title)
+                if let match = regex.firstMatch(in: title, options: [], range: nsRange),
+                   let matchRange = Range(match.range, in: title) {
+                    title = String(title[..<matchRange.lowerBound])
+                }
             }
         }
         
@@ -274,7 +317,8 @@ extension SyncTask {
     // MARK: - Helper Methods
     
     private static func extractDate(from content: inout String, emoji: String) -> Date? {
-        let pattern = "\(emoji) (\\d{4}-\\d{2}-\\d{2})"
+        // Handle optional FE0F variation selector that some editors/keyboards insert after emoji
+        let pattern = "\(emoji)\u{FE0F}?\\s*(\\d{4}-\\d{2}-\\d{2})"
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
         
         let range = NSRange(content.startIndex..., in: content)

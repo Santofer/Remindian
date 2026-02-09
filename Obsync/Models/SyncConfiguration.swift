@@ -11,6 +11,7 @@ class SyncConfiguration: ObservableObject, Codable {
     @Published var defaultList: String
     @Published var taskFilesPattern: String
     @Published var excludedFolders: [String]
+    @Published var includedFolders: [String]  // Whitelist: if non-empty, ONLY scan these folders
     @Published var syncCompletedTasks: Bool
     @Published var deleteCompletedAfterDays: Int?
     @Published var conflictResolution: ConflictResolution
@@ -19,6 +20,12 @@ class SyncConfiguration: ObservableObject, Codable {
     @Published var forceDarkIcon: Bool
     @Published var dryRunMode: Bool
     @Published var enableCompletionWriteback: Bool
+    @Published var enableDueDateWriteback: Bool
+    @Published var enableStartDateWriteback: Bool
+    @Published var enablePriorityWriteback: Bool
+    @Published var enableNewTaskWriteback: Bool
+    @Published var inboxFilePath: String
+    @Published var enableFileWatcher: Bool
     @Published var enableNotifications: Bool
     @Published var globalHotKeyEnabled: Bool
     @Published var globalHotKeyCode: UInt32
@@ -42,9 +49,11 @@ class SyncConfiguration: ObservableObject, Codable {
 
     enum CodingKeys: String, CodingKey {
         case vaultPath, syncIntervalMinutes, enableAutoSync, syncOnLaunch
-        case listMappings, defaultList, taskFilesPattern, excludedFolders
+        case listMappings, defaultList, taskFilesPattern, excludedFolders, includedFolders
         case syncCompletedTasks, deleteCompletedAfterDays, conflictResolution
         case includeDueTime, hideDockIcon, forceDarkIcon, dryRunMode, enableCompletionWriteback
+        case enableDueDateWriteback, enableStartDateWriteback, enablePriorityWriteback
+        case enableNewTaskWriteback, inboxFilePath, enableFileWatcher
         case enableNotifications, globalHotKeyEnabled, globalHotKeyCode, globalHotKeyModifiers
     }
 
@@ -57,6 +66,7 @@ class SyncConfiguration: ObservableObject, Codable {
         defaultList: String = "Reminders",
         taskFilesPattern: String = "**/*.md",
         excludedFolders: [String] = [".obsidian", ".git", ".trash"],
+        includedFolders: [String] = [],
         syncCompletedTasks: Bool = true,
         deleteCompletedAfterDays: Int? = nil,
         conflictResolution: ConflictResolution = .obsidianWins,
@@ -64,6 +74,12 @@ class SyncConfiguration: ObservableObject, Codable {
         hideDockIcon: Bool = false,
         dryRunMode: Bool = false,
         enableCompletionWriteback: Bool = true,
+        enableDueDateWriteback: Bool = false,
+        enableStartDateWriteback: Bool = false,
+        enablePriorityWriteback: Bool = false,
+        enableNewTaskWriteback: Bool = false,
+        inboxFilePath: String = "Inbox.md",
+        enableFileWatcher: Bool = false,
         enableNotifications: Bool = true,
         forceDarkIcon: Bool = false,
         globalHotKeyEnabled: Bool = false,
@@ -78,6 +94,7 @@ class SyncConfiguration: ObservableObject, Codable {
         self.defaultList = defaultList
         self.taskFilesPattern = taskFilesPattern
         self.excludedFolders = excludedFolders
+        self.includedFolders = includedFolders
         self.syncCompletedTasks = syncCompletedTasks
         self.deleteCompletedAfterDays = deleteCompletedAfterDays
         self.conflictResolution = conflictResolution
@@ -86,6 +103,12 @@ class SyncConfiguration: ObservableObject, Codable {
         self.forceDarkIcon = forceDarkIcon
         self.dryRunMode = dryRunMode
         self.enableCompletionWriteback = enableCompletionWriteback
+        self.enableDueDateWriteback = enableDueDateWriteback
+        self.enableStartDateWriteback = enableStartDateWriteback
+        self.enablePriorityWriteback = enablePriorityWriteback
+        self.enableNewTaskWriteback = enableNewTaskWriteback
+        self.inboxFilePath = inboxFilePath
+        self.enableFileWatcher = enableFileWatcher
         self.enableNotifications = enableNotifications
         self.globalHotKeyEnabled = globalHotKeyEnabled
         self.globalHotKeyCode = globalHotKeyCode
@@ -102,6 +125,7 @@ class SyncConfiguration: ObservableObject, Codable {
         defaultList = try container.decode(String.self, forKey: .defaultList)
         taskFilesPattern = try container.decode(String.self, forKey: .taskFilesPattern)
         excludedFolders = try container.decode([String].self, forKey: .excludedFolders)
+        includedFolders = try container.decodeIfPresent([String].self, forKey: .includedFolders) ?? []
         syncCompletedTasks = try container.decode(Bool.self, forKey: .syncCompletedTasks)
         deleteCompletedAfterDays = try container.decodeIfPresent(Int.self, forKey: .deleteCompletedAfterDays)
         conflictResolution = try container.decode(ConflictResolution.self, forKey: .conflictResolution)
@@ -110,6 +134,12 @@ class SyncConfiguration: ObservableObject, Codable {
         forceDarkIcon = try container.decodeIfPresent(Bool.self, forKey: .forceDarkIcon) ?? false
         dryRunMode = try container.decodeIfPresent(Bool.self, forKey: .dryRunMode) ?? false
         enableCompletionWriteback = try container.decodeIfPresent(Bool.self, forKey: .enableCompletionWriteback) ?? true
+        enableDueDateWriteback = try container.decodeIfPresent(Bool.self, forKey: .enableDueDateWriteback) ?? false
+        enableStartDateWriteback = try container.decodeIfPresent(Bool.self, forKey: .enableStartDateWriteback) ?? false
+        enablePriorityWriteback = try container.decodeIfPresent(Bool.self, forKey: .enablePriorityWriteback) ?? false
+        enableNewTaskWriteback = try container.decodeIfPresent(Bool.self, forKey: .enableNewTaskWriteback) ?? false
+        inboxFilePath = try container.decodeIfPresent(String.self, forKey: .inboxFilePath) ?? "Inbox.md"
+        enableFileWatcher = try container.decodeIfPresent(Bool.self, forKey: .enableFileWatcher) ?? false
         enableNotifications = try container.decodeIfPresent(Bool.self, forKey: .enableNotifications) ?? true
         globalHotKeyEnabled = try container.decodeIfPresent(Bool.self, forKey: .globalHotKeyEnabled) ?? false
         globalHotKeyCode = try container.decodeIfPresent(UInt32.self, forKey: .globalHotKeyCode) ?? 1
@@ -126,6 +156,7 @@ class SyncConfiguration: ObservableObject, Codable {
         try container.encode(defaultList, forKey: .defaultList)
         try container.encode(taskFilesPattern, forKey: .taskFilesPattern)
         try container.encode(excludedFolders, forKey: .excludedFolders)
+        try container.encode(includedFolders, forKey: .includedFolders)
         try container.encode(syncCompletedTasks, forKey: .syncCompletedTasks)
         try container.encode(deleteCompletedAfterDays, forKey: .deleteCompletedAfterDays)
         try container.encode(conflictResolution, forKey: .conflictResolution)
@@ -134,6 +165,12 @@ class SyncConfiguration: ObservableObject, Codable {
         try container.encode(forceDarkIcon, forKey: .forceDarkIcon)
         try container.encode(dryRunMode, forKey: .dryRunMode)
         try container.encode(enableCompletionWriteback, forKey: .enableCompletionWriteback)
+        try container.encode(enableDueDateWriteback, forKey: .enableDueDateWriteback)
+        try container.encode(enableStartDateWriteback, forKey: .enableStartDateWriteback)
+        try container.encode(enablePriorityWriteback, forKey: .enablePriorityWriteback)
+        try container.encode(enableNewTaskWriteback, forKey: .enableNewTaskWriteback)
+        try container.encode(inboxFilePath, forKey: .inboxFilePath)
+        try container.encode(enableFileWatcher, forKey: .enableFileWatcher)
         try container.encode(enableNotifications, forKey: .enableNotifications)
         try container.encode(globalHotKeyEnabled, forKey: .globalHotKeyEnabled)
         try container.encode(globalHotKeyCode, forKey: .globalHotKeyCode)
@@ -144,7 +181,7 @@ class SyncConfiguration: ObservableObject, Codable {
 
     private static var configURL: URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let appFolder = appSupport.appendingPathComponent("Obsync", isDirectory: true)
+        let appFolder = appSupport.appendingPathComponent("Remindian", isDirectory: true)
         try? FileManager.default.createDirectory(at: appFolder, withIntermediateDirectories: true)
         return appFolder.appendingPathComponent("config.json")
     }

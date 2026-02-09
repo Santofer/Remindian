@@ -12,7 +12,10 @@ class SyncState: Codable {
     /// v2: content-hash IDs. v3: clean titles + client from frontmatter.
     /// v4: client from YAML frontmatter. v5: tags in notes + auto list mapping.
     /// v6: fixed recurrence start date from "on the Nth" rules.
-    static let currentStateVersion = 6
+    /// v7: stable IDs — removed mutable fields (dates, priority) from obsidianId
+    ///     to prevent delete+recreate on metadata changes. Re-linking in sync engine
+    ///     handles the migration gracefully.
+    static let currentStateVersion = 7
 
     struct TaskMapping: Codable, Identifiable {
         var id: String { obsidianId }
@@ -41,7 +44,7 @@ class SyncState: Codable {
 
     private static var stateURL: URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let appFolder = appSupport.appendingPathComponent("Obsync", isDirectory: true)
+        let appFolder = appSupport.appendingPathComponent("Remindian", isDirectory: true)
         try? FileManager.default.createDirectory(at: appFolder, withIntermediateDirectories: true)
         return appFolder.appendingPathComponent("sync_state.json")
     }
@@ -60,12 +63,22 @@ class SyncState: Codable {
             let data = try Data(contentsOf: stateURL)
             let state = try JSONDecoder().decode(SyncState.self, from: data)
 
-            // Auto-reset if state version changed (ID scheme migration)
+            // Handle state version migrations
             if state.stateVersion < currentStateVersion {
-                print("Sync state version outdated (v\(state.stateVersion) → v\(currentStateVersion)). Resetting sync state for re-sync.")
-                let fresh = SyncState()
-                fresh.save()
-                return fresh
+                if state.stateVersion == 6 {
+                    // v6 → v7: ObsidianId format changed (removed mutable fields).
+                    // Keep existing mappings — the sync engine's re-linking logic
+                    // will gracefully match old IDs to new ones by title.
+                    print("Sync state v6 → v7: ID format migration. Keeping mappings for re-linking.")
+                    state.stateVersion = currentStateVersion
+                    state.save()
+                } else {
+                    // Older versions: full reset
+                    print("Sync state version outdated (v\(state.stateVersion) → v\(currentStateVersion)). Resetting sync state for re-sync.")
+                    let fresh = SyncState()
+                    fresh.save()
+                    return fresh
+                }
             }
 
             return state
@@ -114,8 +127,17 @@ class SyncState: Codable {
 
     // MARK: - Hash Generation
 
-    /// Generate a stable ID from task content rather than line position.
-    /// Uses filePath + title + key metadata so the ID survives task reordering.
+    /// Generate a stable ID from task content.
+    /// Uses filePath + title + tags + lineNumber. The line number disambiguates
+    /// recurring task pairs (completed + new uncompleted copy) that share the
+    /// same title/file/tags.
+    ///
+    /// Line numbers can change when tasks are reordered, but the re-linking
+    /// logic in the sync engine handles that gracefully by matching on title.
+    ///
+    /// IMPORTANT: Do NOT include dates, priority, or completion status — those
+    /// are mutable fields that change independently, which would generate a new
+    /// ID and cause delete+recreate instead of in-place update.
     static func generateObsidianId(task: SyncTask) -> String {
         guard let source = task.obsidianSource else {
             // Fallback: use title-based ID
@@ -125,11 +147,8 @@ class SyncState: Codable {
         let components = [
             source.filePath,
             task.title,
-            task.dueDate?.ISO8601Format() ?? "",
-            task.startDate?.ISO8601Format() ?? "",
-            task.scheduledDate?.ISO8601Format() ?? "",
             task.tags.sorted().joined(separator: ","),
-            String(task.priority.rawValue)
+            String(source.lineNumber)
         ]
         return components.joined(separator: "|").data(using: .utf8)!.base64EncodedString()
     }

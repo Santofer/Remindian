@@ -2,7 +2,7 @@ import SwiftUI
 import EventKit
 
 @main
-struct ObsyncApp: App {
+struct RemindianApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var syncManager = SyncManager.shared
 
@@ -27,7 +27,7 @@ struct ObsyncApp: App {
                 ? "arrow.triangle.2.circlepath.circle.fill"
                 : "checkmark.circle.fill"
             let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
-            let nsImage = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Obsync")?
+            let nsImage = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Remindian")?
                 .withSymbolConfiguration(config)
             Image(nsImage: nsImage ?? NSImage())
         }
@@ -50,6 +50,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Register global hotkey if enabled
         SyncManager.shared.updateHotKey()
+
+        // Start file watcher if enabled
+        SyncManager.shared.updateFileWatcher()
 
         // Request Reminders access on launch
         Task {

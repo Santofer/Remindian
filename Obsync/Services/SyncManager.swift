@@ -5,7 +5,7 @@ import Combine
 /// Write diagnostic logs to a file (since print/NSLog may not be visible from sandboxed GUI apps)
 func debugLog(_ message: String) {
     let logFile = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        .appendingPathComponent("Obsync", isDirectory: true)
+        .appendingPathComponent("Remindian", isDirectory: true)
         .appendingPathComponent("debug.log")
     try? FileManager.default.createDirectory(at: logFile.deletingLastPathComponent(), withIntermediateDirectories: true)
     let timestamp = ISO8601DateFormatter().string(from: Date())
@@ -61,12 +61,27 @@ class SyncManager: ObservableObject {
     }
 
     private func setupConfigObserver() {
+        // Observe the config object being replaced
         $config
             .debounce(for: .seconds(1), scheduler: RunLoop.main)
             .sink { [weak self] config in
                 config.save()
                 self?.setupAutoSync()
                 self?.updateHotKey()
+                self?.updateFileWatcher()
+            }
+            .store(in: &cancellables)
+
+        // Observe internal @Published property changes within the config object
+        // ($config only fires when the whole object is replaced, not when its
+        // internal properties change — this catches settings edits)
+        config.objectWillChange
+            .debounce(for: .seconds(1), scheduler: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.config.save()
+                self?.setupAutoSync()
+                self?.updateHotKey()
+                self?.updateFileWatcher()
             }
             .store(in: &cancellables)
     }
@@ -221,6 +236,21 @@ class SyncManager: ObservableObject {
             }
         } else {
             HotKeyService.shared.unregister()
+        }
+    }
+
+    // MARK: - File Watcher
+
+    func updateFileWatcher() {
+        if config.enableFileWatcher && !config.vaultPath.isEmpty {
+            FileWatcherService.shared.startWatching(path: config.vaultPath) { [weak self] in
+                Task { @MainActor in
+                    debugLog("[SyncManager] File watcher triggered sync")
+                    await self?.performSync()
+                }
+            }
+        } else {
+            FileWatcherService.shared.stopWatching()
         }
     }
 

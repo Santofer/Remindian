@@ -3,71 +3,49 @@ import SwiftUI
 struct MenuBarView: View {
     @EnvironmentObject var syncManager: SyncManager
 
+    private let menuFont = Font.system(size: 13)
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 0) {
             // Status section
             HStack {
                 Circle()
                     .fill(statusColor)
                     .frame(width: 8, height: 8)
                 Text(syncManager.statusMessage)
-                    .font(.caption)
+                    .font(menuFont)
 
                 if syncManager.config.dryRunMode {
                     Text("DRY RUN")
-                        .font(.caption2)
-                        .fontWeight(.bold)
+                        .font(.system(size: 10, weight: .bold))
                         .padding(.horizontal, 3)
                         .padding(.vertical, 1)
                         .background(Color.yellow.opacity(0.3))
                         .cornerRadius(3)
                 }
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 14)
             .padding(.vertical, 6)
 
             if let lastSync = syncManager.lastSyncDate {
                 Text("Last sync: \(lastSync, style: .relative)")
-                    .font(.caption2)
+                    .font(menuFont)
                     .foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 4)
             }
 
             Divider()
 
             // Quick actions
-            Button(action: {
-                Task {
-                    await syncManager.performSync()
-                }
-            }) {
-                HStack {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                    Text("Sync Now")
-                    Spacer()
-                    if syncManager.isSyncing {
-                        ProgressView()
-                            .scaleEffect(0.6)
-                    } else {
-                        Text("\u{2318}S")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
+            menuButton("Sync Now", icon: "arrow.triangle.2.circlepath") {
+                Task { await syncManager.performSync() }
             }
-            .keyboardShortcut("s", modifiers: .command)
             .disabled(syncManager.isSyncing || !syncManager.hasRemindersAccess)
 
             if !syncManager.pendingConflicts.isEmpty {
-                Button(action: {
+                menuButton("\(syncManager.pendingConflicts.count) Conflicts", icon: "exclamationmark.triangle.fill") {
                     openMainWindow()
-                }) {
-                    HStack {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.orange)
-                        Text("\(syncManager.pendingConflicts.count) Conflicts")
-                        Spacer()
-                    }
                 }
             }
 
@@ -75,10 +53,11 @@ struct MenuBarView: View {
 
             // Last sync results
             if let result = syncManager.lastSyncResult {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text("Last sync results:")
-                        .font(.caption2)
+                        .font(menuFont)
                         .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
                     HStack(spacing: 12) {
                         if result.created > 0 {
@@ -97,62 +76,61 @@ struct MenuBarView: View {
                             Label("\(result.completionsWrittenBack)", systemImage: "checkmark.circle.fill")
                                 .foregroundColor(.purple)
                         }
-                        if result.created == 0 && result.updated == 0 && result.deleted == 0 && result.completionsWrittenBack == 0 {
+                        if result.metadataWrittenBack > 0 {
+                            Label("\(result.metadataWrittenBack)", systemImage: "pencil.circle.fill")
+                                .foregroundColor(.orange)
+                        }
+                        if result.created == 0 && result.updated == 0 && result.deleted == 0 && result.completionsWrittenBack == 0 && result.metadataWrittenBack == 0 {
                             Text("No changes")
                                 .foregroundColor(.secondary)
                         }
                     }
-                    .font(.caption)
+                    .font(menuFont)
                 }
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 14)
                 .padding(.vertical, 6)
 
                 Divider()
             }
 
             // Settings & Quit
-            Button(action: {
+            menuButton("Open Main Window", icon: "macwindow") {
                 openMainWindow()
-            }) {
-                HStack {
-                    Image(systemName: "macwindow")
-                    Text("Open Main Window")
-                    Spacer()
-                }
             }
 
-            Button(action: {
+            menuButton("Settings...", icon: "gear") {
                 openSettings()
-            }) {
-                HStack {
-                    Image(systemName: "gear")
-                    Text("Settings...")
-                    Spacer()
-                    Text("\u{2318},")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
             }
-            .keyboardShortcut(",", modifiers: .command)
+
+            menuButton("About Remindian", icon: "info.circle") {
+                openAboutWindow()
+            }
 
             Divider()
 
-            Button(action: {
+            menuButton("Quit Remindian", icon: "power") {
                 NSApplication.shared.terminate(nil)
-            }) {
-                HStack {
-                    Image(systemName: "power")
-                    Text("Quit")
-                    Spacer()
-                    Text("\u{2318}Q")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
             }
-            .keyboardShortcut("q", modifiers: .command)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 4)
         .frame(width: 250)
+    }
+
+    /// Consistent menu-style button with system font
+    private func menuButton(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .frame(width: 16)
+                Text(title)
+                Spacer()
+            }
+            .font(menuFont)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 5)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private var statusColor: Color {
@@ -172,7 +150,7 @@ struct MenuBarView: View {
 
         for window in NSApplication.shared.windows {
             if window.identifier?.rawValue == "main-window" ||
-               window.title.contains("Obsidian") ||
+               window.title.contains("Remindian") ||
                String(describing: type(of: window.contentView)).contains("ContentView") {
                 window.makeKeyAndOrderFront(nil)
                 return
@@ -183,9 +161,30 @@ struct MenuBarView: View {
         let hostingController = NSHostingController(rootView: contentView)
         let window = NSWindow(contentViewController: hostingController)
         window.identifier = NSUserInterfaceItemIdentifier("main-window")
-        window.title = "Obsync"
+        window.title = "Remindian"
         window.setContentSize(NSSize(width: 600, height: 500))
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    private func openAboutWindow() {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+
+        for window in NSApplication.shared.windows {
+            if window.identifier?.rawValue == "about-window" {
+                window.makeKeyAndOrderFront(nil)
+                return
+            }
+        }
+
+        let aboutView = AboutView()
+        let hostingController = NSHostingController(rootView: aboutView)
+        let window = NSWindow(contentViewController: hostingController)
+        window.identifier = NSUserInterfaceItemIdentifier("about-window")
+        window.title = "About Remindian"
+        window.setContentSize(NSSize(width: 320, height: 480))
+        window.styleMask = [.titled, .closable]
         window.center()
         window.makeKeyAndOrderFront(nil)
     }
@@ -205,8 +204,9 @@ struct MenuBarView: View {
         let window = NSWindow(contentViewController: hostingController)
         window.identifier = NSUserInterfaceItemIdentifier("settings-window")
         window.title = "Settings"
-        window.setContentSize(NSSize(width: 520, height: 480))
-        window.styleMask = [.titled, .closable]
+        window.setContentSize(NSSize(width: 550, height: 580))
+        window.styleMask = [.titled, .closable, .resizable]
+        window.minSize = NSSize(width: 500, height: 450)
         window.center()
         window.makeKeyAndOrderFront(nil)
     }

@@ -129,6 +129,7 @@ struct SyncLogRow: View {
         case .updated: return "arrow.triangle.2.circlepath"
         case .deleted: return "minus.circle.fill"
         case .completionWriteback: return "checkmark.circle.fill"
+        case .metadataWriteback: return "pencil.circle.fill"
         case .error: return "exclamationmark.triangle.fill"
         case .skipped: return "forward.fill"
         }
@@ -140,6 +141,7 @@ struct SyncLogRow: View {
         case .updated: return .blue
         case .deleted: return .red
         case .completionWriteback: return .purple
+        case .metadataWriteback: return .orange
         case .error: return .red
         case .skipped: return .gray
         }

@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var syncManager: SyncManager
     @State private var selectedTab = 0
+    @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,6 +25,10 @@ struct ContentView: View {
         } message: {
             Text(syncManager.errorMessage)
         }
+        .sheet(isPresented: $showOnboarding) {
+            OnboardingView(isPresented: $showOnboarding)
+                .environmentObject(syncManager)
+        }
     }
 }
 
@@ -39,8 +44,12 @@ struct HeaderView: View {
                 .foregroundColor(.accentColor)
 
             VStack(alignment: .leading) {
-                Text("Obsidian \u{2194} Reminders Sync")
+                Text("Remindian")
                     .font(.headline)
+
+                Text("Obsidian \u{2194} Reminders")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
 
                 HStack(spacing: 4) {
                     Text(syncManager.statusMessage)
@@ -182,8 +191,9 @@ struct MainDashboardView: View {
         let window = NSWindow(contentViewController: hostingController)
         window.identifier = NSUserInterfaceItemIdentifier("settings-window")
         window.title = "Settings"
-        window.setContentSize(NSSize(width: 520, height: 480))
-        window.styleMask = [.titled, .closable]
+        window.setContentSize(NSSize(width: 550, height: 580))
+        window.styleMask = [.titled, .closable, .resizable]
+        window.minSize = NSSize(width: 500, height: 450)
         window.center()
         window.makeKeyAndOrderFront(nil)
     }

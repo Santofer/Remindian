@@ -63,7 +63,7 @@ class SyncLog: Codable {
 
     private static var logURL: URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let appFolder = appSupport.appendingPathComponent("Obsync", isDirectory: true)
+        let appFolder = appSupport.appendingPathComponent("Remindian", isDirectory: true)
         try? FileManager.default.createDirectory(at: appFolder, withIntermediateDirectories: true)
         return appFolder.appendingPathComponent("sync_log.json")
     }

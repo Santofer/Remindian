@@ -1,7 +1,7 @@
 import Foundation
 
 /// Creates timestamped backups of Obsidian files before any modification.
-/// Backups are stored in ~/Library/Application Support/Obsync/backups/
+/// Backups are stored in ~/Library/Application Support/Remindian/backups/
 class FileBackupService {
     static let shared = FileBackupService()
 
@@ -12,7 +12,7 @@ class FileBackupService {
     private var backupDir: URL {
         let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         return appSupport
-            .appendingPathComponent("Obsync", isDirectory: true)
+            .appendingPathComponent("Remindian", isDirectory: true)
             .appendingPathComponent("backups", isDirectory: true)
     }
 
@@ -34,6 +34,11 @@ class FileBackupService {
 
         let backupName = "\(slug.replacingOccurrences(of: ".md", with: ""))_\(timestamp).md"
         let backupURL = backupDir.appendingPathComponent(backupName)
+
+        // Skip if already backed up this second (e.g., multiple tasks in same file during one sync)
+        if fileManager.fileExists(atPath: backupURL.path) {
+            return backupURL
+        }
 
         try fileManager.copyItem(at: fileURL, to: backupURL)
 
