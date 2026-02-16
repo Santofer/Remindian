@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct AboutView: View {
-    private let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "3.0"
-    private let buildNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
+    private let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "3.1.0"
+    private let buildNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "2"
     private let releaseDate = "February 2026"
     private let githubURL = "https://github.com/Santofer/Remindian"
     private let downloadURL = "https://github.com/Santofer/Remindian/releases/latest"
@@ -26,9 +26,10 @@ struct AboutView: View {
                 .foregroundColor(.secondary)
 
             // Tagline
-            Text("Sync Obsidian Tasks with Apple Reminders")
+            Text("Sync your tasks between Obsidian, Apple Reminders & Things 3")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
 
             Divider()
                 .frame(width: 200)

@@ -132,12 +132,11 @@ class SyncState: Codable {
     /// recurring task pairs (completed + new uncompleted copy) that share the
     /// same title/file/tags.
     ///
-    /// Line numbers can change when tasks are reordered, but the re-linking
-    /// logic in the sync engine handles that gracefully by matching on title.
-    ///
-    /// IMPORTANT: Do NOT include dates, priority, or completion status — those
-    /// are mutable fields that change independently, which would generate a new
-    /// ID and cause delete+recreate instead of in-place update.
+    /// Content-hash based ID that is stable across line reordering.
+    /// Uses filePath + title + tags — NOT line numbers (which change when
+    /// tasks are reordered) and NOT dates/priority/completion (which are
+    /// mutable fields that change independently and would cause
+    /// delete+recreate instead of in-place update).
     static func generateObsidianId(task: SyncTask) -> String {
         guard let source = task.obsidianSource else {
             // Fallback: use title-based ID
@@ -147,8 +146,7 @@ class SyncState: Codable {
         let components = [
             source.filePath,
             task.title,
-            task.tags.sorted().joined(separator: ","),
-            String(source.lineNumber)
+            task.tags.sorted().joined(separator: ",")
         ]
         return components.joined(separator: "|").data(using: .utf8)!.base64EncodedString()
     }

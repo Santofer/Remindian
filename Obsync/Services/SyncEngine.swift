@@ -2,13 +2,18 @@ import Foundation
 import Combine
 
 /// Core sync engine that handles synchronization.
-/// IMPORTANT: Obsidian is the source of truth. We read from Obsidian and sync TO Reminders.
-/// The only Obsidian write allowed is surgical completion status writeback (opt-in).
+/// Uses protocol-based TaskSource and TaskDestination for extensibility.
+/// The source is always the source of truth. Writeback to the source is opt-in.
 class SyncEngine {
-    private let obsidianService = ObsidianService()
-    private let remindersService = RemindersService()
+    private let source: TaskSource
+    private let destination: TaskDestination
     private let backupService = FileBackupService.shared
     private var syncState = SyncState.load()
+
+    init(source: TaskSource, destination: TaskDestination) {
+        self.source = source
+        self.destination = destination
+    }
 
     // Mutex to prevent concurrent sync operations
     private let syncLock = NSLock()
@@ -80,8 +85,8 @@ class SyncEngine {
 
     // MARK: - Main Sync
 
-    /// Perform sync: Obsidian -> Reminders (one-way, Obsidian is source of truth)
-    /// Optionally writes completion status back to Obsidian (surgical edit only).
+    /// Perform sync: Source -> Destination (source is the source of truth).
+    /// Optionally writes completion status back to source (surgical edit only).
     func performSync(config: SyncConfiguration) async -> SyncResult {
         let startTime = Date()
         var result = SyncResult()
@@ -115,26 +120,24 @@ class SyncEngine {
             return result
         }
 
-        let obsidianDir = URL(fileURLWithPath: config.vaultPath).appendingPathComponent(".obsidian")
-        guard FileManager.default.fileExists(atPath: obsidianDir.path) else {
-            result.errors.append(SyncError.notAnObsidianVault(config.vaultPath))
-            return result
+        // Only check for .obsidian directory when using Obsidian Tasks source
+        if config.taskSourceType == .obsidianTasks {
+            let obsidianDir = URL(fileURLWithPath: config.vaultPath).appendingPathComponent(".obsidian")
+            guard FileManager.default.fileExists(atPath: obsidianDir.path) else {
+                result.errors.append(SyncError.notAnObsidianVault(config.vaultPath))
+                return result
+            }
         }
 
         // Capture file timestamps at sync start (for change detection during writes)
         let syncStartTimestamp = Date()
 
         do {
-            // Step 1: Get all tasks from Obsidian
-            debugLog("[SyncEngine] Scanning vault at: \(config.vaultPath)")
-            debugLog("[SyncEngine] Excluded folders: \(config.excludedFolders)")
-            debugLog("[SyncEngine] Included folders (whitelist): \(config.includedFolders)")
-            let obsidianTasks = try obsidianService.scanVault(
-                at: config.vaultPath,
-                excludedFolders: config.excludedFolders,
-                includedFolders: config.includedFolders
-            )
-            debugLog("[SyncEngine] Found \(obsidianTasks.count) Obsidian tasks")
+            // Step 1: Get all tasks from source
+            debugLog("[SyncEngine] Scanning source: \(source.sourceName)")
+            debugLog("[SyncEngine] Vault: \(config.vaultPath), excluded: \(config.excludedFolders), included: \(config.includedFolders)")
+            let obsidianTasks = try source.scanTasks(config: config)
+            debugLog("[SyncEngine] Found \(obsidianTasks.count) source tasks")
             for (i, task) in obsidianTasks.prefix(5).enumerated() {
                 debugLog("[SyncEngine]   Task \(i): \"\(task.title)\" completed=\(task.isCompleted) file=\(task.obsidianSource?.filePath ?? "?")")
             }
@@ -142,15 +145,15 @@ class SyncEngine {
                 debugLog("[SyncEngine]   ... and \(obsidianTasks.count - 5) more")
             }
 
-            // Step 2: Get all reminders
-            debugLog("[SyncEngine] Fetching all reminders...")
-            let remindersTasks = try await remindersService.fetchAllReminders()
-            debugLog("[SyncEngine] Found \(remindersTasks.count) Reminders tasks")
+            // Step 2: Get all tasks from destination
+            debugLog("[SyncEngine] Fetching from destination: \(destination.destinationName)...")
+            let remindersTasks = try await destination.fetchAllTasks()
+            debugLog("[SyncEngine] Found \(remindersTasks.count) destination tasks")
 
             // Step 3: Build lookup maps
             var obsidianMap: [String: SyncTask] = [:]
             for task in obsidianTasks {
-                let id = SyncState.generateObsidianId(task: task)
+                let id = source.generateTaskId(for: task)
                 obsidianMap[id] = task
             }
             debugLog("[SyncEngine] Obsidian map has \(obsidianMap.count) unique IDs (from \(obsidianTasks.count) tasks)")
@@ -230,6 +233,18 @@ class SyncEngine {
             }
             debugLog("[SyncEngine] Existing mappings: \(syncState.mappings.count)")
 
+            // Safety check: if source task count dropped by >50% compared to
+            // existing mappings, something might be wrong (vault unmounted, scan failure).
+            // Abort to prevent mass deletion of destination tasks.
+            let existingMappingCount = syncState.mappings.count
+            if existingMappingCount > 10 && obsidianMap.count < existingMappingCount / 2 {
+                debugLog("[SyncEngine] SAFETY: Source task count (\(obsidianMap.count)) is <50% of existing mappings (\(existingMappingCount)). Aborting to prevent mass deletion.")
+                result.errors.append(SyncError.safetyAbort(
+                    "Source returned \(obsidianMap.count) tasks but \(existingMappingCount) are mapped. This might indicate a scan failure. Sync aborted to protect your data."
+                ))
+                return result
+            }
+
             // Step 4: Process existing mappings
             var processedObsidianIds: Set<String> = []
             var relinkedRemindersIds: Set<String> = []  // Track re-linked reminders to prevent duplicate deletion
@@ -259,11 +274,10 @@ class SyncEngine {
                     // Pre-check file modification for writeback safety
                     // (computed once before any writes to avoid false positives from our own edits)
                     let fileNotModifiedBeforeSync: Bool = {
-                        guard let source = oTask.obsidianSource else { return false }
-                        return !obsidianService.hasFileChanged(
-                            filePath: source.filePath,
+                        return !source.hasFileChanged(
+                            task: oTask,
                             since: syncStartTimestamp,
-                            vaultPath: config.vaultPath
+                            config: config
                         )
                     }()
 
@@ -298,46 +312,51 @@ class SyncEngine {
 
                                 // Write completion back to Obsidian (surgical edit)
                                 if config.enableCompletionWriteback {
-                                    if let source = oTask.obsidianSource {
                                         // Check file hasn't changed since sync started
-                                        if !fileNotModifiedBeforeSync {
-                                            result.errors.append(ObsidianError.fileModifiedDuringSync)
-                                            result.details.append(SyncLogDetail(
-                                                action: .error,
-                                                taskTitle: oTask.title,
-                                                filePath: source.filePath,
-                                                errorMessage: "File modified during sync"
-                                            ))
-                                        } else if !config.dryRunMode {
-                                            let adjustedLine = source.lineNumber + (fileLineOffsets[source.filePath] ?? 0)
-                                            debugLog("[SyncEngine] Writing completion back to Obsidian: \"\(oTask.title)\" file=\(source.filePath) line=\(source.lineNumber) adjusted=\(adjustedLine)")
-                                            let inserted = try obsidianService.markTaskComplete(
-                                                filePath: source.filePath,
+                                    if !fileNotModifiedBeforeSync {
+                                        result.errors.append(ObsidianError.fileModifiedDuringSync)
+                                        result.details.append(SyncLogDetail(
+                                            action: .error,
+                                            taskTitle: oTask.title,
+                                            filePath: oTask.obsidianSource?.filePath,
+                                            errorMessage: "File modified during sync"
+                                        ))
+                                    } else if !config.dryRunMode {
+                                        // Build an adjusted task for line-offset tracking
+                                        var adjustedTask = oTask
+                                        if let src = oTask.obsidianSource {
+                                            let adjustedLine = src.lineNumber + (fileLineOffsets[src.filePath] ?? 0)
+                                            adjustedTask.obsidianSource = SyncTask.ObsidianSource(
+                                                filePath: src.filePath,
                                                 lineNumber: adjustedLine,
-                                                originalLine: source.originalLine,
-                                                completionDate: rTask.completedDate ?? Date(),
-                                                vaultPath: config.vaultPath
+                                                originalLine: src.originalLine
                                             )
-                                            if inserted > 0 {
-                                                fileLineOffsets[source.filePath, default: 0] += inserted
-                                            }
-                                            debugLog("[SyncEngine] Completion writeback succeeded for: \"\(oTask.title)\" (lines inserted: \(inserted))")
-                                            result.completionsWrittenBack += 1
-                                            result.details.append(SyncLogDetail(
-                                                action: .completionWriteback,
-                                                taskTitle: oTask.title,
-                                                filePath: source.filePath,
-                                                errorMessage: nil
-                                            ))
-                                        } else {
-                                            result.completionsWrittenBack += 1
-                                            result.details.append(SyncLogDetail(
-                                                action: .completionWriteback,
-                                                taskTitle: "[DRY RUN] " + oTask.title,
-                                                filePath: source.filePath,
-                                                errorMessage: nil
-                                            ))
                                         }
+                                        debugLog("[SyncEngine] Writing completion back: \"\(oTask.title)\"")
+                                        let inserted = try source.markTaskComplete(
+                                            task: adjustedTask,
+                                            completionDate: rTask.completedDate ?? Date(),
+                                            config: config
+                                        )
+                                        if inserted > 0, let src = oTask.obsidianSource {
+                                            fileLineOffsets[src.filePath, default: 0] += inserted
+                                        }
+                                        debugLog("[SyncEngine] Completion writeback succeeded for: \"\(oTask.title)\" (lines inserted: \(inserted))")
+                                        result.completionsWrittenBack += 1
+                                        result.details.append(SyncLogDetail(
+                                            action: .completionWriteback,
+                                            taskTitle: oTask.title,
+                                            filePath: oTask.obsidianSource?.filePath,
+                                            errorMessage: nil
+                                        ))
+                                    } else {
+                                        result.completionsWrittenBack += 1
+                                        result.details.append(SyncLogDetail(
+                                            action: .completionWriteback,
+                                            taskTitle: "[DRY RUN] " + oTask.title,
+                                            filePath: oTask.obsidianSource?.filePath,
+                                            errorMessage: nil
+                                        ))
                                     }
                                 }
                             }
@@ -348,23 +367,24 @@ class SyncEngine {
                                 taskForReminders.completedDate = nil
 
                                 if config.enableCompletionWriteback {
-                                    if let source = oTask.obsidianSource {
-                                        if fileNotModifiedBeforeSync && !config.dryRunMode {
-                                            let adjustedLine = source.lineNumber + (fileLineOffsets[source.filePath] ?? 0)
-                                            try obsidianService.markTaskIncomplete(
-                                                filePath: source.filePath,
+                                    if fileNotModifiedBeforeSync && !config.dryRunMode {
+                                        var adjustedTask = oTask
+                                        if let src = oTask.obsidianSource {
+                                            let adjustedLine = src.lineNumber + (fileLineOffsets[src.filePath] ?? 0)
+                                            adjustedTask.obsidianSource = SyncTask.ObsidianSource(
+                                                filePath: src.filePath,
                                                 lineNumber: adjustedLine,
-                                                originalLine: source.originalLine,
-                                                vaultPath: config.vaultPath
+                                                originalLine: src.originalLine
                                             )
-                                            result.completionsWrittenBack += 1
-                                            result.details.append(SyncLogDetail(
-                                                action: .completionWriteback,
-                                                taskTitle: oTask.title,
-                                                filePath: source.filePath,
-                                                errorMessage: nil
-                                            ))
                                         }
+                                        try source.markTaskIncomplete(task: adjustedTask, config: config)
+                                        result.completionsWrittenBack += 1
+                                        result.details.append(SyncLogDetail(
+                                            action: .completionWriteback,
+                                            taskTitle: oTask.title + " (uncompleted)",
+                                            filePath: oTask.obsidianSource?.filePath,
+                                            errorMessage: nil
+                                        ))
                                     }
                                 }
                             }
@@ -373,15 +393,15 @@ class SyncEngine {
                             // Write back when Reminders changed but Obsidian didn't
                             // (meaning the change originated from Reminders, not Obsidian).
                             // All changes are applied atomically in a single file write.
-                            if rChanged && !oChanged, let source = oTask.obsidianSource {
+                            if rChanged && !oChanged {
                                 if fileNotModifiedBeforeSync {
-                                    var metadataChanges = ObsidianService.MetadataChanges()
+                                    var metadataChanges = MetadataChanges()
                                     var changeDescriptions: [String] = []
 
                                     // Due date writeback
                                     let dueDateDiffers = !datesAreEqualByDay(rTask.dueDate, oTask.dueDate)
                                     if dueDateDiffers && config.enableDueDateWriteback {
-                                        debugLog("[SyncEngine] Due date changed in Reminders for \"\(oTask.title)\": obsidian=\(oTask.dueDate?.description ?? "nil"), reminders=\(rTask.dueDate?.description ?? "nil")")
+                                        debugLog("[SyncEngine] Due date changed in destination for \"\(oTask.title)\"")
                                         metadataChanges.newDueDate = .some(rTask.dueDate)
                                         taskForReminders.dueDate = rTask.dueDate
                                         changeDescriptions.append("Due date → \(rTask.dueDate.map { DateFormatter.obsidianDateFormatter.string(from: $0) } ?? "removed")")
@@ -390,7 +410,7 @@ class SyncEngine {
                                     // Start date writeback
                                     let startDateDiffers = !datesAreEqualByDay(rTask.startDate, oTask.startDate)
                                     if startDateDiffers && config.enableStartDateWriteback {
-                                        debugLog("[SyncEngine] Start date changed in Reminders for \"\(oTask.title)\": obsidian=\(oTask.startDate?.description ?? "nil"), reminders=\(rTask.startDate?.description ?? "nil")")
+                                        debugLog("[SyncEngine] Start date changed in destination for \"\(oTask.title)\"")
                                         metadataChanges.newStartDate = .some(rTask.startDate)
                                         taskForReminders.startDate = rTask.startDate
                                         changeDescriptions.append("Start date → \(rTask.startDate.map { DateFormatter.obsidianDateFormatter.string(from: $0) } ?? "removed")")
@@ -398,7 +418,7 @@ class SyncEngine {
 
                                     // Priority writeback
                                     if rTask.priority != oTask.priority && config.enablePriorityWriteback {
-                                        debugLog("[SyncEngine] Priority changed in Reminders for \"\(oTask.title)\": obsidian=\(oTask.priority.displayName), reminders=\(rTask.priority.displayName)")
+                                        debugLog("[SyncEngine] Priority changed in destination for \"\(oTask.title)\"")
                                         metadataChanges.newPriority = rTask.priority
                                         taskForReminders.priority = rTask.priority
                                         changeDescriptions.append("Priority → \(rTask.priority.displayName)")
@@ -407,20 +427,22 @@ class SyncEngine {
                                     // Apply all metadata changes atomically
                                     if metadataChanges.hasChanges {
                                         if !config.dryRunMode {
-                                            let adjustedLine = source.lineNumber + (fileLineOffsets[source.filePath] ?? 0)
-                                            try obsidianService.updateTaskMetadata(
-                                                filePath: source.filePath,
-                                                lineNumber: adjustedLine,
-                                                originalLine: source.originalLine,
-                                                changes: metadataChanges,
-                                                vaultPath: config.vaultPath
-                                            )
+                                            var adjustedTask = oTask
+                                            if let src = oTask.obsidianSource {
+                                                let adjustedLine = src.lineNumber + (fileLineOffsets[src.filePath] ?? 0)
+                                                adjustedTask.obsidianSource = SyncTask.ObsidianSource(
+                                                    filePath: src.filePath,
+                                                    lineNumber: adjustedLine,
+                                                    originalLine: src.originalLine
+                                                )
+                                            }
+                                            try source.updateTaskMetadata(task: adjustedTask, changes: metadataChanges, config: config)
                                         }
                                         result.metadataWrittenBack += changeDescriptions.count
                                         result.details.append(SyncLogDetail(
                                             action: .metadataWriteback,
                                             taskTitle: (config.dryRunMode ? "[DRY RUN] " : "") + oTask.title,
-                                            filePath: source.filePath,
+                                            filePath: oTask.obsidianSource?.filePath,
                                             errorMessage: changeDescriptions.joined(separator: "; ")
                                         ))
                                     }
@@ -428,16 +450,16 @@ class SyncEngine {
                             }
 
                             if !config.dryRunMode {
-                                try remindersService.updateReminder(
+                                try destination.updateTask(
                                     withId: mapping.remindersId,
                                     from: taskForReminders,
-                                    includeDueTime: config.includeDueTime
+                                    config: config
                                 )
 
                                 // Move to correct list if needed
                                 let targetList = config.remindersListForTag(oTask.targetList ?? "")
                                 if targetList != rTask.targetList {
-                                    try remindersService.moveReminder(withId: mapping.remindersId, toList: targetList)
+                                    try destination.moveTask(withId: mapping.remindersId, toList: targetList)
                                 }
 
                                 syncState.addOrUpdateMapping(
@@ -502,10 +524,10 @@ class SyncEngine {
                         do {
                             let listName = config.remindersListForTag(oTask.targetList ?? "")
                             if !config.dryRunMode {
-                                let newId = try remindersService.createReminder(
+                                let newId = try destination.createTask(
                                     from: oTask,
                                     inList: listName,
-                                    includeDueTime: config.includeDueTime
+                                    config: config
                                 )
                                 syncState.addOrUpdateMapping(
                                     obsidianId: mapping.obsidianId,
@@ -609,7 +631,7 @@ class SyncEngine {
                             // Truly deleted from Obsidian — delete from Reminders too
                             do {
                                 if !config.dryRunMode {
-                                    try remindersService.deleteReminder(withId: mapping.remindersId)
+                                    try destination.deleteTask(withId: mapping.remindersId)
                                     syncState.removeMapping(obsidianId: mapping.obsidianId)
                                 }
                                 result.deleted += 1
@@ -685,11 +707,11 @@ class SyncEngine {
                     debugLog("[SyncEngine] Reconnecting new task \"\(task.title)\" to existing reminder \(matched.id) (dedup)")
 
                     if !config.dryRunMode {
-                        // Update the existing reminder with Obsidian data (source of truth)
-                        try? remindersService.updateReminder(
+                        // Update the existing destination task with source data (source of truth)
+                        try? destination.updateTask(
                             withId: matched.id,
                             from: task,
-                            includeDueTime: config.includeDueTime
+                            config: config
                         )
 
                         let hash = SyncState.generateTaskHash(task)
@@ -718,10 +740,10 @@ class SyncEngine {
                     let listName = config.remindersListForTag(task.targetList ?? "")
                     debugLog("[SyncEngine] Creating: \"\(task.title)\" → list \"\(listName)\" (tag: \(task.targetList ?? "none"), client: \(task.clientName ?? "none"))")
                     if !config.dryRunMode {
-                        let reminderId = try remindersService.createReminder(
+                        let reminderId = try destination.createTask(
                             from: task,
                             inList: listName,
-                            includeDueTime: config.includeDueTime
+                            config: config
                         )
                         let hash = SyncState.generateTaskHash(task)
                         syncState.addOrUpdateMapping(
@@ -760,21 +782,13 @@ class SyncEngine {
 
                     do {
                         if !config.dryRunMode {
-                            let result2 = try obsidianService.appendTaskToInbox(
-                                task: rTask,
-                                inboxRelativePath: config.inboxFilePath,
-                                vaultPath: config.vaultPath
-                            )
+                            let newSource = try source.appendNewTask(rTask, config: config)
 
-                            // Create a SyncTask with Obsidian source info for mapping
+                            // Create a SyncTask with source info for mapping
                             var mappedTask = rTask
-                            mappedTask.obsidianSource = SyncTask.ObsidianSource(
-                                filePath: result2.filePath,
-                                lineNumber: result2.lineNumber,
-                                originalLine: result2.lineContent
-                            )
+                            mappedTask.obsidianSource = newSource
 
-                            let obsidianId = SyncState.generateObsidianId(task: mappedTask)
+                            let obsidianId = source.generateTaskId(for: mappedTask)
                             let hash = SyncState.generateTaskHash(mappedTask)
                             syncState.addOrUpdateMapping(
                                 obsidianId: obsidianId,
@@ -827,18 +841,17 @@ class SyncEngine {
     // MARK: - Conflict Resolution (simplified - Obsidian always wins)
 
     func resolveConflict(_ conflict: SyncConflict, with resolution: SyncConflict.ConflictResolutionChoice, config: SyncConfiguration) throws {
-        guard let source = conflict.obsidianVersion.obsidianSource,
-              let remindersId = conflict.remindersVersion.remindersId else {
+        guard let remindersId = conflict.remindersVersion.remindersId else {
             throw SyncError.missingSourceInfo
         }
 
-        let obsidianId = SyncState.generateObsidianId(task: conflict.obsidianVersion)
+        let obsidianId = source.generateTaskId(for: conflict.obsidianVersion)
 
-        // Always use Obsidian version for Reminders
-        try remindersService.updateReminder(
+        // Always use source version for destination
+        try destination.updateTask(
             withId: remindersId,
             from: conflict.obsidianVersion,
-            includeDueTime: config.includeDueTime
+            config: config
         )
         let hash = SyncState.generateTaskHash(conflict.obsidianVersion)
         syncState.addOrUpdateMapping(
@@ -865,14 +878,6 @@ class SyncEngine {
     }
 
     // MARK: - Utilities
-
-    func requestRemindersAccess() async throws -> Bool {
-        return try await remindersService.requestAccess()
-    }
-
-    func getReminderLists() -> [String] {
-        return remindersService.getAllLists().map { $0.title }
-    }
 
     func getLastSyncDate() -> Date? {
         return syncState.lastSyncDate
@@ -903,11 +908,12 @@ enum SyncError: LocalizedError {
     case syncAlreadyInProgress
     case vaultPathNotFound(String)
     case notAnObsidianVault(String)
+    case safetyAbort(String)
 
     var errorDescription: String? {
         switch self {
         case .noVaultConfigured:
-            return "No Obsidian vault path configured"
+            return "No vault path configured"
         case .missingSourceInfo:
             return "Task is missing source information required for sync"
         case .conflictNotResolved:
@@ -918,6 +924,8 @@ enum SyncError: LocalizedError {
             return "Vault path not found: \(path)"
         case .notAnObsidianVault(let path):
             return "Path does not appear to be an Obsidian vault (missing .obsidian directory): \(path)"
+        case .safetyAbort(let message):
+            return "Safety abort: \(message)"
         }
     }
 }

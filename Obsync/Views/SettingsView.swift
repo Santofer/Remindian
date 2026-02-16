@@ -279,6 +279,60 @@ struct AdvancedSettingsView: View {
     var body: some View {
         Form {
             Section {
+                Picker("Task Source", selection: $syncManager.config.taskSourceType) {
+                    ForEach(SyncConfiguration.TaskSourceType.allCases, id: \.self) { type in
+                        Text(type.displayName).tag(type)
+                    }
+                }
+                .onChange(of: syncManager.config.taskSourceType) { _ in
+                    syncManager.updateSourceAndDestination()
+                }
+
+                Picker("Sync To", selection: $syncManager.config.taskDestinationType) {
+                    ForEach(SyncConfiguration.TaskDestinationType.allCases, id: \.self) { type in
+                        Text(type.displayName).tag(type)
+                    }
+                }
+                .onChange(of: syncManager.config.taskDestinationType) { _ in
+                    syncManager.updateSourceAndDestination()
+                }
+
+                if syncManager.config.taskDestinationType == .things3 {
+                    HStack {
+                        Text("Auth Token:")
+                            .foregroundColor(.secondary)
+                        SecureField("From Things > Settings > General", text: $syncManager.config.things3AuthToken)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 250)
+                    }
+                    .padding(.leading, 20)
+
+                    Text("Required for updating tasks. Go to Things > Settings > General > Enable Things URLs to get your token.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.leading, 20)
+                }
+
+                if syncManager.config.taskSourceType == .taskNotes {
+                    HStack {
+                        Text("Tasks Folder:")
+                            .foregroundColor(.secondary)
+                        TextField("TaskNotes/Tasks", text: $syncManager.config.taskNotesFolder)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 200)
+                    }
+                    .padding(.leading, 20)
+
+                    Text("Relative path within your vault where TaskNotes stores task files. Leave empty for default.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.leading, 20)
+                }
+            } header: {
+                Text("Source & Destination")
+            }
+
+            Section {
                 Toggle("Sync completed tasks", isOn: $syncManager.config.syncCompletedTasks)
 
                 Toggle("Dry run mode", isOn: $syncManager.config.dryRunMode)
@@ -289,14 +343,14 @@ struct AdvancedSettingsView: View {
                         Image(systemName: "eye")
                             .foregroundColor(.yellow)
                             .font(.caption)
-                        Text("Dry run is active. No changes will be made to Reminders or Obsidian.")
+                        Text("Dry run is active. No changes will be made.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
                     .padding(.leading, 20)
                 }
 
-                Text("Obsidian is the source of truth. Changes in Obsidian are synced to Reminders.")
+                Text("\(syncManager.config.taskSourceType.displayName) is the source of truth. Changes are synced to \(syncManager.config.taskDestinationType.displayName).")
                     .font(.caption)
                     .foregroundColor(.secondary)
             } header: {

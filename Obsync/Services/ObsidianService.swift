@@ -210,6 +210,9 @@ class ObsidianService {
             throw ObsidianError.fileNotFound(fileURL.path)
         }
 
+        // Register self-modification so FileWatcher ignores our changes
+        FileWatcherService.shared.registerSelfModification(fileURL.path)
+
         // Backup before any modification
         try backupService.backupFile(at: fileURL)
 
@@ -368,6 +371,9 @@ class ObsidianService {
             throw ObsidianError.fileNotFound(fileURL.path)
         }
 
+        // Register self-modification so FileWatcher ignores our changes
+        FileWatcherService.shared.registerSelfModification(fileURL.path)
+
         // Backup before any modification
         try backupService.backupFile(at: fileURL)
 
@@ -447,6 +453,9 @@ class ObsidianService {
         guard fileManager.fileExists(atPath: fileURL.path) else {
             throw ObsidianError.fileNotFound(fileURL.path)
         }
+
+        // Register self-modification so FileWatcher ignores our changes
+        FileWatcherService.shared.registerSelfModification(fileURL.path)
 
         try backupService.backupFile(at: fileURL)
 

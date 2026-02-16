@@ -11,7 +11,7 @@ struct OnboardingView: View {
     @State private var newMappingTag = ""
     @State private var newMappingList = ""
 
-    private let totalSteps = 5
+    private let totalSteps = 6
 
     var body: some View {
         VStack(spacing: 0) {
@@ -29,10 +29,11 @@ struct OnboardingView: View {
             Group {
                 switch currentStep {
                 case 0: welcomeStep
-                case 1: vaultStep
-                case 2: remindersStep
-                case 3: configureStep
-                case 4: finishStep
+                case 1: sourceDestinationStep
+                case 2: vaultStep
+                case 3: remindersStep
+                case 4: configureStep
+                case 5: finishStep
                 default: EmptyView()
                 }
             }
@@ -85,6 +86,87 @@ struct OnboardingView: View {
                 .multilineTextAlignment(.center)
                 .foregroundColor(.secondary)
                 .padding(.horizontal, 40)
+
+            Spacer()
+        }
+    }
+
+    private var sourceDestinationStep: some View {
+        VStack(spacing: 16) {
+            Spacer()
+
+            Image(systemName: "arrow.left.arrow.right")
+                .font(.system(size: 48))
+                .foregroundColor(.accentColor)
+
+            Text("Choose Your Setup")
+                .font(.title2)
+                .fontWeight(.semibold)
+
+            VStack(alignment: .leading, spacing: 12) {
+                GroupBox("Task Source") {
+                    Picker("Read tasks from:", selection: $syncManager.config.taskSourceType) {
+                        ForEach(SyncConfiguration.TaskSourceType.allCases, id: \.self) { type in
+                            Text(type.displayName).tag(type)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(4)
+
+                    Text(syncManager.config.taskSourceType == .obsidianTasks
+                         ? "Reads inline tasks (- [ ] Task 📅 2026-01-01) from your vault"
+                         : "Reads TaskNotes files with YAML frontmatter from your vault")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 4)
+
+                    if syncManager.config.taskSourceType == .taskNotes {
+                        HStack {
+                            Text("Folder:")
+                                .font(.caption)
+                            TextField("TaskNotes/Tasks", text: $syncManager.config.taskNotesFolder)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(size: 12))
+                        }
+                        .padding(.horizontal, 4)
+                    }
+                }
+
+                GroupBox("Sync To") {
+                    Picker("Sync tasks to:", selection: $syncManager.config.taskDestinationType) {
+                        ForEach(SyncConfiguration.TaskDestinationType.allCases, id: \.self) { type in
+                            Text(type.displayName).tag(type)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(4)
+
+                    Text(syncManager.config.taskDestinationType == .appleReminders
+                         ? "Syncs to Apple Reminders via EventKit"
+                         : "Syncs to Things 3 via AppleScript + URL scheme")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 4)
+
+                    if syncManager.config.taskDestinationType == .things3 {
+                        HStack {
+                            Text("Auth Token:")
+                                .font(.caption)
+                            SecureField("From Things Settings", text: $syncManager.config.things3AuthToken)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(size: 12))
+                        }
+                        .padding(.horizontal, 4)
+                    }
+                }
+            }
+            .padding(.horizontal, 30)
+            .onChange(of: syncManager.config.taskSourceType) { _ in
+                syncManager.updateSourceAndDestination()
+            }
+            .onChange(of: syncManager.config.taskDestinationType) { _ in
+                syncManager.updateSourceAndDestination()
+            }
 
             Spacer()
         }
@@ -313,8 +395,8 @@ struct OnboardingView: View {
 
     private var canAdvance: Bool {
         switch currentStep {
-        case 1: return !syncManager.config.vaultPath.isEmpty
-        case 2: return syncManager.hasRemindersAccess
+        case 2: return !syncManager.config.vaultPath.isEmpty
+        case 3: return syncManager.hasRemindersAccess
         default: return true
         }
     }

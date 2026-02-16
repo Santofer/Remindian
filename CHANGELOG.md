@@ -4,6 +4,32 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v3.1.0-beta (February 2026)
+
+### New Features
+- **Things 3 integration** — Sync your tasks to [Things 3](https://culturedcode.com/things/) instead of (or in addition to) Apple Reminders. Reads tasks via AppleScript, creates/updates via `things://` URL scheme
+- **TaskNotes integration** — Use the [TaskNotes](https://github.com/nicolo/obsidian-tasknotes) Obsidian plugin as a task source. Parses YAML frontmatter files (one file per task) with support for status, priority, due/start dates, tags, and recurrence
+- **Modular architecture** — New `TaskSource` / `TaskDestination` protocol system. The sync engine is now source/destination agnostic, making it easy to add more backends in the future
+- **Source & Destination picker** — Choose your task source (Obsidian Tasks or TaskNotes) and destination (Apple Reminders or Things 3) in Settings and in the onboarding wizard
+- **FileWatcher self-change filtering** — Writes made by Remindian itself no longer trigger a redundant re-sync (prevents feedback loops)
+- **Safety abort** — Sync aborts automatically if the source task count drops more than 50% compared to existing mappings (protects against vault unmounted, scan failures, etc.)
+- **Content-hash task IDs** — Task IDs no longer include line numbers, making them stable across line reordering in Obsidian files
+- **Unit test suite** — 34 automated tests covering task parsing, deduplication, TaskNotes parsing, and configuration management
+
+### Technical Changes
+- `SyncEngine` now takes `TaskSource` and `TaskDestination` protocols instead of direct service instances
+- `SyncManager` uses factory methods to create source/destination at runtime based on user settings
+- `Things3Destination` handles reading (AppleScript), creating (URL scheme), updating (URL scheme + auth token), and deleting (AppleScript)
+- `TaskNotesSource` parses YAML frontmatter and supports both file-based scanning and HTTP API (localhost:7117)
+- `RemindersDestination` wraps EventKit behind the `TaskDestination` protocol
+- `ObsidianTasksSource` wraps `ObsidianService` behind the `TaskSource` protocol
+- `FileWatcherService` now maintains a `selfModifiedFiles` set with 3-second auto-expiry for change filtering
+- Added `NSAppleEventsUsageDescription` to Info.plist for Things 3 AppleScript access
+- Onboarding wizard expanded to 6 steps (new "Choose Your Setup" step)
+- Settings view updated with Source & Destination section and conditional fields
+
+---
+
 ## v3.0.0-beta (February 2026) — Remindian
 
 **App renamed from Obsync to Remindian.**
@@ -114,13 +140,19 @@ SwiftUI Layer: ContentView | SettingsView | MenuBarView | SyncHistoryView | Abou
                     |
               SyncEngine   (core sync orchestrator, NSLock mutex)
                /        \
-    ObsidianService    RemindersService
-    (vault I/O)        (EventKit CRUD)
-         |
-    FileBackupService | AuditLog
+        TaskSource       TaskDestination
+        (protocol)        (protocol)
+          /    \            /       \
+  Obsidian   TaskNotes  Reminders  Things3
+  TasksSrc   Source     Destination Destination
+     |          |          |           |
+  ObsidianSvc  YAML     EventKit   AppleScript
+  (vault I/O)  parser   (CRUD)     + URL scheme
+       |
+  FileBackupService | AuditLog
 ```
 
-**Technology:** Swift 5, SwiftUI, EventKit, Carbon (hotkeys), UserNotifications. No external dependencies.
+**Technology:** Swift 5, SwiftUI, EventKit, Carbon (hotkeys), UserNotifications, AppleScript (Things 3). No external dependencies.
 
 ## Data Storage
 

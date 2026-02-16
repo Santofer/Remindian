@@ -28,7 +28,27 @@
 		019 /* FileWatcherService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 121; };
 		020 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 122; };
 		021 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 123; };
+		022 /* TaskSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 124; };
+		023 /* TaskDestination.swift in Sources */ = {isa = PBXBuildFile; fileRef = 125; };
+		024 /* ObsidianTasksSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 126; };
+		025 /* TaskNotesSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 127; };
+		026 /* RemindersDestination.swift in Sources */ = {isa = PBXBuildFile; fileRef = 128; };
+		027 /* Things3Destination.swift in Sources */ = {isa = PBXBuildFile; fileRef = 129; };
+		T01 /* TaskParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T10; };
+		T02 /* DeduplicationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T11; };
+		T03 /* TaskNotesParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T12; };
+		T04 /* ConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T13; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		T20 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 600 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 400;
+			remoteInfo = Remindian;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		100 /* Remindian.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Remindian.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -55,10 +75,28 @@
 		121 /* FileWatcherService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileWatcherService.swift; sourceTree = "<group>"; };
 		122 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		123 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
+		124 /* TaskSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskSource.swift; sourceTree = "<group>"; };
+		125 /* TaskDestination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskDestination.swift; sourceTree = "<group>"; };
+		126 /* ObsidianTasksSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObsidianTasksSource.swift; sourceTree = "<group>"; };
+		127 /* TaskNotesSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskNotesSource.swift; sourceTree = "<group>"; };
+		128 /* RemindersDestination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemindersDestination.swift; sourceTree = "<group>"; };
+		129 /* Things3Destination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Things3Destination.swift; sourceTree = "<group>"; };
+		T00 /* RemindianTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RemindianTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		T10 /* TaskParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskParserTests.swift; sourceTree = "<group>"; };
+		T11 /* DeduplicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeduplicationTests.swift; sourceTree = "<group>"; };
+		T12 /* TaskNotesParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskNotesParserTests.swift; sourceTree = "<group>"; };
+		T13 /* ConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		200 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		T30 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -72,6 +110,7 @@
 			isa = PBXGroup;
 			children = (
 				301 /* Remindian */,
+				309 /* RemindianTests */,
 				302 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -83,6 +122,7 @@
 				303 /* Views */,
 				304 /* Models */,
 				305 /* Services */,
+				306 /* Protocols */,
 				120 /* Assets.xcassets */,
 				112 /* Info.plist */,
 				113 /* Remindian.entitlements */,
@@ -94,6 +134,7 @@
 			isa = PBXGroup;
 			children = (
 				100 /* Remindian.app */,
+				T00 /* RemindianTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -134,8 +175,48 @@
 				116 /* HotKeyService.swift */,
 				117 /* AuditLog.swift */,
 				121 /* FileWatcherService.swift */,
+				307 /* Sources */,
+				308 /* Destinations */,
 			);
 			path = Services;
+			sourceTree = "<group>";
+		};
+		306 /* Protocols */ = {
+			isa = PBXGroup;
+			children = (
+				124 /* TaskSource.swift */,
+				125 /* TaskDestination.swift */,
+			);
+			path = Protocols;
+			sourceTree = "<group>";
+		};
+		307 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				126 /* ObsidianTasksSource.swift */,
+				127 /* TaskNotesSource.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		308 /* Destinations */ = {
+			isa = PBXGroup;
+			children = (
+				128 /* RemindersDestination.swift */,
+				129 /* Things3Destination.swift */,
+			);
+			path = Destinations;
+			sourceTree = "<group>";
+		};
+		309 /* RemindianTests */ = {
+			isa = PBXGroup;
+			children = (
+				T10 /* TaskParserTests.swift */,
+				T11 /* DeduplicationTests.swift */,
+				T12 /* TaskNotesParserTests.swift */,
+				T13 /* ConfigurationTests.swift */,
+			);
+			path = RemindianTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -158,6 +239,23 @@
 			productReference = 100 /* Remindian.app */;
 			productType = "com.apple.product-type.application";
 		};
+		T40 /* RemindianTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = T50;
+			buildPhases = (
+				T41 /* Sources */,
+				T30 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				T21 /* PBXTargetDependency */,
+			);
+			name = RemindianTests;
+			productName = RemindianTests;
+			productReference = T00 /* RemindianTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -170,6 +268,10 @@
 				TargetAttributes = {
 					400 = {
 						CreatedOnToolsVersion = 15.0;
+					};
+					T40 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = 400;
 					};
 				};
 			};
@@ -187,6 +289,7 @@
 			projectRoot = "";
 			targets = (
 				400 /* Remindian */,
+				T40 /* RemindianTests */,
 			);
 		};
 /* End PBXProject section */
@@ -227,10 +330,35 @@
 				019 /* FileWatcherService.swift in Sources */,
 				020 /* OnboardingView.swift in Sources */,
 				021 /* AboutView.swift in Sources */,
+				022 /* TaskSource.swift in Sources */,
+				023 /* TaskDestination.swift in Sources */,
+				024 /* ObsidianTasksSource.swift in Sources */,
+				025 /* TaskNotesSource.swift in Sources */,
+				026 /* RemindersDestination.swift in Sources */,
+				027 /* Things3Destination.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		T41 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				T01 /* TaskParserTests.swift in Sources */,
+				T02 /* DeduplicationTests.swift in Sources */,
+				T03 /* TaskNotesParserTests.swift in Sources */,
+				T04 /* ConfigurationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		T21 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 400 /* Remindian */;
+			targetProxy = T20 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		700 /* Debug */ = {
@@ -371,7 +499,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 3.0;
+				MARKETING_VERSION = 3.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -399,11 +527,43 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 3.0;
+				MARKETING_VERSION = 3.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		T70 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Remindian.app/Contents/MacOS/Remindian";
+			};
+			name = Debug;
+		};
+		T71 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Remindian.app/Contents/MacOS/Remindian";
 			};
 			name = Release;
 		};
@@ -424,6 +584,15 @@
 			buildConfigurations = (
 				700 /* Debug */,
 				701 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		T50 /* Build configuration list for PBXNativeTarget "RemindianTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				T70 /* Debug */,
+				T71 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -44,20 +44,63 @@ class SyncManager: ObservableObject {
 
     // MARK: - Private
 
-    private let syncEngine = SyncEngine()
+    private var syncEngine: SyncEngine
     private var syncTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
     private var isFirstSync = true
     private var appearanceObservation: NSKeyValueObservation?
 
+    // Protocol-based source and destination
+    private(set) var taskSource: TaskSource
+    private(set) var taskDestination: TaskDestination
+
     // MARK: - Initialization
 
     private init() {
-        self.config = SyncConfiguration.load()
+        let loadedConfig = SyncConfiguration.load()
+        self.config = loadedConfig
         self.syncLog = SyncLog.load()
+
+        // Initialize source and destination from config
+        let src = SyncManager.createSource(for: loadedConfig.taskSourceType)
+        let dst = SyncManager.createDestination(for: loadedConfig.taskDestinationType, config: loadedConfig)
+        self.taskSource = src
+        self.taskDestination = dst
+        self.syncEngine = SyncEngine(source: src, destination: dst)
+
         setupAutoSync()
         setupConfigObserver()
         setupAppearanceObserver()
+    }
+
+    // MARK: - Source/Destination Factory
+
+    static func createSource(for type: SyncConfiguration.TaskSourceType) -> TaskSource {
+        switch type {
+        case .obsidianTasks:
+            return ObsidianTasksSource()
+        case .taskNotes:
+            return TaskNotesSource()
+        }
+    }
+
+    static func createDestination(for type: SyncConfiguration.TaskDestinationType, config: SyncConfiguration) -> TaskDestination {
+        switch type {
+        case .appleReminders:
+            return RemindersDestination()
+        case .things3:
+            let destination = Things3Destination()
+            destination.authToken = config.things3AuthToken
+            return destination
+        }
+    }
+
+    /// Recreate source and destination when the user changes the type in settings.
+    func updateSourceAndDestination() {
+        taskSource = SyncManager.createSource(for: config.taskSourceType)
+        taskDestination = SyncManager.createDestination(for: config.taskDestinationType, config: config)
+        syncEngine = SyncEngine(source: taskSource, destination: taskDestination)
+        debugLog("[SyncManager] Updated source=\(taskSource.sourceName), destination=\(taskDestination.destinationName)")
     }
 
     private func setupConfigObserver() {
@@ -99,9 +142,9 @@ class SyncManager: ObservableObject {
 
     func requestRemindersAccess() async {
         do {
-            debugLog("[SyncManager] Requesting Reminders access...")
-            hasRemindersAccess = try await syncEngine.requestRemindersAccess()
-            debugLog("[SyncManager] Reminders access: \(hasRemindersAccess)")
+            debugLog("[SyncManager] Requesting \(taskDestination.destinationName) access...")
+            hasRemindersAccess = try await taskDestination.requestAccess()
+            debugLog("[SyncManager] \(taskDestination.destinationName) access: \(hasRemindersAccess)")
             if hasRemindersAccess {
                 refreshLists()
                 debugLog("[SyncManager] Available lists: \(availableLists)")
@@ -257,7 +300,7 @@ class SyncManager: ObservableObject {
     // MARK: - List Management
 
     func refreshLists() {
-        availableLists = syncEngine.getReminderLists()
+        availableLists = taskDestination.getAvailableLists()
         debugLog("[SyncManager] Refreshed lists: \(availableLists)")
     }
 

@@ -14,7 +14,26 @@ class FileWatcherService {
     /// Debounce interval: wait this long after the last change before triggering sync
     private let debounceInterval: TimeInterval = 2.0
 
+    /// Track files we've written to, so we can ignore our own changes
+    private var selfModifiedFiles: Set<String> = []
+    private let selfModifiedLock = NSLock()
+
     private init() {}
+
+    /// Register a file path that we're about to modify, so the watcher ignores our own changes.
+    /// The file is automatically cleared from the ignore list after a short delay.
+    func registerSelfModification(_ filePath: String) {
+        selfModifiedLock.lock()
+        selfModifiedFiles.insert(filePath)
+        selfModifiedLock.unlock()
+
+        // Clear after 3 seconds (enough for FSEvents to process our change)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+            self?.selfModifiedLock.lock()
+            self?.selfModifiedFiles.remove(filePath)
+            self?.selfModifiedLock.unlock()
+        }
+    }
 
     /// Start watching a vault directory for markdown file changes.
     /// - Parameters:
@@ -78,7 +97,11 @@ class FileWatcherService {
 
     /// Called by the FSEvents callback when changes are detected.
     fileprivate func handleFileSystemEvent(paths: [String]) {
-        // Filter: only care about markdown files
+        // Filter: only care about markdown files, skip our own modifications
+        selfModifiedLock.lock()
+        let currentSelfModified = selfModifiedFiles
+        selfModifiedLock.unlock()
+
         let relevantChanges = paths.filter { path in
             let lower = path.lowercased()
             // Must be a markdown file
@@ -90,12 +113,17 @@ class FileWatcherService {
                     return false
                 }
             }
+            // Ignore files we've modified ourselves
+            if currentSelfModified.contains(path) {
+                debugLog("[FileWatcher] Ignoring self-modified file: \(path)")
+                return false
+            }
             return true
         }
 
         guard !relevantChanges.isEmpty else { return }
 
-        debugLog("[FileWatcher] Detected \(relevantChanges.count) markdown file change(s)")
+        debugLog("[FileWatcher] Detected \(relevantChanges.count) external markdown file change(s)")
 
         // Debounce: reset timer on each event, only trigger after quiet period
         DispatchQueue.main.async { [weak self] in

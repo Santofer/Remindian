@@ -31,6 +31,36 @@ class SyncConfiguration: ObservableObject, Codable {
     @Published var globalHotKeyCode: UInt32
     @Published var globalHotKeyModifiers: UInt32
 
+    // MARK: - Source & Destination Selection
+    @Published var taskSourceType: TaskSourceType
+    @Published var taskDestinationType: TaskDestinationType
+    @Published var things3AuthToken: String
+    @Published var taskNotesFolder: String  // Relative path within vault (e.g., "TaskNotes/Tasks")
+
+    enum TaskSourceType: String, Codable, CaseIterable {
+        case obsidianTasks = "obsidianTasks"
+        case taskNotes = "taskNotes"
+
+        var displayName: String {
+            switch self {
+            case .obsidianTasks: return "Obsidian Tasks"
+            case .taskNotes: return "TaskNotes"
+            }
+        }
+    }
+
+    enum TaskDestinationType: String, Codable, CaseIterable {
+        case appleReminders = "appleReminders"
+        case things3 = "things3"
+
+        var displayName: String {
+            switch self {
+            case .appleReminders: return "Apple Reminders"
+            case .things3: return "Things 3"
+            }
+        }
+    }
+
     struct ListMapping: Codable, Identifiable, Equatable {
         var id = UUID()
         var obsidianTag: String
@@ -55,6 +85,7 @@ class SyncConfiguration: ObservableObject, Codable {
         case enableDueDateWriteback, enableStartDateWriteback, enablePriorityWriteback
         case enableNewTaskWriteback, inboxFilePath, enableFileWatcher
         case enableNotifications, globalHotKeyEnabled, globalHotKeyCode, globalHotKeyModifiers
+        case taskSourceType, taskDestinationType, things3AuthToken, taskNotesFolder
     }
 
     init(
@@ -84,7 +115,11 @@ class SyncConfiguration: ObservableObject, Codable {
         forceDarkIcon: Bool = false,
         globalHotKeyEnabled: Bool = false,
         globalHotKeyCode: UInt32 = 1, // kVK_ANSI_S
-        globalHotKeyModifiers: UInt32 = 0x0D00 // cmd + shift + option
+        globalHotKeyModifiers: UInt32 = 0x0D00, // cmd + shift + option
+        taskSourceType: TaskSourceType = .obsidianTasks,
+        taskDestinationType: TaskDestinationType = .appleReminders,
+        things3AuthToken: String = "",
+        taskNotesFolder: String = ""
     ) {
         self.vaultPath = vaultPath
         self.syncIntervalMinutes = syncIntervalMinutes
@@ -113,6 +148,10 @@ class SyncConfiguration: ObservableObject, Codable {
         self.globalHotKeyEnabled = globalHotKeyEnabled
         self.globalHotKeyCode = globalHotKeyCode
         self.globalHotKeyModifiers = globalHotKeyModifiers
+        self.taskSourceType = taskSourceType
+        self.taskDestinationType = taskDestinationType
+        self.things3AuthToken = things3AuthToken
+        self.taskNotesFolder = taskNotesFolder
     }
 
     required init(from decoder: Decoder) throws {
@@ -144,6 +183,10 @@ class SyncConfiguration: ObservableObject, Codable {
         globalHotKeyEnabled = try container.decodeIfPresent(Bool.self, forKey: .globalHotKeyEnabled) ?? false
         globalHotKeyCode = try container.decodeIfPresent(UInt32.self, forKey: .globalHotKeyCode) ?? 1
         globalHotKeyModifiers = try container.decodeIfPresent(UInt32.self, forKey: .globalHotKeyModifiers) ?? 0x0D00
+        taskSourceType = try container.decodeIfPresent(TaskSourceType.self, forKey: .taskSourceType) ?? .obsidianTasks
+        taskDestinationType = try container.decodeIfPresent(TaskDestinationType.self, forKey: .taskDestinationType) ?? .appleReminders
+        things3AuthToken = try container.decodeIfPresent(String.self, forKey: .things3AuthToken) ?? ""
+        taskNotesFolder = try container.decodeIfPresent(String.self, forKey: .taskNotesFolder) ?? ""
     }
 
     func encode(to encoder: Encoder) throws {
@@ -175,6 +218,10 @@ class SyncConfiguration: ObservableObject, Codable {
         try container.encode(globalHotKeyEnabled, forKey: .globalHotKeyEnabled)
         try container.encode(globalHotKeyCode, forKey: .globalHotKeyCode)
         try container.encode(globalHotKeyModifiers, forKey: .globalHotKeyModifiers)
+        try container.encode(taskSourceType, forKey: .taskSourceType)
+        try container.encode(taskDestinationType, forKey: .taskDestinationType)
+        try container.encode(things3AuthToken, forKey: .things3AuthToken)
+        try container.encode(taskNotesFolder, forKey: .taskNotesFolder)
     }
 
     // MARK: - Persistence
