@@ -20,6 +20,7 @@ class UpdaterService: ObservableObject {
     @Published var downloadProgress: Double = 0
     @Published var lastCheckDate: Date?
     @Published var errorMessage: String?
+    @Published var upToDate = false
 
     private var checkTimer: Timer?
 
@@ -49,6 +50,7 @@ class UpdaterService: ObservableObject {
         guard !isChecking else { return }
         isChecking = true
         errorMessage = nil
+        upToDate = false
 
         defer { isChecking = false }
 
@@ -73,6 +75,9 @@ class UpdaterService: ObservableObject {
             } else {
                 updateAvailable = false
                 lastCheckDate = Date()
+                if !silent {
+                    upToDate = true
+                }
             }
         } catch {
             if !silent {

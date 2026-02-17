@@ -116,7 +116,17 @@ struct AboutView: View {
                 .buttonStyle(.bordered)
                 .disabled(updater.isChecking)
 
-                if let lastCheck = updater.lastCheckDate {
+                if updater.upToDate {
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                            .font(.caption)
+                        Text("You're up to date!")
+                            .fontWeight(.medium)
+                    }
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                } else if let lastCheck = updater.lastCheckDate {
                     Text("Last checked: \(lastCheck, style: .relative) ago")
                         .font(.caption2)
                         .foregroundColor(.secondary)
