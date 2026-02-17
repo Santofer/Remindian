@@ -55,8 +55,8 @@ class TaskNotesSource: TaskSource {
     /// Current integration mode
     var integrationMode: IntegrationMode = .cli
 
-    /// HTTP API base URL (default: TaskNotes plugin local server)
-    var apiBaseUrl: String = "http://localhost:7117"
+    /// HTTP API port (default: TaskNotes plugin local server port)
+    var apiPort: Int = 8080
 
     /// Path to the mtn binary (auto-detected or user-configured)
     var mtnPath: String = ""
@@ -169,7 +169,7 @@ class TaskNotesSource: TaskSource {
         case .fileBased:
             return try scanTasksFromFiles(config: config)
         case .httpApi:
-            return try scanTasksViaApi()
+            return try scanTasksViaApi(config: config)
         }
     }
 
@@ -686,21 +686,77 @@ class TaskNotesSource: TaskSource {
 
     // MARK: - HTTP API
 
-    private func scanTasksViaApi() throws -> [SyncTask] {
-        guard let url = URL(string: "\(apiBaseUrl)/api/tasks") else {
+    private func resolvedApiPort(config: SyncConfiguration) -> Int {
+        if (1...65535).contains(config.taskNotesApiPort) {
+            return config.taskNotesApiPort
+        }
+        if (1...65535).contains(apiPort) {
+            return apiPort
+        }
+        return 8080
+    }
+
+    private func responseSnippet(from data: Data) -> String {
+        guard let body = String(data: data, encoding: .utf8) else { return "<non-UTF8 response>" }
+        let compact = body.replacingOccurrences(of: "\n", with: " ")
+        return String(compact.prefix(240))
+    }
+
+    private func decodeApiTasks(from data: Data) throws -> [TaskNotesApiTask] {
+        let decoder = JSONDecoder()
+
+        if let directArray = try? decoder.decode([TaskNotesApiTask].self, from: data) {
+            return directArray
+        }
+
+        if let envelope = try? decoder.decode(TaskNotesApiEnvelope<[TaskNotesApiTask]>.self, from: data) {
+            if envelope.success == false {
+                throw TaskNotesError.apiError(envelope.error ?? envelope.message ?? "API returned success=false")
+            }
+            if let tasks = envelope.data {
+                return tasks
+            }
+        }
+
+        if let envelope = try? decoder.decode(TaskNotesApiEnvelope<TaskNotesApiTaskCollection>.self, from: data) {
+            if envelope.success == false {
+                throw TaskNotesError.apiError(envelope.error ?? envelope.message ?? "API returned success=false")
+            }
+            if let payload = envelope.data {
+                if let tasks = payload.tasks {
+                    return tasks
+                }
+                if let tasks = payload.items {
+                    return tasks
+                }
+                if let tasks = payload.results {
+                    return tasks
+                }
+            }
+        }
+
+        throw TaskNotesError.apiError("Unexpected /api/tasks response format: \(responseSnippet(from: data))")
+    }
+
+    private func scanTasksViaApi(config: SyncConfiguration) throws -> [SyncTask] {
+        let apiBase = "http://localhost:\(resolvedApiPort(config: config))"
+        guard let url = URL(string: "\(apiBase)/api/tasks") else {
             throw TaskNotesError.invalidApiUrl
         }
 
         var request = URLRequest(url: url)
-        request.timeoutInterval = 5
+        request.timeoutInterval = 8
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         let semaphore = DispatchSemaphore(value: 0)
         var responseData: Data?
         var responseError: Error?
+        var httpStatusCode: Int?
 
-        let task = URLSession.shared.dataTask(with: request) { data, _, error in
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
             responseData = data
             responseError = error
+            httpStatusCode = (response as? HTTPURLResponse)?.statusCode
             semaphore.signal()
         }
         task.resume()
@@ -714,8 +770,11 @@ class TaskNotesSource: TaskSource {
             throw TaskNotesError.apiError("No data received")
         }
 
-        let decoder = JSONDecoder()
-        let apiTasks = try decoder.decode([TaskNotesApiTask].self, from: data)
+        if let statusCode = httpStatusCode, !(200...299).contains(statusCode) {
+            throw TaskNotesError.apiError("HTTP \(statusCode): \(responseSnippet(from: data))")
+        }
+
+        let apiTasks = try decodeApiTasks(from: data)
         return apiTasks.map { $0.toSyncTask() }
     }
 
@@ -866,6 +925,19 @@ private struct TaskNotesApiTask: Codable {
             remindersId: id
         )
     }
+}
+
+private struct TaskNotesApiEnvelope<T: Decodable>: Decodable {
+    let success: Bool?
+    let data: T?
+    let error: String?
+    let message: String?
+}
+
+private struct TaskNotesApiTaskCollection: Decodable {
+    let tasks: [TaskNotesApiTask]?
+    let items: [TaskNotesApiTask]?
+    let results: [TaskNotesApiTask]?
 }
 
 // MARK: - Errors

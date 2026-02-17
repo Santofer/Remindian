@@ -83,6 +83,7 @@ class SyncManager: ObservableObject {
             let source = TaskNotesSource()
             if let config = config {
                 source.integrationMode = TaskNotesSource.IntegrationMode(rawValue: config.taskNotesIntegrationMode) ?? .cli
+                source.apiPort = config.taskNotesApiPort
             }
             return source
         }
@@ -173,6 +174,7 @@ class SyncManager: ObservableObject {
             debugLog("[SyncManager] Skipped: already syncing")
             return
         }
+        updateSourceAndDestination()
         guard hasRemindersAccess else {
             showErrorMessage("No access to Reminders. Please grant permission in System Settings.")
             return

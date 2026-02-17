@@ -11,9 +11,29 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func requestPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
-            if let error = error {
-                print("Notification permission error: \(error)")
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            switch settings.authorizationStatus {
+            case .authorized, .provisional:
+                return
+            case .denied:
+                debugLog("[Notifications] Permission denied in system settings")
+            case .notDetermined:
+                center.requestAuthorization(options: [.alert, .sound]) { granted, error in
+                    if let nsError = error as NSError? {
+                        if nsError.domain == UNErrorDomain && nsError.code == 1 {
+                            debugLog("[Notifications] Notifications are not allowed for this application")
+                            return
+                        }
+                        debugLog("[Notifications] Permission request failed: \(nsError.localizedDescription)")
+                        return
+                    }
+                    if !granted {
+                        debugLog("[Notifications] Permission was not granted")
+                    }
+                }
+            @unknown default:
+                return
             }
         }
     }
@@ -30,7 +50,14 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             content: content,
             trigger: nil
         )
-        UNUserNotificationCenter.current().add(request)
+        UNUserNotificationCenter.current().add(request) { error in
+            if let nsError = error as NSError? {
+                if nsError.domain == UNErrorDomain && nsError.code == 1 {
+                    return
+                }
+                debugLog("[Notifications] Failed to schedule notification: \(nsError.localizedDescription)")
+            }
+        }
     }
 
     // Show notifications even when app is in foreground

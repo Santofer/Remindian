@@ -340,6 +340,28 @@ struct AdvancedSettingsView: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .padding(.leading, 20)
+
+                        HStack {
+                            Text("API Port:")
+                                .foregroundColor(.secondary)
+                            TextField("8080", text: Binding(
+                                get: { String(syncManager.config.taskNotesApiPort) },
+                                set: { value in
+                                    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    if trimmed.isEmpty {
+                                        syncManager.config.taskNotesApiPort = 8080
+                                        return
+                                    }
+
+                                    if let port = Int(trimmed), (1...65535).contains(port) {
+                                        syncManager.config.taskNotesApiPort = port
+                                    }
+                                }
+                            ))
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 120)
+                        }
+                        .padding(.leading, 20)
                     }
 
                     HStack {
