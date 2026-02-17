@@ -4,6 +4,25 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v3.2.0 (February 2026)
+
+### New Features
+- **TaskNotes CLI integration (`mtn`)** — Sync tasks using the [mdbase-tasknotes](https://github.com/callumalpass/mdbase-tasknotes) CLI tool. Works completely standalone without Obsidian open. Install with `npm install -g mdbase-tasknotes`
+- **TaskNotes integration mode picker** — Choose between CLI (mtn), Direct Files, or HTTP API in Settings
+- **Auto-updater** — Checks GitHub Releases for new versions automatically (every 24 hours). Downloads, mounts DMG, replaces the app, and relaunches — all without opening a browser
+- **Buy Me a Coffee** — Support the project directly from the About page
+
+### Technical Changes
+- `TaskNotesSource` now supports 3 integration modes: CLI (`mtn list --json`), file-based (direct YAML parsing), and HTTP API
+- CLI mode uses `Process` to invoke `mtn` with auto-detection of the binary path
+- All CLI operations: scan (`mtn list --json`), complete (`mtn complete`), update (`mtn update`), create (`mtn create`)
+- File-based mode updated to match mdbase-tasknotes field names (`scheduled` instead of `start`, `completedDate`, `title` in frontmatter)
+- `SyncConfiguration` gains `taskNotesIntegrationMode` field (backward compatible, defaults to `cli`)
+- `UpdaterService` checks GitHub Releases API, downloads DMG, mounts with `hdiutil`, replaces app bundle, and relaunches
+- About page redesigned with update status, progress bar, and Buy Me a Coffee button
+
+---
+
 ## v3.1.0-beta (February 2026)
 
 ### New Features

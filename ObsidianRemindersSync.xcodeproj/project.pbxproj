@@ -34,6 +34,7 @@
 		025 /* TaskNotesSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 127; };
 		026 /* RemindersDestination.swift in Sources */ = {isa = PBXBuildFile; fileRef = 128; };
 		027 /* Things3Destination.swift in Sources */ = {isa = PBXBuildFile; fileRef = 129; };
+		028 /* UpdaterService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 130; };
 		T01 /* TaskParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T10; };
 		T02 /* DeduplicationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T11; };
 		T03 /* TaskNotesParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T12; };
@@ -81,6 +82,7 @@
 		127 /* TaskNotesSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskNotesSource.swift; sourceTree = "<group>"; };
 		128 /* RemindersDestination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemindersDestination.swift; sourceTree = "<group>"; };
 		129 /* Things3Destination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Things3Destination.swift; sourceTree = "<group>"; };
+		130 /* UpdaterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdaterService.swift; sourceTree = "<group>"; };
 		T00 /* RemindianTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RemindianTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		T10 /* TaskParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskParserTests.swift; sourceTree = "<group>"; };
 		T11 /* DeduplicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeduplicationTests.swift; sourceTree = "<group>"; };
@@ -175,6 +177,7 @@
 				116 /* HotKeyService.swift */,
 				117 /* AuditLog.swift */,
 				121 /* FileWatcherService.swift */,
+				130 /* UpdaterService.swift */,
 				307 /* Sources */,
 				308 /* Destinations */,
 			);
@@ -336,6 +339,7 @@
 				025 /* TaskNotesSource.swift in Sources */,
 				026 /* RemindersDestination.swift in Sources */,
 				027 /* Things3Destination.swift in Sources */,
+				028 /* UpdaterService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -499,7 +503,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 3.1.0;
+				MARKETING_VERSION = 3.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -527,7 +531,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 3.1.0;
+				MARKETING_VERSION = 3.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

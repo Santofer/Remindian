@@ -1,11 +1,13 @@
 import SwiftUI
 
 struct AboutView: View {
-    private let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "3.1.0"
-    private let buildNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "2"
+    private let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "3.2.0"
+    private let buildNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "3"
     private let releaseDate = "February 2026"
     private let githubURL = "https://github.com/Santofer/Remindian"
-    private let downloadURL = "https://github.com/Santofer/Remindian/releases/latest"
+    private let buyMeCoffeeURL = "https://buymeacoffee.com/santofer"
+
+    @StateObject private var updater = UpdaterService.shared
 
     var body: some View {
         VStack(spacing: 16) {
@@ -32,7 +34,7 @@ struct AboutView: View {
                 .multilineTextAlignment(.center)
 
             Divider()
-                .frame(width: 200)
+                .frame(width: 240)
 
             // Author & info
             VStack(spacing: 8) {
@@ -63,23 +65,74 @@ struct AboutView: View {
             }
 
             Divider()
-                .frame(width: 200)
+                .frame(width: 240)
+
+            // Update section
+            if updater.updateAvailable {
+                VStack(spacing: 6) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .foregroundColor(.blue)
+                        Text("Update available: \(updater.latestVersion)")
+                            .fontWeight(.medium)
+                    }
+                    .font(.callout)
+
+                    if updater.isDownloading {
+                        ProgressView(value: updater.downloadProgress)
+                            .frame(width: 200)
+                        Text("Downloading update...")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Button(action: {
+                            Task { await updater.downloadAndInstall() }
+                        }) {
+                            HStack {
+                                Image(systemName: "arrow.down.circle.fill")
+                                Text("Install Update")
+                            }
+                            .frame(width: 200)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+            } else {
+                Button(action: {
+                    Task { await updater.checkForUpdates(silent: false) }
+                }) {
+                    HStack {
+                        if updater.isChecking {
+                            ProgressView()
+                                .controlSize(.small)
+                                .padding(.trailing, 2)
+                        } else {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                        }
+                        Text(updater.isChecking ? "Checking..." : "Check for Updates")
+                    }
+                    .frame(width: 200)
+                }
+                .buttonStyle(.bordered)
+                .disabled(updater.isChecking)
+
+                if let lastCheck = updater.lastCheckDate {
+                    Text("Last checked: \(lastCheck, style: .relative) ago")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            if let error = updater.errorMessage {
+                Text(error)
+                    .font(.caption2)
+                    .foregroundColor(.red)
+                    .multilineTextAlignment(.center)
+                    .frame(width: 260)
+            }
 
             // Action buttons
             VStack(spacing: 10) {
-                Button(action: {
-                    if let url = URL(string: downloadURL) {
-                        NSWorkspace.shared.open(url)
-                    }
-                }) {
-                    HStack {
-                        Image(systemName: "arrow.down.circle.fill")
-                        Text("Check for Updates")
-                    }
-                    .frame(width: 180)
-                }
-                .buttonStyle(.borderedProminent)
-
                 Button(action: {
                     if let url = URL(string: githubURL) {
                         NSWorkspace.shared.open(url)
@@ -89,18 +142,36 @@ struct AboutView: View {
                         Image(systemName: "chevron.left.forwardslash.chevron.right")
                         Text("View on GitHub")
                     }
-                    .frame(width: 180)
+                    .frame(width: 200)
                 }
                 .buttonStyle(.bordered)
+
+                // Buy Me a Coffee button
+                Button(action: {
+                    if let url = URL(string: buyMeCoffeeURL) {
+                        NSWorkspace.shared.open(url)
+                    }
+                }) {
+                    HStack(spacing: 6) {
+                        Text("\u{2615}")
+                            .font(.body)
+                        Text("Buy Me a Coffee")
+                            .fontWeight(.medium)
+                    }
+                    .frame(width: 200)
+                    .padding(.vertical, 4)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.orange)
             }
 
             Text("Free and open source under the MIT License")
                 .font(.caption2)
                 .foregroundColor(.secondary)
-                .padding(.top, 4)
+                .padding(.top, 2)
         }
         .padding(30)
-        .frame(width: 320, height: 480)
+        .frame(width: 340, height: 580)
     }
 }
 

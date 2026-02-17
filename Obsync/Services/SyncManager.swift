@@ -62,7 +62,7 @@ class SyncManager: ObservableObject {
         self.syncLog = SyncLog.load()
 
         // Initialize source and destination from config
-        let src = SyncManager.createSource(for: loadedConfig.taskSourceType)
+        let src = SyncManager.createSource(for: loadedConfig.taskSourceType, config: loadedConfig)
         let dst = SyncManager.createDestination(for: loadedConfig.taskDestinationType, config: loadedConfig)
         self.taskSource = src
         self.taskDestination = dst
@@ -75,12 +75,16 @@ class SyncManager: ObservableObject {
 
     // MARK: - Source/Destination Factory
 
-    static func createSource(for type: SyncConfiguration.TaskSourceType) -> TaskSource {
+    static func createSource(for type: SyncConfiguration.TaskSourceType, config: SyncConfiguration? = nil) -> TaskSource {
         switch type {
         case .obsidianTasks:
             return ObsidianTasksSource()
         case .taskNotes:
-            return TaskNotesSource()
+            let source = TaskNotesSource()
+            if let config = config {
+                source.integrationMode = TaskNotesSource.IntegrationMode(rawValue: config.taskNotesIntegrationMode) ?? .cli
+            }
+            return source
         }
     }
 
@@ -97,7 +101,7 @@ class SyncManager: ObservableObject {
 
     /// Recreate source and destination when the user changes the type in settings.
     func updateSourceAndDestination() {
-        taskSource = SyncManager.createSource(for: config.taskSourceType)
+        taskSource = SyncManager.createSource(for: config.taskSourceType, config: config)
         taskDestination = SyncManager.createDestination(for: config.taskDestinationType, config: config)
         syncEngine = SyncEngine(source: taskSource, destination: taskDestination)
         debugLog("[SyncManager] Updated source=\(taskSource.sourceName), destination=\(taskDestination.destinationName)")

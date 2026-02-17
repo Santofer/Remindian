@@ -1,26 +1,27 @@
 import Foundation
 
-/// TaskNotes source — reads tasks from the TaskNotes plugin's file-based format.
+/// TaskNotes source — reads tasks from the TaskNotes/mdbase-tasknotes ecosystem.
 ///
 /// TaskNotes stores each task as a separate .md file with YAML frontmatter:
 /// ```
 /// ---
-/// status: todo
-/// priority: medium
+/// title: Buy groceries
+/// status: open
+/// priority: normal
 /// due: 2026-03-15
-/// recurrence: RRULE:FREQ=MONTHLY;BYMONTHDAY=20
+/// scheduled: 2026-03-14
 /// tags: [work, urgent]
-/// created: 2026-01-01T10:00:00
+/// dateCreated: 2026-01-01
 /// ---
-/// # Task Title
 ///
 /// Task description/notes here
 /// ```
 ///
-/// Integration methods:
-/// 1. File-based: Read/write .md files in TaskNotes/Tasks/ directory (works without Obsidian open)
-/// 2. HTTP API: GET/POST/PUT/DELETE /api/tasks (requires Obsidian open with TaskNotes plugin)
-/// 3. Webhooks: TaskNotes can send events on task changes (for reactive sync)
+/// Integration methods (in priority order):
+/// 1. CLI (`mtn`): Uses `mdbase-tasknotes` CLI — works without Obsidian open.
+///    Install: `npm install -g mdbase-tasknotes`
+/// 2. File-based: Direct read/write of .md files in the tasks directory.
+/// 3. HTTP API: GET/POST/PUT/DELETE /api/tasks (requires Obsidian open with TaskNotes plugin)
 class TaskNotesSource: TaskSource {
     let sourceName = "TaskNotes"
 
@@ -28,20 +29,147 @@ class TaskNotesSource: TaskSource {
     private let backupService = FileBackupService.shared
     private let auditLog = AuditLog.shared
 
-    /// Whether to use the HTTP API (true) or file-based access (false).
-    /// File-based is more reliable but HTTP API provides richer metadata.
-    var useHttpApi: Bool = false
+    /// Integration mode for TaskNotes.
+    enum IntegrationMode: String, Codable, CaseIterable {
+        case cli = "cli"           // mtn CLI (standalone, recommended)
+        case fileBased = "file"    // Direct file read/write
+        case httpApi = "http"      // HTTP API (requires Obsidian)
+
+        var displayName: String {
+            switch self {
+            case .cli: return "CLI (mtn)"
+            case .fileBased: return "Direct Files"
+            case .httpApi: return "HTTP API"
+            }
+        }
+
+        var description: String {
+            switch self {
+            case .cli: return "Uses mdbase-tasknotes CLI. Works without Obsidian. Install: npm install -g mdbase-tasknotes"
+            case .fileBased: return "Reads/writes task files directly. Works without Obsidian."
+            case .httpApi: return "Uses the TaskNotes plugin HTTP API. Requires Obsidian to be open."
+            }
+        }
+    }
+
+    /// Current integration mode
+    var integrationMode: IntegrationMode = .cli
 
     /// HTTP API base URL (default: TaskNotes plugin local server)
     var apiBaseUrl: String = "http://localhost:7117"
 
+    /// Path to the mtn binary (auto-detected or user-configured)
+    var mtnPath: String = ""
+
+    // MARK: - CLI Detection
+
+    /// Find the `mtn` binary path. Checks common locations.
+    static func findMtnBinary() -> String? {
+        let commonPaths = [
+            "/usr/local/bin/mtn",
+            "/opt/homebrew/bin/mtn",
+            "\(NSHomeDirectory())/.npm-global/bin/mtn",
+            "\(NSHomeDirectory())/.nvm/versions/node/default/bin/mtn"
+        ]
+
+        for path in commonPaths {
+            if FileManager.default.isExecutableFile(atPath: path) {
+                return path
+            }
+        }
+
+        // Try `which mtn` as fallback
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["which", "mtn"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            if process.terminationStatus == 0 {
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let path = path, !path.isEmpty {
+                    return path
+                }
+            }
+        } catch {
+            debugLog("[TaskNotes] Failed to run 'which mtn': \(error)")
+        }
+
+        return nil
+    }
+
+    /// Check if mtn is available
+    var isMtnAvailable: Bool {
+        if !mtnPath.isEmpty {
+            return fileManager.isExecutableFile(atPath: mtnPath)
+        }
+        return TaskNotesSource.findMtnBinary() != nil
+    }
+
+    /// Get the effective mtn path (configured or auto-detected)
+    private var effectiveMtnPath: String? {
+        if !mtnPath.isEmpty && fileManager.isExecutableFile(atPath: mtnPath) {
+            return mtnPath
+        }
+        return TaskNotesSource.findMtnBinary()
+    }
+
+    // MARK: - CLI Execution Helper
+
+    /// Run an mtn command and return stdout.
+    private func runMtn(args: [String], collectionPath: String) throws -> String {
+        guard let binary = effectiveMtnPath else {
+            throw TaskNotesError.mtnNotFound
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: binary)
+        process.arguments = ["-p", collectionPath] + args
+
+        // Inherit PATH for node resolution
+        var env = ProcessInfo.processInfo.environment
+        let npmPaths = ["/usr/local/bin", "/opt/homebrew/bin", "\(NSHomeDirectory())/.npm-global/bin"]
+        if let existingPath = env["PATH"] {
+            env["PATH"] = npmPaths.joined(separator: ":") + ":" + existingPath
+        }
+        process.environment = env
+
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.standardOutput = stdout
+        process.standardError = stderr
+
+        try process.run()
+        process.waitUntilExit()
+
+        let outputData = stdout.fileHandleForReading.readDataToEndOfFile()
+        let errorData = stderr.fileHandleForReading.readDataToEndOfFile()
+        let output = String(data: outputData, encoding: .utf8) ?? ""
+        let errorOutput = String(data: errorData, encoding: .utf8) ?? ""
+
+        if process.terminationStatus != 0 {
+            debugLog("[TaskNotes] mtn error (exit \(process.terminationStatus)): \(errorOutput)")
+            throw TaskNotesError.cliError("mtn exited with code \(process.terminationStatus): \(errorOutput)")
+        }
+
+        return output
+    }
+
     // MARK: - Task Scanning
 
     func scanTasks(config: SyncConfiguration) throws -> [SyncTask] {
-        if useHttpApi {
-            return try scanTasksViaApi()
-        } else {
+        switch integrationMode {
+        case .cli:
+            return try scanTasksViaCli(config: config)
+        case .fileBased:
             return try scanTasksFromFiles(config: config)
+        case .httpApi:
+            return try scanTasksViaApi()
         }
     }
 
@@ -54,7 +182,31 @@ class TaskNotesSource: TaskSource {
         return "tasknotes|\(source.filePath)"
     }
 
-    // MARK: - Writeback
+    // MARK: - CLI Scanning
+
+    private func scanTasksViaCli(config: SyncConfiguration) throws -> [SyncTask] {
+        let collectionPath = resolveCollectionPath(config: config)
+
+        let output = try runMtn(args: ["list", "--json", "--limit", "10000"], collectionPath: collectionPath)
+
+        guard !output.isEmpty else {
+            debugLog("[TaskNotes] mtn returned empty output")
+            return []
+        }
+
+        guard let data = output.data(using: .utf8) else {
+            throw TaskNotesError.cliError("Failed to parse mtn output as UTF-8")
+        }
+
+        let decoder = JSONDecoder()
+        let cliTasks = try decoder.decode([MtnCliTask].self, from: data)
+        let tasks = cliTasks.map { $0.toSyncTask() }
+
+        debugLog("[TaskNotes] CLI found \(tasks.count) tasks")
+        return tasks
+    }
+
+    // MARK: - CLI Writeback
 
     @discardableResult
     func markTaskComplete(task: SyncTask, completionDate: Date, config: SyncConfiguration) throws -> Int {
@@ -62,11 +214,17 @@ class TaskNotesSource: TaskSource {
             throw ObsidianError.noSourceInformation
         }
 
-        let fileURL = URL(fileURLWithPath: config.vaultPath + source.filePath)
+        if integrationMode == .cli, effectiveMtnPath != nil {
+            return try markTaskCompleteViaCli(task: task, config: config)
+        }
+
+        // Fallback to file-based
+        let fileURL = URL(fileURLWithPath: resolveFullPath(source: source, config: config))
         guard fileManager.fileExists(atPath: fileURL.path) else {
             throw ObsidianError.fileNotFound(fileURL.path)
         }
 
+        FileWatcherService.shared.registerSelfModification(fileURL.path)
         try backupService.backupFile(at: fileURL)
 
         var content = try String(contentsOf: fileURL, encoding: .utf8)
@@ -74,9 +232,8 @@ class TaskNotesSource: TaskSource {
         formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
         let dateStr = formatter.string(from: completionDate)
 
-        // Update status in frontmatter
         content = updateFrontmatterField(in: content, field: "status", value: "done")
-        content = updateFrontmatterField(in: content, field: "completed", value: dateStr)
+        content = updateFrontmatterField(in: content, field: "completedDate", value: dateStr)
 
         try content.write(to: fileURL, atomically: true, encoding: .utf8)
 
@@ -84,7 +241,29 @@ class TaskNotesSource: TaskSource {
             action: "taskNotesComplete",
             filePath: source.filePath,
             lineNumber: 0,
-            beforeLine: "status: todo",
+            beforeLine: "status: open",
+            afterLine: "status: done"
+        )
+
+        return 0
+    }
+
+    private func markTaskCompleteViaCli(task: SyncTask, config: SyncConfiguration) throws -> Int {
+        guard let source = task.obsidianSource else {
+            throw ObsidianError.noSourceInformation
+        }
+
+        let fullPath = resolveFullPath(source: source, config: config)
+        FileWatcherService.shared.registerSelfModification(fullPath)
+
+        let collectionPath = resolveCollectionPath(config: config)
+        _ = try runMtn(args: ["complete", source.filePath], collectionPath: collectionPath)
+
+        auditLog.logFileModification(
+            action: "taskNotesComplete",
+            filePath: source.filePath,
+            lineNumber: 0,
+            beforeLine: "status: open",
             afterLine: "status: done"
         )
 
@@ -96,16 +275,26 @@ class TaskNotesSource: TaskSource {
             throw ObsidianError.noSourceInformation
         }
 
-        let fileURL = URL(fileURLWithPath: config.vaultPath + source.filePath)
+        if integrationMode == .cli, effectiveMtnPath != nil {
+            let collectionPath = resolveCollectionPath(config: config)
+            let fullPath = resolveFullPath(source: source, config: config)
+            FileWatcherService.shared.registerSelfModification(fullPath)
+            _ = try runMtn(args: ["update", source.filePath, "--status", "open"], collectionPath: collectionPath)
+            return
+        }
+
+        // Fallback to file-based
+        let fileURL = URL(fileURLWithPath: resolveFullPath(source: source, config: config))
         guard fileManager.fileExists(atPath: fileURL.path) else {
             throw ObsidianError.fileNotFound(fileURL.path)
         }
 
+        FileWatcherService.shared.registerSelfModification(fileURL.path)
         try backupService.backupFile(at: fileURL)
 
         var content = try String(contentsOf: fileURL, encoding: .utf8)
-        content = updateFrontmatterField(in: content, field: "status", value: "todo")
-        content = removeFrontmatterField(in: content, field: "completed")
+        content = updateFrontmatterField(in: content, field: "status", value: "open")
+        content = removeFrontmatterField(in: content, field: "completedDate")
 
         try content.write(to: fileURL, atomically: true, encoding: .utf8)
     }
@@ -115,11 +304,18 @@ class TaskNotesSource: TaskSource {
             throw ObsidianError.noSourceInformation
         }
 
-        let fileURL = URL(fileURLWithPath: config.vaultPath + source.filePath)
+        if integrationMode == .cli, effectiveMtnPath != nil {
+            try updateTaskMetadataViaCli(task: task, changes: changes, config: config)
+            return
+        }
+
+        // Fallback to file-based
+        let fileURL = URL(fileURLWithPath: resolveFullPath(source: source, config: config))
         guard fileManager.fileExists(atPath: fileURL.path) else {
             throw ObsidianError.fileNotFound(fileURL.path)
         }
 
+        FileWatcherService.shared.registerSelfModification(fileURL.path)
         try backupService.backupFile(at: fileURL)
 
         var content = try String(contentsOf: fileURL, encoding: .utf8)
@@ -136,9 +332,9 @@ class TaskNotesSource: TaskSource {
 
         if let startDateChange = changes.newStartDate {
             if let date = startDateChange {
-                content = updateFrontmatterField(in: content, field: "start", value: dateFormatter.string(from: date))
+                content = updateFrontmatterField(in: content, field: "scheduled", value: dateFormatter.string(from: date))
             } else {
-                content = removeFrontmatterField(in: content, field: "start")
+                content = removeFrontmatterField(in: content, field: "scheduled")
             }
         }
 
@@ -146,9 +342,9 @@ class TaskNotesSource: TaskSource {
             let priorityStr: String
             switch newPriority {
             case .high: priorityStr = "high"
-            case .medium: priorityStr = "medium"
+            case .medium: priorityStr = "normal"
             case .low: priorityStr = "low"
-            case .none: priorityStr = "none"
+            case .none: priorityStr = "normal"
             }
             content = updateFrontmatterField(in: content, field: "priority", value: priorityStr)
         }
@@ -156,69 +352,167 @@ class TaskNotesSource: TaskSource {
         try content.write(to: fileURL, atomically: true, encoding: .utf8)
     }
 
+    private func updateTaskMetadataViaCli(task: SyncTask, changes: MetadataChanges, config: SyncConfiguration) throws {
+        guard let source = task.obsidianSource else {
+            throw ObsidianError.noSourceInformation
+        }
+
+        let collectionPath = resolveCollectionPath(config: config)
+        let fullPath = resolveFullPath(source: source, config: config)
+        FileWatcherService.shared.registerSelfModification(fullPath)
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+
+        var args = ["update", source.filePath]
+
+        if let dueDateChange = changes.newDueDate {
+            if let date = dueDateChange {
+                args += ["--due", dateFormatter.string(from: date)]
+            }
+        }
+
+        if let startDateChange = changes.newStartDate {
+            if let date = startDateChange {
+                args += ["--scheduled", dateFormatter.string(from: date)]
+            }
+        }
+
+        if let newPriority = changes.newPriority {
+            let priorityStr: String
+            switch newPriority {
+            case .high: priorityStr = "high"
+            case .medium: priorityStr = "normal"
+            case .low: priorityStr = "low"
+            case .none: priorityStr = "normal"
+            }
+            args += ["--priority", priorityStr]
+        }
+
+        if args.count > 2 {
+            _ = try runMtn(args: args, collectionPath: collectionPath)
+        }
+    }
+
     func appendNewTask(_ task: SyncTask, config: SyncConfiguration) throws -> SyncTask.ObsidianSource {
-        // TaskNotes creates a new file for each task
-        let tasksDir = config.taskNotesFolder.isEmpty ? "TaskNotes/Tasks" : config.taskNotesFolder
+        if integrationMode == .cli, effectiveMtnPath != nil {
+            return try appendNewTaskViaCli(task, config: config)
+        }
+
+        // Fallback to file-based creation
+        return try appendNewTaskViaFiles(task, config: config)
+    }
+
+    private func appendNewTaskViaCli(_ task: SyncTask, config: SyncConfiguration) throws -> SyncTask.ObsidianSource {
+        let collectionPath = resolveCollectionPath(config: config)
+
+        // Build natural language input for mtn create
+        var createText = task.title
+
+        if let dueDate = task.dueDate {
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyy-MM-dd"
+            createText += " due:\(dateFormatter.string(from: dueDate))"
+        }
+
+        if task.priority == .high {
+            createText += " high priority"
+        } else if task.priority == .low {
+            createText += " low priority"
+        }
+
+        for tag in task.tags {
+            let tagName = tag.hasPrefix("#") ? tag : "#\(tag)"
+            createText += " \(tagName)"
+        }
+
+        let output = try runMtn(args: ["create", createText], collectionPath: collectionPath)
+        debugLog("[TaskNotes] Created task via CLI: \(output.trimmingCharacters(in: .whitespacesAndNewlines))")
+
+        // Try to find the created file by listing recent tasks
+        let sanitizedTitle = task.title
+            .lowercased()
+            .replacingOccurrences(of: "[^a-z0-9\\s-]", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\s+", with: "-", options: .regularExpression)
+            .prefix(50)
+        let relativePath = "/tasks/\(sanitizedTitle).md"
+
+        return SyncTask.ObsidianSource(
+            filePath: relativePath,
+            lineNumber: 1,
+            originalLine: "# \(task.title)"
+        )
+    }
+
+    private func appendNewTaskViaFiles(_ task: SyncTask, config: SyncConfiguration) throws -> SyncTask.ObsidianSource {
+        let tasksDir = config.taskNotesFolder.isEmpty ? "tasks" : config.taskNotesFolder
         let dirURL = URL(fileURLWithPath: config.vaultPath).appendingPathComponent(tasksDir)
 
         if !fileManager.fileExists(atPath: dirURL.path) {
             try fileManager.createDirectory(at: dirURL, withIntermediateDirectories: true)
         }
 
-        // Generate filename from title
+        // Generate filename from title (mdbase-style slugification)
         let sanitizedTitle = task.title
-            .replacingOccurrences(of: "[^a-zA-Z0-9\\s-]", with: "", options: .regularExpression)
+            .lowercased()
+            .replacingOccurrences(of: "[^a-z0-9\\s-]", with: "", options: .regularExpression)
             .replacingOccurrences(of: "\\s+", with: "-", options: .regularExpression)
             .prefix(50)
-        let fileName = "\(sanitizedTitle)-\(UUID().uuidString.prefix(8)).md"
-        let fileURL = dirURL.appendingPathComponent(String(fileName))
+        let fileName = "\(sanitizedTitle).md"
+        var fileURL = dirURL.appendingPathComponent(String(fileName))
+
+        // If file already exists, add a UUID suffix
+        if fileManager.fileExists(atPath: fileURL.path) {
+            let uniqueName = "\(sanitizedTitle)-\(UUID().uuidString.prefix(8)).md"
+            fileURL = dirURL.appendingPathComponent(String(uniqueName))
+        }
 
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
-        let isoFormatter = DateFormatter()
-        isoFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
 
-        // Build YAML frontmatter
+        // Build YAML frontmatter (mdbase-tasknotes format)
         var frontmatter = "---\n"
-        frontmatter += "status: \(task.isCompleted ? "done" : "todo")\n"
+        frontmatter += "title: \(task.title)\n"
+        frontmatter += "status: \(task.isCompleted ? "done" : "open")\n"
 
-        if task.priority != .none {
-            let priorityStr: String
-            switch task.priority {
-            case .high: priorityStr = "high"
-            case .medium: priorityStr = "medium"
-            case .low: priorityStr = "low"
-            case .none: priorityStr = "none"
-            }
-            frontmatter += "priority: \(priorityStr)\n"
+        let priorityStr: String
+        switch task.priority {
+        case .high: priorityStr = "high"
+        case .medium: priorityStr = "normal"
+        case .low: priorityStr = "low"
+        case .none: priorityStr = "normal"
         }
+        frontmatter += "priority: \(priorityStr)\n"
 
         if let dueDate = task.dueDate {
             frontmatter += "due: \(dateFormatter.string(from: dueDate))\n"
         }
 
         if let startDate = task.startDate {
-            frontmatter += "start: \(dateFormatter.string(from: startDate))\n"
+            frontmatter += "scheduled: \(dateFormatter.string(from: startDate))\n"
         }
 
         if !task.tags.isEmpty {
             let tagNames = task.tags.map { $0.hasPrefix("#") ? String($0.dropFirst()) : $0 }
-            frontmatter += "tags: [\(tagNames.joined(separator: ", "))]\n"
+            frontmatter += "tags:\n"
+            for tag in tagNames {
+                frontmatter += "  - \(tag)\n"
+            }
         }
 
-        frontmatter += "created: \(isoFormatter.string(from: Date()))\n"
+        frontmatter += "dateCreated: \(dateFormatter.string(from: Date()))\n"
 
         if task.isCompleted, let completedDate = task.completedDate {
-            frontmatter += "completed: \(isoFormatter.string(from: completedDate))\n"
+            frontmatter += "completedDate: \(dateFormatter.string(from: completedDate))\n"
         }
 
         frontmatter += "---\n"
 
         // Build content
         var content = frontmatter
-        content += "# \(task.title)\n"
+        content += "\n"
         if let notes = task.notes, !notes.isEmpty {
-            content += "\n\(notes)\n"
+            content += "\(notes)\n"
         }
 
         try content.write(to: fileURL, atomically: true, encoding: .utf8)
@@ -233,7 +527,7 @@ class TaskNotesSource: TaskSource {
 
     func hasFileChanged(task: SyncTask, since timestamp: Date, config: SyncConfiguration) -> Bool {
         guard let source = task.obsidianSource else { return true }
-        let fileURL = URL(fileURLWithPath: config.vaultPath + source.filePath)
+        let fileURL = URL(fileURLWithPath: resolveFullPath(source: source, config: config))
         guard let attrs = try? fileManager.attributesOfItem(atPath: fileURL.path),
               let modDate = attrs[.modificationDate] as? Date else {
             return true
@@ -241,10 +535,23 @@ class TaskNotesSource: TaskSource {
         return modDate > timestamp
     }
 
+    // MARK: - Path Helpers
+
+    private func resolveCollectionPath(config: SyncConfiguration) -> String {
+        if config.taskNotesFolder.isEmpty {
+            return config.vaultPath
+        }
+        return config.vaultPath + "/" + config.taskNotesFolder
+    }
+
+    private func resolveFullPath(source: SyncTask.ObsidianSource, config: SyncConfiguration) -> String {
+        return config.vaultPath + source.filePath
+    }
+
     // MARK: - File-Based Scanning
 
     private func scanTasksFromFiles(config: SyncConfiguration) throws -> [SyncTask] {
-        let tasksDir = config.taskNotesFolder.isEmpty ? "TaskNotes/Tasks" : config.taskNotesFolder
+        let tasksDir = config.taskNotesFolder.isEmpty ? "tasks" : config.taskNotesFolder
         let dirURL = URL(fileURLWithPath: config.vaultPath).appendingPathComponent(tasksDir)
 
         guard fileManager.fileExists(atPath: dirURL.path) else {
@@ -276,7 +583,7 @@ class TaskNotesSource: TaskSource {
             throw TaskNotesError.noFrontmatter(fileURL.lastPathComponent)
         }
 
-        var status = "todo"
+        var status = "open"
         var priority: SyncTask.Priority = .none
         var dueDate: Date?
         var startDate: Date?
@@ -312,29 +619,40 @@ class TaskNotesSource: TaskSource {
                     let value = String(trimmed[trimmed.index(after: colonIndex)...]).trimmingCharacters(in: .whitespaces)
 
                     switch key {
+                    case "title":
+                        if !value.isEmpty { title = value }
                     case "status":
                         status = value
                     case "priority":
                         switch value.lowercased() {
-                        case "high": priority = .high
-                        case "medium": priority = .medium
+                        case "high", "urgent": priority = .high
+                        case "medium", "normal": priority = .medium
                         case "low": priority = .low
                         default: priority = .none
                         }
                     case "due":
                         dueDate = dateFormatter.date(from: value)
-                    case "start":
+                    case "scheduled", "start":
                         startDate = dateFormatter.date(from: value)
-                    case "completed":
+                    case "completeddate", "completed":
                         completedDate = isoFormatter.date(from: value) ?? dateFormatter.date(from: value)
                     case "tags":
-                        // Parse YAML array: [tag1, tag2] or - tag1
+                        // Parse YAML inline array: [tag1, tag2]
                         let cleaned = value
                             .replacingOccurrences(of: "[", with: "")
                             .replacingOccurrences(of: "]", with: "")
-                        tags = cleaned.components(separatedBy: ",").map { "#\($0.trimmingCharacters(in: .whitespaces))" }
+                        if !cleaned.isEmpty {
+                            tags = cleaned.components(separatedBy: ",").map { "#\($0.trimmingCharacters(in: .whitespaces))" }
+                        }
                     default:
                         break
+                    }
+                } else if trimmed.hasPrefix("- ") && !tags.isEmpty {
+                    // YAML multi-line array item (under tags:)
+                    // This is a simplification — only works right after tags:
+                    let tagValue = String(trimmed.dropFirst(2)).trimmingCharacters(in: .whitespaces)
+                    if !tagValue.isEmpty {
+                        tags.append("#\(tagValue)")
                     }
                 }
             }
@@ -373,7 +691,6 @@ class TaskNotesSource: TaskSource {
             throw TaskNotesError.invalidApiUrl
         }
 
-        // Synchronous request (we're already on a background thread during sync)
         var request = URLRequest(url: url)
         request.timeoutInterval = 5
 
@@ -381,7 +698,7 @@ class TaskNotesSource: TaskSource {
         var responseData: Data?
         var responseError: Error?
 
-        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+        let task = URLSession.shared.dataTask(with: request) { data, _, error in
             responseData = data
             responseError = error
             semaphore.signal()
@@ -397,7 +714,6 @@ class TaskNotesSource: TaskSource {
             throw TaskNotesError.apiError("No data received")
         }
 
-        // Parse JSON response
         let decoder = JSONDecoder()
         let apiTasks = try decoder.decode([TaskNotesApiTask].self, from: data)
         return apiTasks.map { $0.toSyncTask() }
@@ -405,7 +721,7 @@ class TaskNotesSource: TaskSource {
 
     // MARK: - Frontmatter Helpers
 
-    private func updateFrontmatterField(in content: String, field: String, value: String) -> String {
+    func updateFrontmatterField(in content: String, field: String, value: String) -> String {
         var lines = content.components(separatedBy: "\n")
         var inFrontmatter = false
         var fieldFound = false
@@ -433,7 +749,7 @@ class TaskNotesSource: TaskSource {
         return lines.joined(separator: "\n")
     }
 
-    private func removeFrontmatterField(in content: String, field: String) -> String {
+    func removeFrontmatterField(in content: String, field: String) -> String {
         var lines = content.components(separatedBy: "\n")
         var inFrontmatter = false
 
@@ -453,6 +769,59 @@ class TaskNotesSource: TaskSource {
     }
 }
 
+// MARK: - CLI JSON Response Model
+
+private struct MtnCliTask: Codable {
+    let title: String?
+    let status: String?
+    let priority: String?
+    let due: String?
+    let scheduled: String?
+    let completedDate: String?
+    let tags: [String]?
+    let contexts: [String]?
+    let path: String?
+    let dateCreated: String?
+    let dateModified: String?
+    let timeEstimate: Int?
+
+    func toSyncTask() -> SyncTask {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+
+        let taskTitle = title ?? "Untitled"
+        let isCompleted = status == "done" || status == "completed"
+
+        let taskPriority: SyncTask.Priority
+        switch priority?.lowercased() {
+        case "high", "urgent": taskPriority = .high
+        case "medium", "normal": taskPriority = .medium
+        case "low": taskPriority = .low
+        default: taskPriority = .none
+        }
+
+        let taskTags = (tags ?? []).map { "#\($0)" }
+        let relativePath = path ?? "/tasks/\(taskTitle.lowercased().replacingOccurrences(of: " ", with: "-")).md"
+
+        return SyncTask(
+            title: taskTitle,
+            isCompleted: isCompleted,
+            priority: taskPriority,
+            dueDate: due.flatMap { dateFormatter.date(from: $0) },
+            startDate: scheduled.flatMap { dateFormatter.date(from: $0) },
+            completedDate: completedDate.flatMap { dateFormatter.date(from: $0) },
+            tags: taskTags,
+            targetList: taskTags.first.map { $0.hasPrefix("#") ? String($0.dropFirst()) : $0 },
+            obsidianSource: SyncTask.ObsidianSource(
+                filePath: relativePath,
+                lineNumber: 1,
+                originalLine: "# \(taskTitle)"
+            ),
+            lastModified: dateModified.flatMap { dateFormatter.date(from: $0) } ?? Date()
+        )
+    }
+}
+
 // MARK: - API Response Models
 
 private struct TaskNotesApiTask: Codable {
@@ -461,6 +830,7 @@ private struct TaskNotesApiTask: Codable {
     let status: String?
     let priority: String?
     let due: String?
+    let scheduled: String?
     let start: String?
     let completed: String?
     let tags: [String]?
@@ -474,8 +844,8 @@ private struct TaskNotesApiTask: Codable {
         let isCompleted = status == "done" || status == "completed"
         let taskPriority: SyncTask.Priority
         switch priority?.lowercased() {
-        case "high": taskPriority = .high
-        case "medium": taskPriority = .medium
+        case "high", "urgent": taskPriority = .high
+        case "medium", "normal": taskPriority = .medium
         case "low": taskPriority = .low
         default: taskPriority = .none
         }
@@ -487,7 +857,7 @@ private struct TaskNotesApiTask: Codable {
             isCompleted: isCompleted,
             priority: taskPriority,
             dueDate: due.flatMap { dateFormatter.date(from: $0) },
-            startDate: start.flatMap { dateFormatter.date(from: $0) },
+            startDate: (scheduled ?? start).flatMap { dateFormatter.date(from: $0) },
             completedDate: completed.flatMap { dateFormatter.date(from: $0) },
             tags: taskTags,
             targetList: taskTags.first.map { $0.hasPrefix("#") ? String($0.dropFirst()) : $0 },
@@ -504,6 +874,8 @@ enum TaskNotesError: LocalizedError {
     case noFrontmatter(String)
     case invalidApiUrl
     case apiError(String)
+    case mtnNotFound
+    case cliError(String)
 
     var errorDescription: String? {
         switch self {
@@ -513,6 +885,10 @@ enum TaskNotesError: LocalizedError {
             return "Invalid TaskNotes API URL"
         case .apiError(let message):
             return "TaskNotes API error: \(message)"
+        case .mtnNotFound:
+            return "mdbase-tasknotes CLI (mtn) not found. Install with: npm install -g mdbase-tasknotes"
+        case .cliError(let message):
+            return "TaskNotes CLI error: \(message)"
         }
     }
 }

@@ -315,15 +315,43 @@ struct AdvancedSettingsView: View {
 
                 if syncManager.config.taskSourceType == .taskNotes {
                     HStack {
+                        Text("Integration:")
+                            .foregroundColor(.secondary)
+                        Picker("", selection: $syncManager.config.taskNotesIntegrationMode) {
+                            Text("CLI (mtn)").tag("cli")
+                            Text("Direct Files").tag("file")
+                            Text("HTTP API").tag("http")
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 250)
+                    }
+                    .padding(.leading, 20)
+                    .onChange(of: syncManager.config.taskNotesIntegrationMode) { _ in
+                        syncManager.updateSourceAndDestination()
+                    }
+
+                    if syncManager.config.taskNotesIntegrationMode == "cli" {
+                        Text("Uses mdbase-tasknotes CLI. Works without Obsidian. Install: npm install -g mdbase-tasknotes")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.leading, 20)
+                    } else if syncManager.config.taskNotesIntegrationMode == "http" {
+                        Text("Requires Obsidian to be open with the TaskNotes plugin running.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.leading, 20)
+                    }
+
+                    HStack {
                         Text("Tasks Folder:")
                             .foregroundColor(.secondary)
-                        TextField("TaskNotes/Tasks", text: $syncManager.config.taskNotesFolder)
+                        TextField("tasks", text: $syncManager.config.taskNotesFolder)
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 200)
                     }
                     .padding(.leading, 20)
 
-                    Text("Relative path within your vault where TaskNotes stores task files. Leave empty for default.")
+                    Text("Relative path within your vault where TaskNotes stores task files. Leave empty for default (vault root).")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .padding(.leading, 20)

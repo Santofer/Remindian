@@ -35,7 +35,8 @@ class SyncConfiguration: ObservableObject, Codable {
     @Published var taskSourceType: TaskSourceType
     @Published var taskDestinationType: TaskDestinationType
     @Published var things3AuthToken: String
-    @Published var taskNotesFolder: String  // Relative path within vault (e.g., "TaskNotes/Tasks")
+    @Published var taskNotesFolder: String  // Relative path within vault (e.g., "tasks")
+    @Published var taskNotesIntegrationMode: String  // "cli", "file", or "http"
 
     enum TaskSourceType: String, Codable, CaseIterable {
         case obsidianTasks = "obsidianTasks"
@@ -85,7 +86,7 @@ class SyncConfiguration: ObservableObject, Codable {
         case enableDueDateWriteback, enableStartDateWriteback, enablePriorityWriteback
         case enableNewTaskWriteback, inboxFilePath, enableFileWatcher
         case enableNotifications, globalHotKeyEnabled, globalHotKeyCode, globalHotKeyModifiers
-        case taskSourceType, taskDestinationType, things3AuthToken, taskNotesFolder
+        case taskSourceType, taskDestinationType, things3AuthToken, taskNotesFolder, taskNotesIntegrationMode
     }
 
     init(
@@ -119,7 +120,8 @@ class SyncConfiguration: ObservableObject, Codable {
         taskSourceType: TaskSourceType = .obsidianTasks,
         taskDestinationType: TaskDestinationType = .appleReminders,
         things3AuthToken: String = "",
-        taskNotesFolder: String = ""
+        taskNotesFolder: String = "",
+        taskNotesIntegrationMode: String = "cli"
     ) {
         self.vaultPath = vaultPath
         self.syncIntervalMinutes = syncIntervalMinutes
@@ -152,6 +154,7 @@ class SyncConfiguration: ObservableObject, Codable {
         self.taskDestinationType = taskDestinationType
         self.things3AuthToken = things3AuthToken
         self.taskNotesFolder = taskNotesFolder
+        self.taskNotesIntegrationMode = taskNotesIntegrationMode
     }
 
     required init(from decoder: Decoder) throws {
@@ -187,6 +190,7 @@ class SyncConfiguration: ObservableObject, Codable {
         taskDestinationType = try container.decodeIfPresent(TaskDestinationType.self, forKey: .taskDestinationType) ?? .appleReminders
         things3AuthToken = try container.decodeIfPresent(String.self, forKey: .things3AuthToken) ?? ""
         taskNotesFolder = try container.decodeIfPresent(String.self, forKey: .taskNotesFolder) ?? ""
+        taskNotesIntegrationMode = try container.decodeIfPresent(String.self, forKey: .taskNotesIntegrationMode) ?? "cli"
     }
 
     func encode(to encoder: Encoder) throws {
@@ -222,6 +226,7 @@ class SyncConfiguration: ObservableObject, Codable {
         try container.encode(taskDestinationType, forKey: .taskDestinationType)
         try container.encode(things3AuthToken, forKey: .things3AuthToken)
         try container.encode(taskNotesFolder, forKey: .taskNotesFolder)
+        try container.encode(taskNotesIntegrationMode, forKey: .taskNotesIntegrationMode)
     }
 
     // MARK: - Persistence
