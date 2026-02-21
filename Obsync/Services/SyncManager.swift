@@ -84,6 +84,10 @@ class SyncManager: ObservableObject {
             let source = TaskNotesSource()
             if let config = config {
                 source.integrationMode = TaskNotesSource.IntegrationMode(rawValue: config.taskNotesIntegrationMode) ?? .cli
+                source.mtnPath = config.taskNotesMtnPath
+                if !config.taskNotesApiUrl.isEmpty {
+                    source.apiBaseUrl = config.taskNotesApiUrl
+                }
             }
             return source
         }
@@ -459,6 +463,32 @@ class SyncManager: ObservableObject {
         source.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 1.0)
         padded.unlockFocus()
         return padded
+    }
+
+    // MARK: - mtn Binary Selection (Sandbox)
+
+    func selectMtnBinary() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.canCreateDirectories = false
+        panel.message = "Select the mtn binary (run 'which mtn' in Terminal to find it)"
+        panel.prompt = "Select"
+        panel.directoryURL = URL(fileURLWithPath: "/opt/homebrew/bin")
+        panel.showsHiddenFiles = true
+
+        if panel.runModal() == .OK, let url = panel.url {
+            config.taskNotesMtnPath = url.path
+
+            // Save security-scoped bookmark for persistent sandbox access
+            TaskNotesSource.saveMtnBookmark(for: url)
+
+            // Rebuild source with new path
+            updateSourceAndDestination()
+
+            debugLog("[SyncManager] Selected mtn binary: \(url.path)")
+        }
     }
 
     // MARK: - Launch at Login

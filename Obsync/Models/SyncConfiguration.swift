@@ -37,6 +37,8 @@ class SyncConfiguration: ObservableObject, Codable {
     @Published var things3AuthToken: String
     @Published var taskNotesFolder: String  // Relative path within vault (e.g., "tasks")
     @Published var taskNotesIntegrationMode: String  // "cli", "file", or "http"
+    @Published var taskNotesMtnPath: String  // User-configured path to mtn binary
+    @Published var taskNotesApiUrl: String  // HTTP API base URL (e.g., http://localhost:8080)
     @Published var launchAtLogin: Bool
     @Published var maxCompletedTaskAgeDays: Int  // 0 = no limit, >0 = skip completed tasks older than N days
     @Published var syncedRemindersLists: [String]  // Empty = sync all lists, non-empty = only these lists
@@ -91,6 +93,7 @@ class SyncConfiguration: ObservableObject, Codable {
         case enableNewTaskWriteback, inboxFilePath, enableFileWatcher
         case enableNotifications, globalHotKeyEnabled, globalHotKeyCode, globalHotKeyModifiers
         case taskSourceType, taskDestinationType, things3AuthToken, taskNotesFolder, taskNotesIntegrationMode
+        case taskNotesMtnPath, taskNotesApiUrl
         case launchAtLogin, maxCompletedTaskAgeDays, syncedRemindersLists, addTaskLinkToReminders
     }
 
@@ -127,6 +130,8 @@ class SyncConfiguration: ObservableObject, Codable {
         things3AuthToken: String = "",
         taskNotesFolder: String = "",
         taskNotesIntegrationMode: String = "cli",
+        taskNotesMtnPath: String = "",
+        taskNotesApiUrl: String = "http://localhost:8080",
         launchAtLogin: Bool = false,
         maxCompletedTaskAgeDays: Int = 0,
         syncedRemindersLists: [String] = [],
@@ -164,6 +169,8 @@ class SyncConfiguration: ObservableObject, Codable {
         self.things3AuthToken = things3AuthToken
         self.taskNotesFolder = taskNotesFolder
         self.taskNotesIntegrationMode = taskNotesIntegrationMode
+        self.taskNotesMtnPath = taskNotesMtnPath
+        self.taskNotesApiUrl = taskNotesApiUrl
         self.launchAtLogin = launchAtLogin
         self.maxCompletedTaskAgeDays = maxCompletedTaskAgeDays
         self.syncedRemindersLists = syncedRemindersLists
@@ -204,6 +211,8 @@ class SyncConfiguration: ObservableObject, Codable {
         things3AuthToken = try container.decodeIfPresent(String.self, forKey: .things3AuthToken) ?? ""
         taskNotesFolder = try container.decodeIfPresent(String.self, forKey: .taskNotesFolder) ?? ""
         taskNotesIntegrationMode = try container.decodeIfPresent(String.self, forKey: .taskNotesIntegrationMode) ?? "cli"
+        taskNotesMtnPath = try container.decodeIfPresent(String.self, forKey: .taskNotesMtnPath) ?? ""
+        taskNotesApiUrl = try container.decodeIfPresent(String.self, forKey: .taskNotesApiUrl) ?? "http://localhost:8080"
         launchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
         maxCompletedTaskAgeDays = try container.decodeIfPresent(Int.self, forKey: .maxCompletedTaskAgeDays) ?? 0
         syncedRemindersLists = try container.decodeIfPresent([String].self, forKey: .syncedRemindersLists) ?? []
@@ -244,6 +253,8 @@ class SyncConfiguration: ObservableObject, Codable {
         try container.encode(things3AuthToken, forKey: .things3AuthToken)
         try container.encode(taskNotesFolder, forKey: .taskNotesFolder)
         try container.encode(taskNotesIntegrationMode, forKey: .taskNotesIntegrationMode)
+        try container.encode(taskNotesMtnPath, forKey: .taskNotesMtnPath)
+        try container.encode(taskNotesApiUrl, forKey: .taskNotesApiUrl)
         try container.encode(launchAtLogin, forKey: .launchAtLogin)
         try container.encode(maxCompletedTaskAgeDays, forKey: .maxCompletedTaskAgeDays)
         try container.encode(syncedRemindersLists, forKey: .syncedRemindersLists)

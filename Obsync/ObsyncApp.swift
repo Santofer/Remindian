@@ -49,6 +49,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Resolve vault bookmark for sandbox access
         _ = SyncManager.shared.resolveVaultBookmark()
 
+        // Resolve mtn binary bookmark for TaskNotes CLI sandbox access
+        _ = TaskNotesSource.resolveMtnBookmark()
+
         // Register global hotkey if enabled
         SyncManager.shared.updateHotKey()
 

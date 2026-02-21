@@ -56,86 +56,129 @@ class TaskNotesSource: TaskSource {
     var integrationMode: IntegrationMode = .cli
 
     /// HTTP API base URL (default: TaskNotes plugin local server)
-    var apiBaseUrl: String = "http://localhost:7117"
+    var apiBaseUrl: String = "http://localhost:8080"
 
-    /// Path to the mtn binary (auto-detected or user-configured)
+    /// Path to the mtn binary (user-configured via file picker for sandbox access)
     var mtnPath: String = ""
 
-    // MARK: - CLI Detection
+    // MARK: - CLI Detection & Sandbox Bookmark
 
-    /// Find the `mtn` binary path. Checks common locations.
-    static func findMtnBinary() -> String? {
+    /// Resolve the saved security-scoped bookmark for the mtn binary.
+    /// Must be called on app launch to restore sandbox access to the CLI tool.
+    static func resolveMtnBookmark() -> String? {
+        guard let data = UserDefaults.standard.data(forKey: "mtnBinaryBookmark") else {
+            return nil
+        }
+        var isStale = false
+        guard let url = try? URL(
+            resolvingBookmarkData: data,
+            options: .withSecurityScope,
+            relativeTo: nil,
+            bookmarkDataIsStale: &isStale
+        ) else {
+            debugLog("[TaskNotes] Failed to resolve mtn bookmark")
+            return nil
+        }
+        if isStale {
+            debugLog("[TaskNotes] mtn bookmark is stale")
+            return nil
+        }
+        guard url.startAccessingSecurityScopedResource() else {
+            debugLog("[TaskNotes] Failed to start accessing mtn binary")
+            return nil
+        }
+        debugLog("[TaskNotes] Resolved mtn bookmark: \(url.path)")
+        return url.path
+    }
+
+    /// Save a security-scoped bookmark for the mtn binary path.
+    /// Called after user selects the binary via NSOpenPanel.
+    static func saveMtnBookmark(for url: URL) {
+        do {
+            let bookmark = try url.bookmarkData(
+                options: .withSecurityScope,
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            )
+            UserDefaults.standard.set(bookmark, forKey: "mtnBinaryBookmark")
+            debugLog("[TaskNotes] Saved mtn bookmark for: \(url.path)")
+        } catch {
+            debugLog("[TaskNotes] Failed to save mtn bookmark: \(error)")
+        }
+    }
+
+    /// Check if mtn is available (user-configured path, bookmark, or shell fallback)
+    var isMtnAvailable: Bool {
+        return effectiveMtnPath != nil
+    }
+
+    /// Get the effective mtn path. Priority:
+    /// 1. User-configured path (from settings)
+    /// 2. Saved bookmark path
+    /// 3. Shell-based detection (runs in non-sandboxed /bin/sh)
+    private var effectiveMtnPath: String? {
+        // 1. User-configured path
+        if !mtnPath.isEmpty && fileManager.isExecutableFile(atPath: mtnPath) {
+            return mtnPath
+        }
+
+        // 2. Try resolved bookmark
+        if let bookmarkPath = TaskNotesSource.resolveMtnBookmark(),
+           fileManager.isExecutableFile(atPath: bookmarkPath) {
+            return bookmarkPath
+        }
+
+        // 3. Check common paths (may work if app has read access)
         let commonPaths = [
             "/usr/local/bin/mtn",
             "/opt/homebrew/bin/mtn",
-            "\(NSHomeDirectory())/.npm-global/bin/mtn",
-            "\(NSHomeDirectory())/.nvm/versions/node/default/bin/mtn"
+            "\(NSHomeDirectory())/.npm-global/bin/mtn"
         ]
-
         for path in commonPaths {
-            if FileManager.default.isExecutableFile(atPath: path) {
+            if fileManager.isExecutableFile(atPath: path) {
                 return path
             }
-        }
-
-        // Try `which mtn` as fallback
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["which", "mtn"]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-            if process.terminationStatus == 0 {
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-                if let path = path, !path.isEmpty {
-                    return path
-                }
-            }
-        } catch {
-            debugLog("[TaskNotes] Failed to run 'which mtn': \(error)")
         }
 
         return nil
     }
 
-    /// Check if mtn is available
-    var isMtnAvailable: Bool {
-        if !mtnPath.isEmpty {
-            return fileManager.isExecutableFile(atPath: mtnPath)
-        }
-        return TaskNotesSource.findMtnBinary() != nil
-    }
-
-    /// Get the effective mtn path (configured or auto-detected)
-    private var effectiveMtnPath: String? {
-        if !mtnPath.isEmpty && fileManager.isExecutableFile(atPath: mtnPath) {
-            return mtnPath
-        }
-        return TaskNotesSource.findMtnBinary()
-    }
-
     // MARK: - CLI Execution Helper
 
     /// Run an mtn command and return stdout.
+    /// Uses /bin/sh -l -c to execute the command, which gives access to the user's
+    /// full PATH (including nvm, npm-global, homebrew). This works in the sandbox
+    /// because /bin/sh is always accessible.
     private func runMtn(args: [String], collectionPath: String) throws -> String {
-        guard let binary = effectiveMtnPath else {
-            throw TaskNotesError.mtnNotFound
+        // Build the full command string for shell execution
+        let mtnBinary: String
+
+        if let directPath = effectiveMtnPath {
+            // Use the direct path if we have sandbox access
+            mtnBinary = directPath
+        } else {
+            // Fall back to just "mtn" and rely on the shell's PATH
+            mtnBinary = "mtn"
         }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: binary)
-        process.arguments = ["-p", collectionPath] + args
+        // Escape the collection path and args for shell
+        let escapedPath = collectionPath.replacingOccurrences(of: "'", with: "'\\''")
+        let escapedArgs = args.map { $0.replacingOccurrences(of: "'", with: "'\\''") }
+        let fullCommand = "'\(mtnBinary)' -p '\(escapedPath)' " + escapedArgs.map { "'\($0)'" }.joined(separator: " ")
 
-        // Inherit PATH for node resolution
+        debugLog("[TaskNotes] Running: /bin/sh -l -c \"\(fullCommand)\"")
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-l", "-c", fullCommand]
+
+        // Ensure common bin paths are in PATH
         var env = ProcessInfo.processInfo.environment
-        let npmPaths = ["/usr/local/bin", "/opt/homebrew/bin", "\(NSHomeDirectory())/.npm-global/bin"]
+        let extraPaths = ["/usr/local/bin", "/opt/homebrew/bin", "\(NSHomeDirectory())/.npm-global/bin"]
         if let existingPath = env["PATH"] {
-            env["PATH"] = npmPaths.joined(separator: ":") + ":" + existingPath
+            env["PATH"] = extraPaths.joined(separator: ":") + ":" + existingPath
+        } else {
+            env["PATH"] = extraPaths.joined(separator: ":") + ":/usr/bin:/bin"
         }
         process.environment = env
 
@@ -886,7 +929,7 @@ enum TaskNotesError: LocalizedError {
         case .apiError(let message):
             return "TaskNotes API error: \(message)"
         case .mtnNotFound:
-            return "mdbase-tasknotes CLI (mtn) not found. Install with: npm install -g mdbase-tasknotes"
+            return "mdbase-tasknotes CLI (mtn) not found. Install with: npm install -g mdbase-tasknotes — then go to Settings > Advanced and click 'Browse...' to select the mtn binary (run 'which mtn' in Terminal to find it)"
         case .cliError(let message):
             return "TaskNotes CLI error: \(message)"
         }

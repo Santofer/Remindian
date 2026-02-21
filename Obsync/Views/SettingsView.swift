@@ -341,8 +341,54 @@ struct AdvancedSettingsView: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .padding(.leading, 20)
+
+                        HStack {
+                            Text("mtn path:")
+                                .foregroundColor(.secondary)
+                            TextField("/opt/homebrew/bin/mtn", text: $syncManager.config.taskNotesMtnPath)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 200)
+                            Button("Browse...") {
+                                syncManager.selectMtnBinary()
+                            }
+                        }
+                        .padding(.leading, 20)
+
+                        if syncManager.config.taskNotesMtnPath.isEmpty {
+                            Text("Select the mtn binary to grant sandbox access. Run 'which mtn' in Terminal to find its location.")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                                .padding(.leading, 20)
+                        } else {
+                            HStack(spacing: 4) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                    .font(.caption)
+                                Text("mtn configured: \(syncManager.config.taskNotesMtnPath)")
+                            }
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.leading, 20)
+                        }
                     } else if syncManager.config.taskNotesIntegrationMode == "http" {
-                        Text("Requires Obsidian to be open with the TaskNotes plugin running.")
+                        Text("Uses the TaskNotes plugin HTTP API. Requires Obsidian to be open.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.leading, 20)
+
+                        HStack {
+                            Text("API URL:")
+                                .foregroundColor(.secondary)
+                            TextField("http://localhost:8080", text: $syncManager.config.taskNotesApiUrl)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 250)
+                        }
+                        .padding(.leading, 20)
+                        .onChange(of: syncManager.config.taskNotesApiUrl) { _ in
+                            syncManager.updateSourceAndDestination()
+                        }
+
+                        Text("Base URL of the TaskNotes HTTP API. Check your plugin settings for the correct port.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .padding(.leading, 20)
