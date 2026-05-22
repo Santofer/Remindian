@@ -53,6 +53,7 @@
 		T09 /* TickTickOAuthServerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T18; };
 		T0A /* InboxWritebackRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T19; };
 		T0B /* V5_9_0_RegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1A; };
+		T0C /* AgeFilterWritebackRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -116,6 +117,7 @@
 		T18 /* TickTickOAuthServerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TickTickOAuthServerTests.swift; sourceTree = "<group>"; };
 		T19 /* InboxWritebackRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxWritebackRegressionTests.swift; sourceTree = "<group>"; };
 		T1A /* V5_9_0_RegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V5_9_0_RegressionTests.swift; sourceTree = "<group>"; };
+		T1B /* AgeFilterWritebackRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgeFilterWritebackRegressionTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -260,6 +262,7 @@
 				T18 /* TickTickOAuthServerTests.swift */,
 				T19 /* InboxWritebackRegressionTests.swift */,
 				T1A /* V5_9_0_RegressionTests.swift */,
+				T1B /* AgeFilterWritebackRegressionTests.swift */,
 			);
 			path = RemindianTests;
 			sourceTree = "<group>";
@@ -407,6 +410,7 @@
 				T09 /* TickTickOAuthServerTests.swift in Sources */,
 				T0A /* InboxWritebackRegressionTests.swift in Sources */,
 				T0B /* V5_9_0_RegressionTests.swift in Sources */,
+				T0C /* AgeFilterWritebackRegressionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

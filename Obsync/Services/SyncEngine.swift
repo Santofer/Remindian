@@ -98,6 +98,26 @@ class SyncEngine {
         }
     }
 
+    // MARK: - Filters
+
+    /// True if a completed task is older than `config.maxCompletedTaskAgeDays`
+    /// and should be excluded from sync. Uncompleted tasks are never filtered.
+    /// Returns false when the setting is disabled (<= 0).
+    ///
+    /// Used in two places: the source scan (Step 1) and the Reminders → Obsidian
+    /// writeback loop (Step 6). Without applying it on both sides, a user with
+    /// `enableNewTaskWriteback = true` and a long history of completed reminders
+    /// gets every old completion written into the vault on next sync, which is
+    /// exactly the symptom #11 was filed for.
+    static func isCompletedTaskTooOld(_ task: SyncTask, config: SyncConfiguration) -> Bool {
+        guard config.maxCompletedTaskAgeDays > 0, task.isCompleted else { return false }
+        let cutoffDate = Calendar.current.date(byAdding: .day, value: -config.maxCompletedTaskAgeDays, to: Date()) ?? Date()
+        if let completedDate = task.completedDate {
+            return completedDate <= cutoffDate
+        }
+        return task.lastModified <= cutoffDate
+    }
+
     // MARK: - Main Sync
 
     /// Perform sync: Source -> Destination (source is the source of truth).
@@ -160,15 +180,8 @@ class SyncEngine {
 
             // Filter out old completed tasks if configured
             if config.maxCompletedTaskAgeDays > 0 {
-                let cutoffDate = Calendar.current.date(byAdding: .day, value: -config.maxCompletedTaskAgeDays, to: Date()) ?? Date()
                 let beforeCount = obsidianTasks.count
-                obsidianTasks = obsidianTasks.filter { task in
-                    guard task.isCompleted else { return true }
-                    if let completedDate = task.completedDate {
-                        return completedDate > cutoffDate
-                    }
-                    return task.lastModified > cutoffDate
-                }
+                obsidianTasks = obsidianTasks.filter { !SyncEngine.isCompletedTaskTooOld($0, config: config) }
                 let filtered = beforeCount - obsidianTasks.count
                 if filtered > 0 {
                     debugLog("[SyncEngine] Filtered out \(filtered) completed tasks older than \(config.maxCompletedTaskAgeDays) days")
@@ -1044,9 +1057,21 @@ class SyncEngine {
                     titleIndex[task.title] = id
                 }
 
+                // Counter for the age-filter log line below — mirrors the source-scan
+                // "Filtered out N completed tasks older than N days" pattern.
+                var skippedOldCount = 0
+
                 for (remindersId, rTask) in remindersMap {
                     // Skip completed tasks unless configured to sync them
                     if rTask.isCompleted && !config.syncCompletedTasks { continue }
+
+                    // Honor maxCompletedTaskAgeDays in both directions. Without this,
+                    // old completed reminders bypass the age cutoff via the writeback
+                    // path — exactly the symptom #11 was filed for.
+                    if SyncEngine.isCompletedTaskTooOld(rTask, config: config) {
+                        skippedOldCount += 1
+                        continue
+                    }
 
                     // CRITICAL: skip reminders whose title already exists anywhere in
                     // the vault. Without this, Apple Reminders' recurring-task history
@@ -1125,6 +1150,10 @@ class SyncEngine {
                             errorMessage: "Inbox writeback failed: \(error.localizedDescription)"
                         ))
                     }
+                }
+
+                if skippedOldCount > 0 {
+                    debugLog("[SyncEngine] Skipped \(skippedOldCount) old completed reminders from inbox writeback (older than \(config.maxCompletedTaskAgeDays) days)")
                 }
             }
 
