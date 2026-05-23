@@ -8,11 +8,20 @@ class SyncEngine {
     private let source: TaskSource
     private let destination: TaskDestination
     private let backupService = FileBackupService.shared
-    private var syncState = SyncState.load()
+    private var syncState: SyncState
 
-    init(source: TaskSource, destination: TaskDestination) {
+    /// Production init — loads sync state from disk.
+    convenience init(source: TaskSource, destination: TaskDestination) {
+        self.init(source: source, destination: destination, syncState: SyncState.load())
+    }
+
+    /// Designated init exposing the SyncState seam so tests can drive
+    /// `performSync(...)` without touching the real Application Support
+    /// directory. Production callers should use the convenience init above.
+    init(source: TaskSource, destination: TaskDestination, syncState: SyncState) {
         self.source = source
         self.destination = destination
+        self.syncState = syncState
     }
 
     // Mutex to prevent concurrent sync operations
@@ -100,22 +109,41 @@ class SyncEngine {
 
     // MARK: - Filters
 
-    /// True if a completed task is older than `config.maxCompletedTaskAgeDays`
-    /// and should be excluded from sync. Uncompleted tasks are never filtered.
-    /// Returns false when the setting is disabled (<= 0).
+    /// Compute the completed-task age cutoff for this sync. Returns nil when
+    /// the filter is disabled (`maxCompletedTaskAgeDays <= 0`).
+    ///
+    /// Computed once per sync — callers pass the resulting cutoff into
+    /// `isCompletedTaskTooOld(_:cutoff:)` for every task. This keeps the cutoff
+    /// stable across all tasks evaluated in the same sync (rather than
+    /// re-sampling `Date()` per task) and concentrates the calendar-arithmetic
+    /// fallback in one place.
+    ///
+    /// The `.distantPast` fallback (used when `Calendar.current.date(byAdding:)`
+    /// returns nil) means a calendar-arithmetic failure degrades to "keep
+    /// everything" — anything compared against `distantPast` with `<=` is false.
+    /// The earlier `?? Date()` fallback had the opposite effect: cutoff = now
+    /// silently filtered every completed task.
+    static func completedTaskCutoffDate(for config: SyncConfiguration) -> Date? {
+        guard config.maxCompletedTaskAgeDays > 0 else { return nil }
+        return Calendar.current.date(byAdding: .day, value: -config.maxCompletedTaskAgeDays, to: Date()) ?? .distantPast
+    }
+
+    /// True if a completed task is older than the supplied cutoff and should
+    /// be excluded from sync. Uncompleted tasks and a nil cutoff (filter
+    /// disabled) always return false. Falls back to `lastModified` when
+    /// `completedDate` is missing — matches the legacy source-scan behavior.
     ///
     /// Used in two places: the source scan (Step 1) and the Reminders → Obsidian
     /// writeback loop (Step 6). Without applying it on both sides, a user with
     /// `enableNewTaskWriteback = true` and a long history of completed reminders
-    /// gets every old completion written into the vault on next sync, which is
-    /// exactly the symptom #11 was filed for.
-    static func isCompletedTaskTooOld(_ task: SyncTask, config: SyncConfiguration) -> Bool {
-        guard config.maxCompletedTaskAgeDays > 0, task.isCompleted else { return false }
-        let cutoffDate = Calendar.current.date(byAdding: .day, value: -config.maxCompletedTaskAgeDays, to: Date()) ?? Date()
+    /// gets every old completion written into the vault on next sync — exactly
+    /// the symptom #11 was filed for.
+    static func isCompletedTaskTooOld(_ task: SyncTask, cutoff: Date?) -> Bool {
+        guard let cutoff, task.isCompleted else { return false }
         if let completedDate = task.completedDate {
-            return completedDate <= cutoffDate
+            return completedDate <= cutoff
         }
-        return task.lastModified <= cutoffDate
+        return task.lastModified <= cutoff
     }
 
     // MARK: - Main Sync
@@ -179,9 +207,9 @@ class SyncEngine {
             debugLog("[SyncEngine] Found \(obsidianTasks.count) source tasks")
 
             // Filter out old completed tasks if configured
-            if config.maxCompletedTaskAgeDays > 0 {
+            if let sourceCutoff = SyncEngine.completedTaskCutoffDate(for: config) {
                 let beforeCount = obsidianTasks.count
-                obsidianTasks = obsidianTasks.filter { !SyncEngine.isCompletedTaskTooOld($0, config: config) }
+                obsidianTasks = obsidianTasks.filter { !SyncEngine.isCompletedTaskTooOld($0, cutoff: sourceCutoff) }
                 let filtered = beforeCount - obsidianTasks.count
                 if filtered > 0 {
                     debugLog("[SyncEngine] Filtered out \(filtered) completed tasks older than \(config.maxCompletedTaskAgeDays) days")
@@ -1057,6 +1085,10 @@ class SyncEngine {
                     titleIndex[task.title] = id
                 }
 
+                // Cutoff computed once per sync — keeps filter decisions stable
+                // across all reminders evaluated in the same writeback pass.
+                let writebackCutoff = SyncEngine.completedTaskCutoffDate(for: config)
+
                 // Counter for the age-filter log line below — mirrors the source-scan
                 // "Filtered out N completed tasks older than N days" pattern.
                 var skippedOldCount = 0
@@ -1064,14 +1096,6 @@ class SyncEngine {
                 for (remindersId, rTask) in remindersMap {
                     // Skip completed tasks unless configured to sync them
                     if rTask.isCompleted && !config.syncCompletedTasks { continue }
-
-                    // Honor maxCompletedTaskAgeDays in both directions. Without this,
-                    // old completed reminders bypass the age cutoff via the writeback
-                    // path — exactly the symptom #11 was filed for.
-                    if SyncEngine.isCompletedTaskTooOld(rTask, config: config) {
-                        skippedOldCount += 1
-                        continue
-                    }
 
                     // CRITICAL: skip reminders whose title already exists anywhere in
                     // the vault. Without this, Apple Reminders' recurring-task history
@@ -1082,6 +1106,13 @@ class SyncEngine {
                     // and re-appending it adds noise. We attach the existing
                     // obsidianId to the reminder's mapping instead so subsequent
                     // syncs treat it as already-mapped. (regression: 2026-04-30)
+                    //
+                    // This block runs BEFORE the age filter below so the mapping
+                    // side-effect still fires for old-and-title-matched reminders —
+                    // otherwise an old recurring-task occurrence whose title matches
+                    // a vault task would skip via age every sync without ever getting
+                    // a syncState mapping, and the noisy "Skipped N" count would
+                    // include it perpetually.
                     if let existingObsidianId = titleIndex[rTask.title] {
                         if !config.dryRunMode,
                            let matchedObsidianTask = obsidianMap[existingObsidianId] {
@@ -1093,6 +1124,16 @@ class SyncEngine {
                             )
                         }
                         debugLog("[SyncEngine] Skipping inbox writeback for \"\(rTask.title)\": title already exists in vault (mapped to existing task)")
+                        continue
+                    }
+
+                    // Honor maxCompletedTaskAgeDays in both directions. Without this,
+                    // old completed reminders bypass the age cutoff via the writeback
+                    // path — exactly the symptom #11 was filed for. Runs AFTER the
+                    // title-dedup above so the dedup's mapping side-effect is
+                    // preserved for old-and-title-matched reminders.
+                    if SyncEngine.isCompletedTaskTooOld(rTask, cutoff: writebackCutoff) {
+                        skippedOldCount += 1
                         continue
                     }
 
