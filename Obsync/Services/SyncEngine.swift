@@ -535,6 +535,14 @@ class SyncEngine {
                         do {
                             var taskForReminders = oTask
 
+                            // When the file-modification guard blocks an Obsidian-side
+                            // writeback (completion or metadata), we MUST NOT advance the
+                            // stored hashes to reflect a writeback that never happened.
+                            // Otherwise the next sync sees no diff to retry and the user's
+                            // Reminders-side change is permanently lost. Tracked here so
+                            // the syncState save below can preserve the prior hashes.
+                            var obsidianWritebackSkippedDueToFileMod = false
+
                             // If only Reminders changed (not Obsidian), preserve the
                             // Reminders values so we don't revert the user's edits.
                             // The metadata writeback will selectively write enabled
@@ -556,6 +564,7 @@ class SyncEngine {
                                 if config.enableCompletionWriteback {
                                         // Check file hasn't changed since sync started
                                     if !fileNotModifiedBeforeSync {
+                                        obsidianWritebackSkippedDueToFileMod = true
                                         result.errors.append(ObsidianError.fileModifiedDuringSync)
                                         result.details.append(SyncLogDetail(
                                             action: .error,
@@ -622,7 +631,23 @@ class SyncEngine {
                             // Skip if completion writeback already modified this task's
                             // vault line — originalLine is stale and the task is done.
                             if rChanged && !oChanged && !completionWritebackIds.contains(mapping.obsidianId) {
-                                if fileNotModifiedBeforeSync {
+                                if !fileNotModifiedBeforeSync {
+                                    // File mtime bumped between sync start and now.
+                                    // Without this branch the writeback would silently
+                                    // skip AND the hash-save below would advance to
+                                    // "synced," permanently losing the Reminders-side
+                                    // change. Flag for the hash-save and surface the
+                                    // skip as a non-fatal error so the user can see it.
+                                    obsidianWritebackSkippedDueToFileMod = true
+                                    debugLog("[SyncEngine] Metadata writeback skipped (file modified during sync) for \"\(oTask.title)\" — will retry next sync")
+                                    result.errors.append(ObsidianError.fileModifiedDuringSync)
+                                    result.details.append(SyncLogDetail(
+                                        action: .error,
+                                        taskTitle: oTask.title,
+                                        filePath: oTask.obsidianSource?.filePath,
+                                        errorMessage: "Metadata writeback skipped: file modified during sync (will retry)"
+                                    ))
+                                } else {
                                     var metadataChanges = MetadataChanges()
                                     var changeDescriptions: [String] = []
 
@@ -725,12 +750,27 @@ class SyncEngine {
                                     }
                                 }
 
-                                syncState.addOrUpdateMapping(
-                                    obsidianId: mapping.obsidianId,
-                                    remindersId: mapping.remindersId,
-                                    obsidianHash: SyncState.generateTaskHash(taskForReminders),
-                                    remindersHash: SyncState.generateTaskHash(taskForReminders)
-                                )
+                                if obsidianWritebackSkippedDueToFileMod {
+                                    // Preserve the pre-sync hashes so the next sync still
+                                    // detects rChanged and retries the writeback. Without
+                                    // this the Reminders-side change would be permanently
+                                    // lost (and on the sync after that, the "obsidian wins"
+                                    // path would push the stale Obsidian value back to
+                                    // Reminders, destroying the user's edit there too).
+                                    syncState.addOrUpdateMapping(
+                                        obsidianId: mapping.obsidianId,
+                                        remindersId: mapping.remindersId,
+                                        obsidianHash: mapping.lastObsidianHash,
+                                        remindersHash: mapping.lastRemindersHash
+                                    )
+                                } else {
+                                    syncState.addOrUpdateMapping(
+                                        obsidianId: mapping.obsidianId,
+                                        remindersId: mapping.remindersId,
+                                        obsidianHash: SyncState.generateTaskHash(taskForReminders),
+                                        remindersHash: SyncState.generateTaskHash(taskForReminders)
+                                    )
+                                }
                             }
                             result.updated += 1
                             result.details.append(SyncLogDetail(
