@@ -715,10 +715,8 @@ class ObsidianService {
             }
         }
 
-        // Clean up double spaces
-        while newLine.contains("  ") {
-            newLine = newLine.replacingOccurrences(of: "  ", with: " ")
-        }
+        // Collapse runs of spaces in one pass (was an O(n^2) while-loop). (perf)
+        newLine = newLine.replacingOccurrences(of: " {2,}", with: " ", options: .regularExpression)
 
         return newLine
     }
@@ -757,10 +755,8 @@ class ObsidianService {
             }
         }
 
-        // Clean up double spaces
-        while newLine.contains("  ") {
-            newLine = newLine.replacingOccurrences(of: "  ", with: " ")
-        }
+        // Collapse runs of spaces in one pass (was an O(n^2) while-loop). (perf)
+        newLine = newLine.replacingOccurrences(of: " {2,}", with: " ", options: .regularExpression)
 
         return newLine
     }

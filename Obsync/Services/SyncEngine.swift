@@ -407,8 +407,8 @@ class SyncEngine {
                     if aInbox != bInbox { return aInbox < bInbox }
 
                     // Prefer the one that already has a sync mapping
-                    let aHasMapping = syncState.mappings.contains { $0.obsidianId == a.id } ? 0 : 1
-                    let bHasMapping = syncState.mappings.contains { $0.obsidianId == b.id } ? 0 : 1
+                    let aHasMapping = syncState.hasMapping(obsidianId: a.id) ? 0 : 1
+                    let bHasMapping = syncState.hasMapping(obsidianId: b.id) ? 0 : 1
                     return aHasMapping < bHasMapping
                 }
                 // Keep first (best), remove the Inbox duplicates
@@ -1028,18 +1028,28 @@ class SyncEngine {
                     debugLog("[SyncEngine] Reconnecting new task \"\(task.title)\" to existing reminder \(matched.id) (dedup)")
 
                     if !config.dryRunMode {
-                        // Update the existing destination task with source data (source of truth)
-                        try? await destination.updateTask(
+                        // Push source-of-truth content to the existing reminder.
+                        // We detect failure via the `try?` optional (a `do/catch`
+                        // region here trips the Release SIL ownership optimizer
+                        // for this async function). On failure: surface an error
+                        // and store an EMPTY obsidianHash so the next sync detects
+                        // a change and retries — the old code stored the real hash
+                        // regardless, silently losing the failed update.
+                        let pushOK: Void? = try? await destination.updateTask(
                             withId: matched.id,
                             from: task,
                             config: config
                         )
 
-                        let hash = SyncState.generateTaskHash(task)
+                        if pushOK == nil {
+                            result.errors.append(SyncError.reconnectUpdateFailed(task.title))
+                            debugLog("[SyncEngine] Reconnect updateTask failed for \"\(task.title)\"; storing empty hash to force retry")
+                        }
+
                         syncState.addOrUpdateMapping(
                             obsidianId: obsidianId,
                             remindersId: matched.id,
-                            obsidianHash: hash,
+                            obsidianHash: pushOK == nil ? "" : SyncState.generateTaskHash(task),
                             remindersHash: SyncState.generateTaskHash(matched.task)
                         )
                     }
@@ -1393,6 +1403,7 @@ enum SyncError: LocalizedError {
     case vaultPathNotFound(String)
     case notAnObsidianVault(String)
     case safetyAbort(String)
+    case reconnectUpdateFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -1412,6 +1423,8 @@ enum SyncError: LocalizedError {
             return "Path does not appear to be an Obsidian vault (missing .obsidian directory): \(path)"
         case .safetyAbort(let message):
             return "Safety abort: \(message)"
+        case .reconnectUpdateFailed(let title):
+            return "Failed to update reconnected reminder \"\(title)\"; will retry on next sync"
         }
     }
 }

@@ -56,6 +56,9 @@
 		T0C /* AgeFilterWritebackRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B; };
 		T0D /* ObsidianURIHandlingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1C; };
 		T0E /* IgnoredMarkersRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1D; };
+		T0F /* TaskNotesSlugTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1E; };
+		T0G /* SyncStateIndexTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1F; };
+		T0H /* SyncEngineReconnectFailureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1G; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -122,6 +125,9 @@
 		T1B /* AgeFilterWritebackRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgeFilterWritebackRegressionTests.swift; sourceTree = "<group>"; };
 		T1C /* ObsidianURIHandlingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObsidianURIHandlingTests.swift; sourceTree = "<group>"; };
 		T1D /* IgnoredMarkersRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IgnoredMarkersRegressionTests.swift; sourceTree = "<group>"; };
+		T1E /* TaskNotesSlugTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskNotesSlugTests.swift; sourceTree = "<group>"; };
+		T1F /* SyncStateIndexTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncStateIndexTests.swift; sourceTree = "<group>"; };
+		T1G /* SyncEngineReconnectFailureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncEngineReconnectFailureTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -269,6 +275,9 @@
 				T1B /* AgeFilterWritebackRegressionTests.swift */,
 				T1C /* ObsidianURIHandlingTests.swift */,
 				T1D /* IgnoredMarkersRegressionTests.swift */,
+				T1E /* TaskNotesSlugTests.swift */,
+				T1F /* SyncStateIndexTests.swift */,
+				T1G /* SyncEngineReconnectFailureTests.swift */,
 			);
 			path = RemindianTests;
 			sourceTree = "<group>";
@@ -419,6 +428,9 @@
 				T0C /* AgeFilterWritebackRegressionTests.swift in Sources */,
 				T0D /* ObsidianURIHandlingTests.swift in Sources */,
 				T0E /* IgnoredMarkersRegressionTests.swift in Sources */,
+				T0F /* TaskNotesSlugTests.swift in Sources */,
+				T0G /* SyncStateIndexTests.swift in Sources */,
+				T0H /* SyncEngineReconnectFailureTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -572,7 +584,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 5.10.1;
+				MARKETING_VERSION = 5.11.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -600,7 +612,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 5.10.1;
+				MARKETING_VERSION = 5.11.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

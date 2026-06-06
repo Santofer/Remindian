@@ -4,6 +4,37 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.11.0 (June 2026)
+
+Performance hardening + correctness fixes. No config or sync-state format change — existing installs upgrade transparently.
+
+### Bug fixes
+
+- **International characters stripped from TaskNotes filenames (#73).** The filename slug used an ASCII-only filter that *deleted* accented letters: "Från Mac till lördag" became `frn-mac-till-lrdag.md`. It now transliterates Latin diacritics (å→a, ö→o, ñ→n) so the file is `fran-mac-till-lordag.md`, and falls back to a stable `task-<id>` token when a fully non-Latin title (e.g. CJK) would otherwise produce an empty filename. The displayed task title was always preserved in the file's YAML frontmatter — this only affected the on-disk filename. Applied to all three slug sites (file creation, CLI create, CLI fallback). Thanks @bms53.
+- **Silent data loss when reconnecting a task to an existing reminder.** In the dedup-reconnect path, the content push used `try?` and then stored the mapping with the current hash regardless — so if the push failed (EventKit hiccup, permission), the next sync saw "no change" and never retried, losing the update silently. Now the error surfaces in the sync result and the mapping is stored with an empty hash to force a retry on the next sync.
+
+### Performance
+
+A rearchitecture for large vaults — behavior is identical (the full pre-existing test suite passes unchanged), only the speed differs.
+
+- **O(1) mapping lookups.** `SyncState` gained in-memory `obsidianId`/`remindersId` → mapping indexes. The sync engine's per-task `findMapping` calls were linear scans inside per-task loops — O(n²) on the mapping count. They're now O(1). The on-disk `sync_state.json` format is unchanged (only the `mappings` array is persisted; indexes are rebuilt on load).
+- **Compile parser regexes once.** `SyncTask.fromObsidianLine` recompiled ~13 `NSRegularExpression` objects on every task line. They're now `static let` constants compiled once — a large win when scanning thousands of tasks. (Verified output-identical by the existing parser test suite.)
+- **Micro-opts.** The dedup sort's mapping-existence check is now an O(1) index lookup, and two O(n²) `while contains("  ")` space-collapse loops became a single regex pass.
+
+### Tests
+
+- New `TaskNotesSlugTests` (slug transliteration, CJK fallback, filename-safety property test), `SyncStateIndexTests` (index/array consistency across add/update/remove/reconnect, Codable round-trip, legacy-payload decode, mutation fuzz), and `SyncEngineReconnectFailureTests` (push-failure surfaces error + forces retry; happy path stores real hash). Full suite ~250 cases, all green.
+
+### Not in this release
+
+- **macOS 12 Monterey support (#72).** The app is built on `MenuBarExtra` and `NavigationSplitView`, both macOS 13 APIs that underpin the entire menu-bar UI. Supporting Monterey would require an `NSStatusItem` rewrite — tracked as a possible future effort, gauging demand on #72.
+
+### Thanks
+
+@bms53 for #73.
+
+---
+
 ## v5.10.1 (May 2026)
 
 ### Feature: Ignore specific status markers (#70)

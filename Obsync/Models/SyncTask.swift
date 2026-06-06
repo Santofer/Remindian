@@ -123,6 +123,79 @@ struct SyncTask: Identifiable, Equatable, Codable {
 // MARK: - Obsidian Tasks Format Parsing
 
 extension SyncTask {
+    /// Pre-compiled regexes for the per-line parser.
+    ///
+    /// `NSRegularExpression(pattern:)` builds an NFA on every call — cheap once,
+    /// but `fromObsidianLine` runs once per task line, and the old code compiled
+    /// ~13 patterns per call. On a 10k-task vault that's ~130k compilations.
+    /// Hoisting them to `static let` compiles each pattern exactly once
+    /// (Swift static-let init is lazy + thread-safe). Behavior is identical —
+    /// same patterns, same options. (perf)
+    ///
+    /// Patterns here are compile-time constants, so `try!` is appropriate: a
+    /// malformed pattern is a programmer error that surfaces immediately on
+    /// first access (and is caught by the test suite).
+    enum Rx {
+        static func make(_ pattern: String, _ options: NSRegularExpression.Options = []) -> NSRegularExpression {
+            // swiftlint:disable:next force_try
+            return try! NSRegularExpression(pattern: pattern, options: options)
+        }
+
+        // Priority emojis (with optional FE0F variation selector). Order is
+        // high → medium → low (first match wins, matching the old loop).
+        static let priority: [(level: Priority, regex: NSRegularExpression)] = [
+            (.high, make("⏫\u{FE0F}?")),
+            (.medium, make("🔼\u{FE0F}?")),
+            (.low, make("🔽\u{FE0F}?")),
+        ]
+
+        // Recurrence emoji — capture the rule text (emoji + trailing run up to
+        // the next metadata emoji or tag). Order 🔁 then 🔂.
+        static let recurrenceEmojiCapture: [NSRegularExpression] = [
+            make("🔁\u{FE0F}?\\s*[^📅🛫⏳✅⏫🔼🔽#]*"),
+            make("🔂\u{FE0F}?\\s*[^📅🛫⏳✅⏫🔼🔽#]*"),
+        ]
+
+        // Recurrence emoji — bare emoji only, used when stripping the rule from
+        // the title (everything after the emoji is removed by the caller).
+        static let recurrenceEmojiBare: [NSRegularExpression] = [
+            make("🔁\u{FE0F}?"),
+            make("🔂\u{FE0F}?"),
+        ]
+
+        // Plain-text recurrence — capture form (full month names + intervals).
+        static let plainRecurrenceCapture = make(
+            "\\bevery\\s+(?:month|week|day|year|other|january|february|march|april|may|june|july|august|september|october|november|december|\\d+\\s+days?)\\b[^📅🛫⏳✅⏫🔼🔽#]*",
+            [.caseInsensitive]
+        )
+
+        // Plain-text recurrence — title-strip form (greedy to end of line).
+        static let plainRecurrenceStrip = make(
+            "\\bevery\\s+(?:month|week|day|year|other|\\d+\\s+days?)\\b.*?(?:when done)?.*$",
+            [.caseInsensitive]
+        )
+
+        // Tag / list token (supports hierarchical #a/b/c and +prefix).
+        static let tag = make("[#+][\\w-]+(?:/[\\w-]+)*")
+
+        // Date fields, keyed by emoji. Captures yyyy-MM-dd.
+        static let dateByEmoji: [String: NSRegularExpression] = [
+            "📅": make("📅\u{FE0F}?\\s*(\\d{4}-\\d{2}-\\d{2})"),
+            "🛫": make("🛫\u{FE0F}?\\s*(\\d{4}-\\d{2}-\\d{2})"),
+            "⏳": make("⏳\u{FE0F}?\\s*(\\d{4}-\\d{2}-\\d{2})"),
+            "✅": make("✅\u{FE0F}?\\s*(\\d{4}-\\d{2}-\\d{2})"),
+        ]
+
+        // Protected ranges for tag extraction (#65).
+        static let url = make("https?://[^\\s)\\]]+")
+        static let wikilink = make("\\[\\[[^\\]]*\\]\\]")
+        static let codeSpan = make("`[^`]*`")
+
+        // Dataview inline fields (#41).
+        static let dataviewField = make("[\\[\\(]([\\w-]+)::\\s*([^\\]\\)]+)[\\]\\)]")
+        static let dataviewClean = make("\\s*[\\[\\(][\\w-]+::\\s*[^\\]\\)]+[\\]\\)]")
+    }
+
     /// Default open-status markers (the bracket content of `- [ ]`).
     static let defaultOpenMarkers: Set<Character> = [" "]
 
@@ -216,19 +289,13 @@ extension SyncTask {
         
         // Parse priority (handle optional FE0F variation selector)
         var priority: Priority = .none
-        let priorityEmojis: [(emoji: String, level: Priority)] = [
-            ("⏫", .high), ("🔼", .medium), ("🔽", .low)
-        ]
-        for (emoji, level) in priorityEmojis {
-            let pattern = "\(emoji)\u{FE0F}?"
-            if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
-                let nsRange = NSRange(content.startIndex..., in: content)
-                if let match = regex.firstMatch(in: content, options: [], range: nsRange),
-                   let matchRange = Range(match.range, in: content) {
-                    priority = level
-                    content.removeSubrange(matchRange)
-                    break
-                }
+        for (level, regex) in Rx.priority {
+            let nsRange = NSRange(content.startIndex..., in: content)
+            if let match = regex.firstMatch(in: content, options: [], range: nsRange),
+               let matchRange = Range(match.range, in: content) {
+                priority = level
+                content.removeSubrange(matchRange)
+                break
             }
         }
         
@@ -246,24 +313,21 @@ extension SyncTask {
         var recurrenceRule: String? = nil
 
         // Case 1: emoji-based
-        for recEmoji in ["🔁", "🔂"] {
-            let recPattern = "\(recEmoji)\u{FE0F}?\\s*[^📅🛫⏳✅⏫🔼🔽#]*"
-            if let recRegex = try? NSRegularExpression(pattern: recPattern, options: []) {
-                let recRange = NSRange(content.startIndex..., in: content)
-                if let match = recRegex.firstMatch(in: content, options: [], range: recRange),
-                   let matchRange = Range(match.range, in: content) {
-                    let captured = String(content[matchRange]).trimmingCharacters(in: .whitespaces)
-                    if !captured.isEmpty {
-                        recurrenceRule = captured
-                    }
+        for recRegex in Rx.recurrenceEmojiCapture {
+            let recRange = NSRange(content.startIndex..., in: content)
+            if let match = recRegex.firstMatch(in: content, options: [], range: recRange),
+               let matchRange = Range(match.range, in: content) {
+                let captured = String(content[matchRange]).trimmingCharacters(in: .whitespaces)
+                if !captured.isEmpty {
+                    recurrenceRule = captured
                 }
-                content = recRegex.stringByReplacingMatches(in: content, options: [], range: recRange, withTemplate: "")
             }
+            content = recRegex.stringByReplacingMatches(in: content, options: [], range: recRange, withTemplate: "")
         }
 
         // Case 2: plain-text (only consider if emoji case didn't hit)
-        let plainRecPattern = "\\bevery\\s+(?:month|week|day|year|other|january|february|march|april|may|june|july|august|september|october|november|december|\\d+\\s+days?)\\b[^📅🛫⏳✅⏫🔼🔽#]*"
-        if let plainRecRegex = try? NSRegularExpression(pattern: plainRecPattern, options: [.caseInsensitive]) {
+        do {
+            let plainRecRegex = Rx.plainRecurrenceCapture
             let recRange = NSRange(content.startIndex..., in: content)
             if recurrenceRule == nil,
                let match = plainRecRegex.firstMatch(in: content, options: [], range: recRange),
@@ -293,10 +357,11 @@ extension SyncTask {
         var tags: [String] = []
         var targetList: String? = nil
         let protectedRanges = computeProtectedRanges(in: content)
-        let tagRegex = try? NSRegularExpression(pattern: "[#+][\\w-]+(?:/[\\w-]+)*", options: [])
+        let tagRegex = Rx.tag
         let range = NSRange(content.startIndex..., in: content)
 
-        if let matches = tagRegex?.matches(in: content, options: [], range: range) {
+        do {
+            let matches = tagRegex.matches(in: content, options: [], range: range)
             for match in matches {
                 // Drop matches that overlap any protected range.
                 let isProtected = protectedRanges.contains { protected in
@@ -332,30 +397,24 @@ extension SyncTask {
         // Remove recurrence info from title
         // Case 1: 🔁/🔂 emoji (with optional FE0F variation selector) and everything after
         var recurrenceStripped = false
-        let recurrenceEmojis = ["🔁", "🔂"]
-        for emoji in recurrenceEmojis {
-            let pattern = "\(emoji)\u{FE0F}?"
-            if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
-                let nsRange = NSRange(title.startIndex..., in: title)
-                if let match = regex.firstMatch(in: title, options: [], range: nsRange),
-                   let matchRange = Range(match.range, in: title) {
-                    title = String(title[..<matchRange.lowerBound])
-                    recurrenceStripped = true
-                    break
-                }
+        for regex in Rx.recurrenceEmojiBare {
+            let nsRange = NSRange(title.startIndex..., in: title)
+            if let match = regex.firstMatch(in: title, options: [], range: nsRange),
+               let matchRange = Range(match.range, in: title) {
+                title = String(title[..<matchRange.lowerBound])
+                recurrenceStripped = true
+                break
             }
         }
 
         // Case 2: Plain-text recurrence rules without emoji
         // Matches patterns like "every month on the 1st when done", "every week", "every 90 days when done"
         if !recurrenceStripped {
-            let plainRecurrencePattern = "\\bevery\\s+(?:month|week|day|year|other|\\d+\\s+days?)\\b.*?(?:when done)?.*$"
-            if let regex = try? NSRegularExpression(pattern: plainRecurrencePattern, options: [.caseInsensitive]) {
-                let nsRange = NSRange(title.startIndex..., in: title)
-                if let match = regex.firstMatch(in: title, options: [], range: nsRange),
-                   let matchRange = Range(match.range, in: title) {
-                    title = String(title[..<matchRange.lowerBound])
-                }
+            let regex = Rx.plainRecurrenceStrip
+            let nsRange = NSRange(title.startIndex..., in: title)
+            if let match = regex.firstMatch(in: title, options: [], range: nsRange),
+               let matchRange = Range(match.range, in: title) {
+                title = String(title[..<matchRange.lowerBound])
             }
         }
         
@@ -394,9 +453,7 @@ extension SyncTask {
     /// This is called after `fromObsidianLine` to augment with any dataview fields found.
     static func parseDataviewFields(from line: String, into task: inout SyncTask) {
         // Match both [key::value] and (key::value) patterns
-        let dvPattern = "[\\[\\(]([\\w-]+)::\\s*([^\\]\\)]+)[\\]\\)]"
-        guard let regex = try? NSRegularExpression(pattern: dvPattern, options: []) else { return }
-
+        let regex = Rx.dataviewField
         let nsRange = NSRange(line.startIndex..., in: line)
         let matches = regex.matches(in: line, options: [], range: nsRange)
 
@@ -474,12 +531,10 @@ extension SyncTask {
         }
 
         // Clean dataview fields from the title
-        let cleanPattern = "\\s*[\\[\\(][\\w-]+::\\s*[^\\]\\)]+[\\]\\)]"
-        if let cleanRegex = try? NSRegularExpression(pattern: cleanPattern, options: []) {
-            let titleRange = NSRange(task.title.startIndex..., in: task.title)
-            task.title = cleanRegex.stringByReplacingMatches(in: task.title, range: titleRange, withTemplate: "")
-                .trimmingCharacters(in: .whitespaces)
-        }
+        let cleanRegex = Rx.dataviewClean
+        let titleRange = NSRange(task.title.startIndex..., in: task.title)
+        task.title = cleanRegex.stringByReplacingMatches(in: task.title, range: titleRange, withTemplate: "")
+            .trimmingCharacters(in: .whitespaces)
     }
 
     /// Convert task back to Obsidian Tasks format
@@ -541,10 +596,19 @@ extension SyncTask {
     // MARK: - Helper Methods
     
     private static func extractDate(from content: inout String, emoji: String) -> Date? {
-        // Handle optional FE0F variation selector that some editors/keyboards insert after emoji
-        let pattern = "\(emoji)\u{FE0F}?\\s*(\\d{4}-\\d{2}-\\d{2})"
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
-        
+        // Use the pre-compiled regex for this emoji; fall back to compiling on
+        // the fly for any caller that passes an emoji outside the known four
+        // (none today, but keeps the helper self-contained). (perf)
+        let regex: NSRegularExpression
+        if let cached = Rx.dateByEmoji[emoji] {
+            regex = cached
+        } else {
+            guard let compiled = try? NSRegularExpression(
+                pattern: "\(emoji)\u{FE0F}?\\s*(\\d{4}-\\d{2}-\\d{2})", options: []
+            ) else { return nil }
+            regex = compiled
+        }
+
         let range = NSRange(content.startIndex..., in: content)
         guard let match = regex.firstMatch(in: content, options: [], range: range),
               let dateRange = Range(match.range(at: 1), in: content) else { return nil }
@@ -589,22 +653,16 @@ extension SyncTask {
         // brackets if the URL is somehow inside one). Trailing punctuation
         // like `.,;` is included in the URL — fine, since we only need
         // start-position protection for tag matches, not exact URL bounds.
-        if let urlRegex = try? NSRegularExpression(pattern: "https?://[^\\s)\\]]+", options: []) {
-            ranges.append(contentsOf: urlRegex.matches(in: content, options: [], range: nsRange).map(\.range))
-        }
+        ranges.append(contentsOf: Rx.url.matches(in: content, options: [], range: nsRange).map(\.range))
 
         // Wikilinks. `[[anything-not-containing-]]]` — minimal but correct
         // for our purpose (we only care that the header `#section` inside
         // doesn't escape).
-        if let wikilinkRegex = try? NSRegularExpression(pattern: "\\[\\[[^\\]]*\\]\\]", options: []) {
-            ranges.append(contentsOf: wikilinkRegex.matches(in: content, options: [], range: nsRange).map(\.range))
-        }
+        ranges.append(contentsOf: Rx.wikilink.matches(in: content, options: [], range: nsRange).map(\.range))
 
         // Inline code spans. Single backticks; we don't need to handle the
         // pathological double-backtick case for our purposes.
-        if let codeRegex = try? NSRegularExpression(pattern: "`[^`]*`", options: []) {
-            ranges.append(contentsOf: codeRegex.matches(in: content, options: [], range: nsRange).map(\.range))
-        }
+        ranges.append(contentsOf: Rx.codeSpan.matches(in: content, options: [], range: nsRange).map(\.range))
 
         return ranges
     }
@@ -619,9 +677,9 @@ extension SyncTask {
         
         // Parse tags from notes if present (supports both # and + prefixes)
         if let notes = reminder.notes {
-            let tagRegex = try? NSRegularExpression(pattern: "[#+][\\w-]+(?:/[\\w-]+)*", options: [])
             let range = NSRange(notes.startIndex..., in: notes)
-            if let matches = tagRegex?.matches(in: notes, options: [], range: range) {
+            do {
+                let matches = Rx.tag.matches(in: notes, options: [], range: range)
                 for match in matches {
                     if let tagRange = Range(match.range, in: notes) {
                         tags.append(String(notes[tagRange]))

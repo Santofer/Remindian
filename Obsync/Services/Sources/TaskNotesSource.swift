@@ -29,6 +29,32 @@ class TaskNotesSource: TaskSource {
     private let backupService = FileBackupService.shared
     private let auditLog = AuditLog.shared
 
+    /// Produce a filesystem-safe, human-readable slug from a task title.
+    ///
+    /// Transliterates Latin diacritics (à→a, ö→o, ñ→n) instead of stripping
+    /// them, so "Från Mac till lördag" becomes "fran-mac-till-lordag" rather
+    /// than the old "frn-mac-till-lrdag". Characters outside the Latin script
+    /// (CJK, Cyrillic, …) have no ASCII fold, so they're dropped — and when
+    /// that would leave an empty slug we fall back to a stable token so we
+    /// never emit a bare ".md" filename or collide. (#73)
+    ///
+    /// The displayed task title is always preserved separately in the file's
+    /// YAML frontmatter (`title:`); this only affects the on-disk filename.
+    static func slugify(_ title: String, maxLength: Int = 50) -> String {
+        let folded = title.folding(
+            options: .diacriticInsensitive,
+            locale: Locale(identifier: "en_US_POSIX")
+        )
+        let slug = folded
+            .lowercased()
+            .replacingOccurrences(of: "[^a-z0-9\\s-]", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\s+", with: "-", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+            .prefix(maxLength)
+        let result = String(slug)
+        return result.isEmpty ? "task-\(UUID().uuidString.prefix(8))" : result
+    }
+
     /// Integration mode for TaskNotes.
     enum IntegrationMode: String, Codable, CaseIterable {
         case cli = "cli"           // mtn CLI (standalone, recommended)
@@ -517,11 +543,7 @@ class TaskNotesSource: TaskSource {
         debugLog("[TaskNotes] Created task via CLI: \(output.trimmingCharacters(in: .whitespacesAndNewlines))")
 
         // Try to find the created file by listing recent tasks
-        let sanitizedTitle = task.title
-            .lowercased()
-            .replacingOccurrences(of: "[^a-z0-9\\s-]", with: "", options: .regularExpression)
-            .replacingOccurrences(of: "\\s+", with: "-", options: .regularExpression)
-            .prefix(50)
+        let sanitizedTitle = Self.slugify(task.title)
         let relativePath = "/tasks/\(sanitizedTitle).md"
 
         return SyncTask.ObsidianSource(
@@ -539,19 +561,15 @@ class TaskNotesSource: TaskSource {
             try fileManager.createDirectory(at: dirURL, withIntermediateDirectories: true)
         }
 
-        // Generate filename from title (mdbase-style slugification)
-        let sanitizedTitle = task.title
-            .lowercased()
-            .replacingOccurrences(of: "[^a-z0-9\\s-]", with: "", options: .regularExpression)
-            .replacingOccurrences(of: "\\s+", with: "-", options: .regularExpression)
-            .prefix(50)
+        // Generate filename from title (Unicode-aware slugification, #73)
+        let sanitizedTitle = Self.slugify(task.title)
         let fileName = "\(sanitizedTitle).md"
-        var fileURL = dirURL.appendingPathComponent(String(fileName))
+        var fileURL = dirURL.appendingPathComponent(fileName)
 
         // If file already exists, add a UUID suffix
         if fileManager.fileExists(atPath: fileURL.path) {
             let uniqueName = "\(sanitizedTitle)-\(UUID().uuidString.prefix(8)).md"
-            fileURL = dirURL.appendingPathComponent(String(uniqueName))
+            fileURL = dirURL.appendingPathComponent(uniqueName)
         }
 
         let dateFormatter = DateFormatter()
@@ -1037,7 +1055,10 @@ private struct MtnCliTask: Codable {
         }
 
         let taskTags = (tags ?? []).map { "#\($0)" }
-        let relativePath = path ?? "/tasks/\(taskTitle.lowercased().replacingOccurrences(of: " ", with: "-")).md"
+        // Prefer the path the mtn CLI reported; only synthesize one when it's
+        // missing. Use the shared Unicode-aware slug so the fallback matches
+        // the file-creation path and doesn't mangle accents. (#73)
+        let relativePath = path ?? "/tasks/\(TaskNotesSource.slugify(taskTitle)).md"
 
         // Determine target list based on listField (#20)
         let targetList: String?

@@ -3,9 +3,60 @@ import Foundation
 /// Tracks the relationship between Obsidian tasks and Apple Reminders.
 /// Used to detect changes and handle conflicts.
 class SyncState: Codable {
+    /// On-disk source of truth. Preserved verbatim in `sync_state.json` so
+    /// existing state files keep loading unchanged. Direct array access
+    /// (iteration, `.count`, `.map`) by the sync engine still works.
     var mappings: [TaskMapping]
     var lastSyncDate: Date?
     var stateVersion: Int
+
+    // MARK: - In-memory acceleration indexes (not persisted)
+    //
+    // The sync engine looks up mappings by id inside per-task loops. With a
+    // plain array those lookups were O(n) linear scans → O(n²) overall on big
+    // vaults. These dictionaries map id → array index for O(1) find/has.
+    // Rebuilt from `mappings` on decode and after structural removals;
+    // maintained incrementally on add/update. They are NOT encoded — only
+    // `mappings` is. (perf)
+    //
+    // Invariant: `obsidianId` is unique across mappings (addOrUpdate updates in
+    // place rather than appending a duplicate). `remindersId` is intended
+    // unique too; if a duplicate ever exists the index points at the
+    // most-recently-written mapping (more correct than the old `.first`).
+    private var idxByObsidianId: [String: Int] = [:]
+    private var idxByRemindersId: [String: Int] = [:]
+
+    private enum CodingKeys: String, CodingKey {
+        case mappings, lastSyncDate, stateVersion
+    }
+
+    required init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        mappings = try c.decode([TaskMapping].self, forKey: .mappings)
+        lastSyncDate = try c.decodeIfPresent(Date.self, forKey: .lastSyncDate)
+        stateVersion = try c.decodeIfPresent(Int.self, forKey: .stateVersion) ?? Self.currentStateVersion
+        rebuildIndexes()
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(mappings, forKey: .mappings)
+        try c.encodeIfPresent(lastSyncDate, forKey: .lastSyncDate)
+        try c.encode(stateVersion, forKey: .stateVersion)
+    }
+
+    /// Rebuild both id→index maps from `mappings`. O(n). Called on decode and
+    /// after removals (which shift array indices).
+    private func rebuildIndexes() {
+        idxByObsidianId.removeAll(keepingCapacity: true)
+        idxByRemindersId.removeAll(keepingCapacity: true)
+        idxByObsidianId.reserveCapacity(mappings.count)
+        idxByRemindersId.reserveCapacity(mappings.count)
+        for (i, m) in mappings.enumerated() {
+            idxByObsidianId[m.obsidianId] = i
+            idxByRemindersId[m.remindersId] = i
+        }
+    }
 
     /// Current version of the ID generation scheme.
     /// Bump this when the ID format changes to trigger auto-reset.
@@ -99,39 +150,61 @@ class SyncState: Codable {
     // MARK: - Mapping Management
 
     func findMapping(obsidianId: String) -> TaskMapping? {
-        return mappings.first { $0.obsidianId == obsidianId }
+        guard let i = idxByObsidianId[obsidianId] else { return nil }
+        return mappings[i]
     }
 
     func findMapping(remindersId: String) -> TaskMapping? {
-        return mappings.first { $0.remindersId == remindersId }
+        guard let i = idxByRemindersId[remindersId] else { return nil }
+        return mappings[i]
+    }
+
+    /// O(1) existence check. Replaces `mappings.contains { $0.obsidianId == … }`
+    /// in the dedup sort comparator (which was O(n) per comparison). (perf)
+    func hasMapping(obsidianId: String) -> Bool {
+        return idxByObsidianId[obsidianId] != nil
     }
 
     func addOrUpdateMapping(obsidianId: String, remindersId: String, obsidianHash: String, remindersHash: String) {
-        if let index = mappings.firstIndex(where: { $0.obsidianId == obsidianId }) {
-            mappings[index] = TaskMapping(
-                obsidianId: obsidianId,
-                remindersId: remindersId,
-                lastObsidianHash: obsidianHash,
-                lastRemindersHash: remindersHash,
-                lastSyncDate: Date()
-            )
+        let newMapping = TaskMapping(
+            obsidianId: obsidianId,
+            remindersId: remindersId,
+            lastObsidianHash: obsidianHash,
+            lastRemindersHash: remindersHash,
+            lastSyncDate: Date()
+        )
+
+        if let i = idxByObsidianId[obsidianId] {
+            // Update in place — array index is stable. If the remindersId
+            // changed (reconnect), move its index entry to the new id.
+            let oldRemindersId = mappings[i].remindersId
+            if oldRemindersId != remindersId {
+                // Only drop the old entry if it still points at this slot
+                // (defensive against a duplicate remindersId elsewhere).
+                if idxByRemindersId[oldRemindersId] == i {
+                    idxByRemindersId.removeValue(forKey: oldRemindersId)
+                }
+                idxByRemindersId[remindersId] = i
+            }
+            mappings[i] = newMapping
         } else {
-            mappings.append(TaskMapping(
-                obsidianId: obsidianId,
-                remindersId: remindersId,
-                lastObsidianHash: obsidianHash,
-                lastRemindersHash: remindersHash,
-                lastSyncDate: Date()
-            ))
+            mappings.append(newMapping)
+            let i = mappings.count - 1
+            idxByObsidianId[obsidianId] = i
+            idxByRemindersId[remindersId] = i
         }
     }
 
     func removeMapping(obsidianId: String) {
+        guard idxByObsidianId[obsidianId] != nil else { return }
         mappings.removeAll { $0.obsidianId == obsidianId }
+        rebuildIndexes() // array indices shifted
     }
 
     func removeMapping(remindersId: String) {
+        guard idxByRemindersId[remindersId] != nil else { return }
         mappings.removeAll { $0.remindersId == remindersId }
+        rebuildIndexes()
     }
 
     // MARK: - Hash Generation
