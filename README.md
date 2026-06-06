@@ -32,11 +32,19 @@ Your vault is the **source of truth**. Remindian syncs tasks from Obsidian into 
 >
 > **Four destinations** — Apple Reminders · Things 3 · Todoist · TickTick
 
-## Download
+## Install
 
-**[Download Remindian v4.1.0](https://github.com/Santofer/Remindian/releases/latest)** — Universal Binary (Apple Silicon + Intel), macOS 13.0+
+### Homebrew (recommended)
 
-> Since the app is not notarized yet, right-click the app and select **Open** on first launch to bypass Gatekeeper. Remindian includes a built-in auto-updater that checks for new versions on launch and every 24 hours.
+```sh
+brew install --cask Santofer/tap/remindian
+```
+
+### Direct download
+
+**[Download the latest release](https://github.com/Santofer/Remindian/releases/latest)** — Universal Binary (Apple Silicon + Intel), macOS 13.0+ (Ventura).
+
+> Since the app is not notarized yet, right-click the app and select **Open** on first launch to bypass Gatekeeper. Remindian includes a built-in auto-updater that checks for new versions on launch and every 24 hours, so you only do this once.
 
 ## Features
 
