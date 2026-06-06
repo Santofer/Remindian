@@ -4,6 +4,29 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.15.0 (June 2026)
+
+Generic Markdown source (#27) — Remindian now syncs **NotePlan** and other plain-markdown task tools, not just Obsidian. Additive and opt-in; the Obsidian Tasks path is completely untouched.
+
+### New
+
+- **Generic Markdown task source.** Settings → General → Task Source now offers **Generic Markdown (NotePlan, etc.)**. It reads tasks written with a *configurable token dialect* instead of Obsidian's emoji:
+  - **Due / start / done dates** via a configurable prefix — defaults to NotePlan's `>2025-01-20` (due) and `@done(2025-01-20)` (done). Both bare (`>2025-01-20`) and parenthesized (`@done(2025-01-20)`) forms are understood.
+  - **Priority** via configurable tokens — defaults to `!!!` / `!!` / `!` (high / medium / low).
+  - **File extensions** (default `md`, `txt`), checkbox markers, and `#tags`.
+  - Tasks use `- [ ] / - [x]` checkboxes (also `*` and `+` bullets).
+  - Two-way sync works: completion, due/start dates, priority, tags, and new-task creation are written back surgically in the same dialect, verifying the line before editing so a concurrent external change aborts the write rather than clobbering it.
+
+### Notes
+
+- This is a **separate parser and writer** from the Obsidian Tasks engine — the proven Obsidian path carries zero regression risk. Recurrence is not parsed in the generic dialect (recurrence conventions vary too much between tools); everything else round-trips.
+
+### Tests
+
+- New `GenericMarkdownTests` (20 cases): NotePlan parsing, longest-priority-token wins, `!`-inside-a-word is not a priority, multiple bullet styles, full field round-trip (`parse(build(task)) == task`), surgical completion/incompletion preserving other tokens, metadata add/replace/remove, plus source-level scan + writeback against real temp files and a write-aborts-on-line-mismatch safety test. Full suite green.
+
+---
+
 ## v5.14.0 (June 2026)
 
 Multi-device sync state (#15). Opt-in, backward compatible — existing installs keep their current per-machine behavior untouched.

@@ -125,6 +125,8 @@ class SyncManager: ObservableObject {
                 source.listField = config.taskNotesListField
             }
             return source
+        case .genericMarkdown:
+            return GenericMarkdownSource()
         }
     }
 

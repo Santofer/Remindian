@@ -42,6 +42,8 @@
 		033 /* AsanaDestination.swift in Sources */ = {isa = PBXBuildFile; fileRef = 135; };
 		034 /* LinearDestination.swift in Sources */ = {isa = PBXBuildFile; fileRef = 136; };
 		035 /* RecurrenceConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 137; };
+		036 /* GenericMarkdownParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 138; };
+		037 /* GenericMarkdownSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 139; };
 		T01 /* TaskParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T10; };
 		T02 /* DeduplicationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T11; };
 		T03 /* TaskNotesParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T12; };
@@ -61,6 +63,7 @@
 		T0H /* SyncEngineReconnectFailureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1G; };
 		T0I /* ObsidianServiceParseCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1H; };
 		T0J /* SyncStateLocationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1I; };
+		T0K /* GenericMarkdownTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1J; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -112,6 +115,8 @@
 		135 /* AsanaDestination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AsanaDestination.swift; sourceTree = "<group>"; };
 		136 /* LinearDestination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinearDestination.swift; sourceTree = "<group>"; };
 		137 /* RecurrenceConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurrenceConverter.swift; sourceTree = "<group>"; };
+		138 /* GenericMarkdownParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenericMarkdownParser.swift; sourceTree = "<group>"; };
+		139 /* GenericMarkdownSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenericMarkdownSource.swift; sourceTree = "<group>"; };
 		T00 /* RemindianTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RemindianTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		T10 /* TaskParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskParserTests.swift; sourceTree = "<group>"; };
 		T11 /* DeduplicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeduplicationTests.swift; sourceTree = "<group>"; };
@@ -132,6 +137,7 @@
 		T1G /* SyncEngineReconnectFailureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncEngineReconnectFailureTests.swift; sourceTree = "<group>"; };
 		T1H /* ObsidianServiceParseCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObsidianServiceParseCacheTests.swift; sourceTree = "<group>"; };
 		T1I /* SyncStateLocationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncStateLocationTests.swift; sourceTree = "<group>"; };
+		T1J /* GenericMarkdownTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenericMarkdownTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -244,6 +250,8 @@
 			children = (
 				126 /* ObsidianTasksSource.swift */,
 				127 /* TaskNotesSource.swift */,
+				138 /* GenericMarkdownParser.swift */,
+				139 /* GenericMarkdownSource.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -284,6 +292,7 @@
 				T1G /* SyncEngineReconnectFailureTests.swift */,
 				T1H /* ObsidianServiceParseCacheTests.swift */,
 				T1I /* SyncStateLocationTests.swift */,
+				T1J /* GenericMarkdownTests.swift */,
 			);
 			path = RemindianTests;
 			sourceTree = "<group>";
@@ -413,6 +422,8 @@
 				033 /* AsanaDestination.swift in Sources */,
 				034 /* LinearDestination.swift in Sources */,
 				035 /* RecurrenceConverter.swift in Sources */,
+				036 /* GenericMarkdownParser.swift in Sources */,
+				037 /* GenericMarkdownSource.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -439,6 +450,7 @@
 				T0H /* SyncEngineReconnectFailureTests.swift in Sources */,
 				T0I /* ObsidianServiceParseCacheTests.swift in Sources */,
 				T0J /* SyncStateLocationTests.swift in Sources */,
+				T0K /* GenericMarkdownTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -592,7 +604,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 5.14.0;
+				MARKETING_VERSION = 5.15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -620,7 +632,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 5.14.0;
+				MARKETING_VERSION = 5.15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

@@ -86,6 +86,9 @@ class SyncConfiguration: ObservableObject, Codable {
     /// Where the sync-state mapping table is stored. (#15) See `SyncStateLocation`.
     @Published var syncStateLocation: SyncStateLocation
 
+    /// Token dialect for the Generic Markdown source (#27). See `GenericMarkdownSettings`.
+    @Published var genericMarkdown: GenericMarkdownSettings
+
     // MARK: - TaskNotes Custom Status Mapping (#10)
     @Published var taskNotesCompletedStatuses: [String]  // Statuses that mean "completed" (e.g., ["done", "completed", "cancelled"])
     @Published var taskNotesOpenStatus: String  // Status to write when marking incomplete (default: "open")
@@ -153,12 +156,67 @@ class SyncConfiguration: ObservableObject, Codable {
     enum TaskSourceType: String, Codable, CaseIterable {
         case obsidianTasks = "obsidianTasks"
         case taskNotes = "taskNotes"
+        case genericMarkdown = "genericMarkdown"
 
         var displayName: String {
             switch self {
             case .obsidianTasks: return "Obsidian Tasks"
             case .taskNotes: return "TaskNotes"
+            case .genericMarkdown: return "Generic Markdown (NotePlan, etc.)"
             }
+        }
+    }
+
+    /// Configurable token dialect for the Generic Markdown source (#27).
+    ///
+    /// Lets Remindian read plain-markdown task tools that aren't Obsidian Tasks
+    /// — NotePlan, and any tool that puts dates/priority on the task line with a
+    /// configurable prefix. Defaults match NotePlan: due `>2025-01-20`, done
+    /// `@done(2025-01-20)`, priority `!`, `!!`, `!!!`. Empty token = that field
+    /// is disabled (not parsed, not written).
+    ///
+    /// Date tokens accept both bare (`>2025-01-20`) and parenthesized
+    /// (`@done(2025-01-20)`) forms, so one model covers both styles.
+    ///
+    /// This is intentionally separate from the Obsidian-Tasks emoji parser: the
+    /// proven Obsidian path is untouched, so adding dialect support carries no
+    /// regression risk for existing users. Recurrence is not parsed in this
+    /// dialect (varies too much between tools); completion, dates, priority and
+    /// new-task writeback are supported.
+    struct GenericMarkdownSettings: Codable, Equatable {
+        var fileExtensions: [String]
+        var openMarkers: [String]
+        var completedMarkers: [String]
+        var dueToken: String
+        var startToken: String
+        var scheduledToken: String
+        var doneToken: String
+        var priorityHighToken: String
+        var priorityMediumToken: String
+        var priorityLowToken: String
+
+        init(
+            fileExtensions: [String] = ["md", "txt"],
+            openMarkers: [String] = [" "],
+            completedMarkers: [String] = ["x", "X"],
+            dueToken: String = ">",
+            startToken: String = "",
+            scheduledToken: String = "",
+            doneToken: String = "@done",
+            priorityHighToken: String = "!!!",
+            priorityMediumToken: String = "!!",
+            priorityLowToken: String = "!"
+        ) {
+            self.fileExtensions = fileExtensions
+            self.openMarkers = openMarkers
+            self.completedMarkers = completedMarkers
+            self.dueToken = dueToken
+            self.startToken = startToken
+            self.scheduledToken = scheduledToken
+            self.doneToken = doneToken
+            self.priorityHighToken = priorityHighToken
+            self.priorityMediumToken = priorityMediumToken
+            self.priorityLowToken = priorityLowToken
         }
     }
 
@@ -251,7 +309,7 @@ class SyncConfiguration: ObservableObject, Codable {
         case taskSourceType, taskDestinationType, things3AuthToken, taskNotesFolder, taskNotesIntegrationMode
         case taskNotesMtnPath, taskNotesApiUrl
         case launchAtLogin, maxCompletedTaskAgeDays, syncedRemindersLists, excludedRemindersLists, addTaskLinkToReminders, appendTaskLinkToNotes
-        case syncStateLocation
+        case syncStateLocation, genericMarkdown
         case taskNotesCompletedStatuses, taskNotesOpenStatus, taskNotesDoneStatus
         case obsidianTasksOpenMarkers, obsidianTasksCompletedMarkers, obsidianTasksIgnoredMarkers
         case taskNotesFieldMapping, taskNotesListField
@@ -315,6 +373,7 @@ class SyncConfiguration: ObservableObject, Codable {
         addTaskLinkToReminders: Bool = true,
         appendTaskLinkToNotes: Bool = false,
         syncStateLocation: SyncStateLocation = .applicationSupport,
+        genericMarkdown: GenericMarkdownSettings = GenericMarkdownSettings(),
         taskNotesCompletedStatuses: [String] = ["done", "completed", "cancelled"],
         taskNotesOpenStatus: String = "open",
         taskNotesDoneStatus: String = "done",
@@ -379,6 +438,7 @@ class SyncConfiguration: ObservableObject, Codable {
         self.addTaskLinkToReminders = addTaskLinkToReminders
         self.appendTaskLinkToNotes = appendTaskLinkToNotes
         self.syncStateLocation = syncStateLocation
+        self.genericMarkdown = genericMarkdown
         self.taskNotesCompletedStatuses = taskNotesCompletedStatuses
         self.taskNotesOpenStatus = taskNotesOpenStatus
         self.taskNotesDoneStatus = taskNotesDoneStatus
@@ -445,6 +505,7 @@ class SyncConfiguration: ObservableObject, Codable {
         excludedTags = try container.decodeIfPresent([String].self, forKey: .excludedTags) ?? []
         addTaskLinkToReminders = try container.decodeIfPresent(Bool.self, forKey: .addTaskLinkToReminders) ?? true
         syncStateLocation = try container.decodeIfPresent(SyncStateLocation.self, forKey: .syncStateLocation) ?? .applicationSupport
+        genericMarkdown = try container.decodeIfPresent(GenericMarkdownSettings.self, forKey: .genericMarkdown) ?? GenericMarkdownSettings()
         // Defaults to `false` for both fresh installs AND existing users
         // upgrading from v5.9.x — the whole point of #69 is that the noisy
         // URL-in-notes is opt-in going forward. Users who want it can toggle
@@ -521,6 +582,7 @@ class SyncConfiguration: ObservableObject, Codable {
         try container.encode(addTaskLinkToReminders, forKey: .addTaskLinkToReminders)
         try container.encode(appendTaskLinkToNotes, forKey: .appendTaskLinkToNotes)
         try container.encode(syncStateLocation, forKey: .syncStateLocation)
+        try container.encode(genericMarkdown, forKey: .genericMarkdown)
         try container.encode(taskNotesCompletedStatuses, forKey: .taskNotesCompletedStatuses)
         try container.encode(taskNotesOpenStatus, forKey: .taskNotesOpenStatus)
         try container.encode(taskNotesDoneStatus, forKey: .taskNotesDoneStatus)

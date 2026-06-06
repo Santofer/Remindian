@@ -54,6 +54,48 @@ struct GeneralSettingsView: View {
                         syncManager.updateSourceAndDestination()
                     }
 
+                    if syncManager.config.taskSourceType == .genericMarkdown {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Token dialect — configure how your tool marks dates and priority on a task line. Defaults match NotePlan. Leave a field blank to disable it.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+
+                            HStack {
+                                Text("File extensions:").foregroundColor(.secondary)
+                                TextField("md, txt", text: Binding(
+                                    get: { syncManager.config.genericMarkdown.fileExtensions.joined(separator: ", ") },
+                                    set: { syncManager.config.genericMarkdown.fileExtensions = $0.split(separator: ",").map { String($0.trimmingCharacters(in: .whitespaces)) }.filter { !$0.isEmpty } }
+                                ))
+                                .textFieldStyle(.roundedBorder).frame(width: 160)
+                            }
+                            HStack {
+                                Text("Due token:").foregroundColor(.secondary)
+                                TextField(">", text: $syncManager.config.genericMarkdown.dueToken)
+                                    .textFieldStyle(.roundedBorder).frame(width: 80)
+                                Text("Start:").foregroundColor(.secondary)
+                                TextField("(off)", text: $syncManager.config.genericMarkdown.startToken)
+                                    .textFieldStyle(.roundedBorder).frame(width: 80)
+                                Text("Done:").foregroundColor(.secondary)
+                                TextField("@done", text: $syncManager.config.genericMarkdown.doneToken)
+                                    .textFieldStyle(.roundedBorder).frame(width: 90)
+                            }
+                            HStack {
+                                Text("Priority high/med/low:").foregroundColor(.secondary)
+                                TextField("!!!", text: $syncManager.config.genericMarkdown.priorityHighToken)
+                                    .textFieldStyle(.roundedBorder).frame(width: 60)
+                                TextField("!!", text: $syncManager.config.genericMarkdown.priorityMediumToken)
+                                    .textFieldStyle(.roundedBorder).frame(width: 60)
+                                TextField("!", text: $syncManager.config.genericMarkdown.priorityLowToken)
+                                    .textFieldStyle(.roundedBorder).frame(width: 60)
+                            }
+                            Text("Dates accept bare (`>2025-01-20`) and parenthesized (`@done(2025-01-20)`) forms. Tasks use `- [ ]` / `- [x]` checkboxes (also `*`/`+` bullets). Recurrence isn't parsed in this dialect.")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.leading, 20)
+                        .padding(.vertical, 4)
+                    }
+
                     Picker("Sync To", selection: $syncManager.config.taskDestinationType) {
                         Label("Apple Reminders", systemImage: "checklist")
                             .tag(SyncConfiguration.TaskDestinationType.appleReminders)

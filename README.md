@@ -28,7 +28,7 @@
 
 Your vault is the **source of truth**. Remindian syncs tasks from Obsidian into your chosen destination. Completions, due dates, start dates, priority, and tags sync back with surgical, metadata-preserving edits.
 
-> **Two task sources** — [Obsidian Tasks](https://publish.obsidian.md/tasks/Introduction) plugin format and [TaskNotes](https://github.com/nicolo/obsidian-tasknotes) plugin
+> **Three task sources** — [Obsidian Tasks](https://publish.obsidian.md/tasks/Introduction) plugin format, [TaskNotes](https://github.com/nicolo/obsidian-tasknotes) plugin, and a configurable **Generic Markdown** dialect for NotePlan & other plain-markdown task tools
 >
 > **Four destinations** — Apple Reminders · Things 3 · Todoist · TickTick
 
@@ -79,6 +79,7 @@ brew install --cask Santofer/tap/remindian
 ### 📥 Sources
 - **Obsidian Tasks** — `- [ ] task 📅 2024-01-20 #tag`
 - **TaskNotes** — One YAML file per task (CLI/Files/HTTP)
+- **Generic Markdown** — NotePlan & friends: `- [ ] task >2024-01-20 !!! #tag`
 - **Custom status mapping** — `done`, `shipped`, `archived`
 
 </td>
