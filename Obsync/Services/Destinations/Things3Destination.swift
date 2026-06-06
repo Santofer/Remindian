@@ -113,6 +113,10 @@ class Things3Destination: TaskDestination {
             return result != nil
         } catch Things3Error.appleScriptTimeout {
             throw Things3Error.appleScriptTimeout
+        } catch Things3Error.notAuthorized {
+            // Surface the actionable Automation-permission guidance verbatim
+            // rather than the generic "access denied". (#56)
+            throw Things3Error.notAuthorized
         } catch {
             throw Things3Error.appleScriptAccessDenied
         }
@@ -141,6 +145,14 @@ class Things3Destination: TaskDestination {
                 let elapsed = Date().timeIntervalSince(listStart)
                 debugLog("[Things3] Fetched \(listTasks.count) tasks from '\(listName)' in \(String(format: "%.2f", elapsed))s")
                 tasks.append(contentsOf: listTasks)
+            } catch Things3Error.notAuthorized {
+                // Automation permission denied → every list and the Logbook will
+                // fail identically, and returning an empty task set would make
+                // the engine think Things 3 was wiped. Abort the whole fetch now
+                // with the actionable message instead of grinding through all of
+                // them and silently reporting "empty". (#56)
+                debugLog("[Things3] Not authorized to control Things 3 — aborting fetch with actionable error.")
+                throw Things3Error.notAuthorized
             } catch {
                 let elapsed = Date().timeIntervalSince(listStart)
                 debugLog("[Things3] Failed to fetch '\(listName)' after \(String(format: "%.2f", elapsed))s: \(error.localizedDescription)")
@@ -519,6 +531,10 @@ class Things3Destination: TaskDestination {
             return try await executeAppleScript(source, timeout: timeout)
         } catch Things3Error.appleScriptTimeout {
             throw Things3Error.appleScriptTimeout
+        } catch Things3Error.notAuthorized {
+            // Permission denial — retrying is pointless and just makes the sync
+            // feel stuck. Fail fast with the actionable message. (#56)
+            throw Things3Error.notAuthorized
         } catch {
             debugLog("[Things3] AppleScript failed (attempt 1): \(error.localizedDescription)")
 
@@ -564,7 +580,9 @@ class Things3Destination: TaskDestination {
                 var error: NSDictionary?
                 let result = script?.executeAndReturnError(&error)
                 if let error = error {
-                    throw Things3Error.appleScriptError(error[NSAppleScript.errorMessage] as? String ?? "Unknown")
+                    let number = (error[NSAppleScript.errorNumber] as? Int) ?? 0
+                    let message = error[NSAppleScript.errorMessage] as? String ?? "Unknown"
+                    throw Things3Error.classifyAppleScriptError(errorNumber: number, message: message)
                 }
                 return result
             }
@@ -802,9 +820,10 @@ class Things3Destination: TaskDestination {
 
 // MARK: - Errors
 
-enum Things3Error: LocalizedError {
+enum Things3Error: LocalizedError, Equatable {
     case notInstalled
     case appleScriptAccessDenied
+    case notAuthorized          // macOS Automation permission not granted (AppleEvent -1743/-1744)
     case appleScriptError(String)
     case appleScriptTimeout
     case authTokenRequired
@@ -819,10 +838,12 @@ enum Things3Error: LocalizedError {
             return "Things 3 is not installed. Please install Things 3 from the Mac App Store."
         case .appleScriptAccessDenied:
             return "Cannot access Things 3 via AppleScript. Please grant access in System Settings > Privacy & Security > Automation."
+        case .notAuthorized:
+            return "Remindian isn't allowed to control Things 3. Open System Settings → Privacy & Security → Automation, find Remindian, and turn ON the Things3 switch. If Remindian or Things3 isn't listed, run `tccutil reset AppleEvents com.remindian.app` in Terminal and start a sync again to re-trigger the permission prompt."
         case .appleScriptError(let message):
             return "Things 3 AppleScript error: \(message)"
         case .appleScriptTimeout:
-            return "Things 3 AppleScript timed out after 30 seconds. Things 3 may be unresponsive, or have too many tasks. Try restarting Things 3."
+            return "Things 3 AppleScript timed out. Things 3 may be unresponsive, or have too many tasks. Try restarting Things 3."
         case .authTokenRequired:
             return "Things 3 auth token required for updates. Go to Things > Settings > General > Enable Things URLs to get your token."
         case .invalidURL:
@@ -833,6 +854,28 @@ enum Things3Error: LocalizedError {
             return "Things 3 URL scheme failed. Make sure Things 3 is installed and the things:// URL scheme is registered."
         case .listFetchFailed(let listName, let underlying):
             return "Skipped Things 3 list '\(listName)' — sync continued with other lists. (\(underlying))"
+        }
+    }
+
+    /// Classify a raw NSAppleScript error into a typed Things3Error.
+    ///
+    /// `errorNumber` is the value under `NSAppleScript.errorNumber`. The key
+    /// codes (from `MacErrors.h` / AppleEvents):
+    ///   -1743  errAEEventNotPermitted    — user denied Automation permission
+    ///   -1744  errAEEventWouldRequireUserConsent — consent not yet given
+    ///   -600   procNotFound               — target app isn't running (transient)
+    ///   -609   connectionInvalid          — app connection dropped (transient)
+    ///
+    /// Permission errors (-1743/-1744) map to `.notAuthorized` so callers can
+    /// (a) show the actionable Automation-permission message and (b) skip the
+    /// pointless retry that made a denied sync feel "stuck" (#56). Everything
+    /// else stays a generic `.appleScriptError` carrying the original message.
+    static func classifyAppleScriptError(errorNumber: Int, message: String) -> Things3Error {
+        switch errorNumber {
+        case -1743, -1744:
+            return .notAuthorized
+        default:
+            return .appleScriptError(message)
         }
     }
 }

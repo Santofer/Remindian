@@ -4,6 +4,21 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.12.0 (June 2026)
+
+Things 3 reliability — sync no longer feels "stuck" when macOS Automation permission is missing. No config or sync-state format change.
+
+### Bug fixes
+
+- **Things 3 sync hung or silently did nothing when Automation permission was denied (#56).** When macOS hadn't granted Remindian permission to control Things 3, every AppleScript call failed with error `-1743` (or `-1744`). The old code treated that like any transient failure: it retried with a launch preamble, ground through all five lists plus the Logbook, and could end up reporting an empty task set — which looked like a hang or, worse, like Things 3 had been wiped. Remindian now recognises the permission errors specifically, **fails fast with an actionable message** ("Open System Settings → Privacy & Security → Automation, turn ON the Things3 switch… or run `tccutil reset AppleEvents com.remindian.app`"), and skips the pointless retries. A denied permission is reported clearly in seconds instead of stalling the sync.
+- **One unresponsive Things 3 list no longer aborts the whole fetch.** A timeout on a single list (e.g. a huge Logbook) used to throw away every other list's tasks. The fetch now continues with whatever lists respond and surfaces the failed ones as warnings, so a partial result beats no result.
+
+### Tests
+
+- New classifier tests assert `-1743`/`-1744` map to the actionable not-authorized error (no retry), other AppleScript errors keep their original message, and the guidance text names the exact Settings location and the `tccutil` fallback. Full suite green.
+
+---
+
 ## v5.11.0 (June 2026)
 
 Performance hardening + correctness fixes. No config or sync-state format change — existing installs upgrade transparently.

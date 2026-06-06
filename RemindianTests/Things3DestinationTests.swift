@@ -66,4 +66,41 @@ final class Things3DestinationTests: XCTestCase {
         let result = dest.buildTagNamesProperty(tags: ["she\"said"])
         XCTAssertEqual(result, "tag names:\"she\\\"said\"")
     }
+
+    // MARK: - AppleScript error classification (#56)
+
+    func test_56_minus1743ClassifiesAsNotAuthorized() {
+        // -1743 = errAEEventNotPermitted (user denied Automation permission).
+        let err = Things3Error.classifyAppleScriptError(
+            errorNumber: -1743,
+            message: "Not authorized to send Apple events to Things3."
+        )
+        XCTAssertEqual(err, .notAuthorized, "-1743 must map to .notAuthorized so the actionable message shows and retries are skipped.")
+    }
+
+    func test_56_minus1744ClassifiesAsNotAuthorized() {
+        // -1744 = errAEEventWouldRequireUserConsent (consent not yet given).
+        let err = Things3Error.classifyAppleScriptError(errorNumber: -1744, message: "consent required")
+        XCTAssertEqual(err, .notAuthorized)
+    }
+
+    func test_56_genericErrorStaysAppleScriptError() {
+        // A non-permission error keeps its original message.
+        let err = Things3Error.classifyAppleScriptError(errorNumber: -1728, message: "Can't get to do id \"X\".")
+        XCTAssertEqual(err, .appleScriptError("Can't get to do id \"X\"."))
+    }
+
+    func test_56_unknownNumberStaysAppleScriptError() {
+        let err = Things3Error.classifyAppleScriptError(errorNumber: 0, message: "Unknown")
+        XCTAssertEqual(err, .appleScriptError("Unknown"))
+    }
+
+    func test_56_notAuthorizedMessageIsActionable() {
+        // The message must name the exact System Settings location and the
+        // tccutil fallback — that's the whole point of the typed error.
+        let msg = Things3Error.notAuthorized.errorDescription ?? ""
+        XCTAssertTrue(msg.contains("Privacy & Security"), "Must point at the right Settings pane.")
+        XCTAssertTrue(msg.contains("Automation"), "Must name the Automation section.")
+        XCTAssertTrue(msg.lowercased().contains("tccutil"), "Must include the reset fallback for when the toggle is missing.")
+    }
 }
