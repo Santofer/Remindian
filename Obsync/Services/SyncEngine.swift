@@ -764,11 +764,36 @@ class SyncEngine {
                                         remindersHash: mapping.lastRemindersHash
                                     )
                                 } else {
+                                    // Store each side's post-sync fingerprint.
+                                    //
+                                    // Obsidian side: the Obsidian task as it will be
+                                    // re-scanned next sync (taskForReminders carries
+                                    // oTask's identity fields incl. its empty/tag-derived
+                                    // targetList) — matches generateTaskHash(oTask).
+                                    //
+                                    // Reminders side: must reflect what the REMINDER
+                                    // hashes to on the next fetch, NOT the Obsidian task.
+                                    // The reminder lives in the resolved destination list
+                                    // (it was created there, or we just moved it there at
+                                    // line ~721) — e.g. "Inbox" or "Someday" — whereas
+                                    // oTask.targetList is empty (inbox) or the raw lower-
+                                    // case tag ("someday"). Storing the Obsidian hash here
+                                    // left lastRemindersHash permanently out of sync with
+                                    // the live reminder, so every subsequent sync saw a
+                                    // phantom rChanged=true and redundantly re-pushed — the
+                                    // "N updated every sync with nothing changing" bug.
+                                    // Seed it with the resolved list so the two agree.
+                                    var reminderStateAfterSync = taskForReminders
+                                    reminderStateAfterSync.targetList = config.resolveTargetList(
+                                        tag: oTask.targetList,
+                                        filePath: oTask.obsidianSource?.filePath,
+                                        tags: oTask.tags
+                                    )
                                     syncState.addOrUpdateMapping(
                                         obsidianId: mapping.obsidianId,
                                         remindersId: mapping.remindersId,
                                         obsidianHash: SyncState.generateTaskHash(taskForReminders),
-                                        remindersHash: SyncState.generateTaskHash(taskForReminders)
+                                        remindersHash: SyncState.generateTaskHash(reminderStateAfterSync)
                                     )
                                 }
                             }
