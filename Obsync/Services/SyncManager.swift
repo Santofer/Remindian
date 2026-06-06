@@ -84,7 +84,9 @@ class SyncManager: ObservableObject {
         let dst = SyncManager.createDestination(for: loadedConfig.taskDestinationType, config: loadedConfig)
         self.taskSource = src
         self.taskDestination = dst
-        self.syncEngine = SyncEngine(source: src, destination: dst)
+        self.syncEngine = SyncEngine(source: src, destination: dst,
+                                     stateLocation: loadedConfig.syncStateLocation,
+                                     vaultPath: loadedConfig.vaultPath)
         debugLog("[SyncManager.init] engine ready")
 
         setupAutoSync()
@@ -164,7 +166,9 @@ class SyncManager: ObservableObject {
     func updateSourceAndDestination() {
         taskSource = SyncManager.createSource(for: config.taskSourceType, config: config)
         taskDestination = SyncManager.createDestination(for: config.taskDestinationType, config: config)
-        syncEngine = SyncEngine(source: taskSource, destination: taskDestination)
+        syncEngine = SyncEngine(source: taskSource, destination: taskDestination,
+                                stateLocation: config.syncStateLocation,
+                                vaultPath: config.vaultPath)
         debugLog("[SyncManager] Updated source=\(taskSource.sourceName), destination=\(taskDestination.destinationName)")
 
         // Re-request access for the new destination

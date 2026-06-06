@@ -1092,6 +1092,26 @@ struct AdvancedSettingsView: View {
             }
 
             Section {
+                Picker("Store sync state in", selection: $syncManager.config.syncStateLocation) {
+                    ForEach(SyncConfiguration.SyncStateLocation.allCases, id: \.self) { loc in
+                        Text(loc.displayName).tag(loc)
+                    }
+                }
+
+                if syncManager.config.syncStateLocation == .vault {
+                    Text("The mapping table is stored at `.remindian/sync_state.json` inside your vault. If you already sync your vault across Macs (Obsidian Sync, iCloud Drive, Dropbox, git…), each Mac reuses the same reminders instead of creating duplicates. Existing mappings on this Mac are copied into the vault the first time. For best results, avoid syncing on two Macs at the very same moment — Remindian reloads the shared state at the start of every sync.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("The mapping table is stored in Application Support on this Mac only. Choose “Inside vault” to share mappings across devices via your existing vault sync.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            } header: {
+                Text("Sync State Storage")
+            }
+
+            Section {
                 Button("Reset Sync State") {
                     showResetConfirmation = true
                 }

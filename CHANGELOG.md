@@ -4,6 +4,28 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.14.0 (June 2026)
+
+Multi-device sync state (#15). Opt-in, backward compatible — existing installs keep their current per-machine behavior untouched.
+
+### New
+
+- **Share sync state across your Macs.** Settings → Advanced → **Sync State Storage** now offers a choice: keep the mapping table in Application Support (this Mac only — the default and previous behavior) or store it **inside your vault** at `.remindian/sync_state.json`. With vault storage, whatever you already use to sync your vault across machines (Obsidian Sync, iCloud Drive, Dropbox, git…) also carries the Obsidian↔reminders mappings — so a second Mac **reuses the existing reminders instead of recreating duplicates**.
+  - The first time you switch to vault storage, this Mac's existing mappings are copied into the vault, so nothing is lost.
+  - Remindian reloads the shared state at the start of every sync, so each device picks up the other's changes. (For best results, avoid syncing on two Macs at the exact same moment.)
+  - Requires no new permissions — Remindian already writes task files into your vault.
+
+### Notes
+
+- **iCloud-container storage was intentionally not added.** It requires a paid Apple Developer membership and a provisioned iCloud container, which can't be tested or shipped reliably right now. The vault option reaches the same multi-device outcome through the vault sync you already have.
+- The on-disk state format is unchanged — switching location back and forth never changes the schema, and old `sync_state.json` / `config.json` files load as before (the new setting defaults to Application Support when absent).
+
+### Tests
+
+- New `SyncStateLocationTests`: vault path resolution + `.remindian` creation, lossless round-trip, per-vault isolation, safe degradation on an empty vault path, on-disk format compatibility, and backward-compatible config decoding. Full suite green.
+
+---
+
 ## v5.13.0 (June 2026)
 
 Performance — large vaults and multi-list Reminders accounts sync noticeably faster. Behavior is identical (the full test suite passes unchanged); only the speed differs. No config or sync-state format change.

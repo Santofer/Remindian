@@ -99,13 +99,44 @@ class SyncState: Codable {
 
     // MARK: - Persistence
 
-    private static var stateURL: URL? {
+    /// Application Support location — the default, per-machine store.
+    private static var appSupportURL: URL? {
         guard let appFolder = remindianAppSupportDir() else { return nil }
         return appFolder.appendingPathComponent("sync_state.json")
     }
 
+    /// Resolve the on-disk path for a given storage location. (#15)
+    ///
+    /// For `.vault`, the file lives at `<vault>/.remindian/sync_state.json` and
+    /// the `.remindian` directory is created if needed. A dot-folder keeps it
+    /// out of Obsidian's view, and our vault scanner only reads `.md` files in
+    /// non-hidden folders, so the state file is never mistaken for a task note.
+    /// Returns nil if the vault path is empty (caller falls back to App Support).
+    static func stateURL(location: SyncConfiguration.SyncStateLocation, vaultPath: String) -> URL? {
+        switch location {
+        case .applicationSupport:
+            return appSupportURL
+        case .vault:
+            let trimmed = vaultPath.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { return nil }
+            let dir = URL(fileURLWithPath: trimmed, isDirectory: true)
+                .appendingPathComponent(".remindian", isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            return dir.appendingPathComponent("sync_state.json")
+        }
+    }
+
+    /// Back-compat convenience — saves to Application Support.
     func save() {
-        guard let url = Self.stateURL else { return }
+        save(location: .applicationSupport, vaultPath: "")
+    }
+
+    func save(location: SyncConfiguration.SyncStateLocation, vaultPath: String) {
+        // If a vault location was requested but couldn't be resolved (empty
+        // vault path), fall back to App Support rather than silently dropping
+        // the write — never lose mappings.
+        let url = Self.stateURL(location: location, vaultPath: vaultPath) ?? Self.appSupportURL
+        guard let url = url else { return }
         do {
             let data = try JSONEncoder().encode(self)
             try data.write(to: url, options: .atomic)
@@ -114,9 +145,45 @@ class SyncState: Codable {
         }
     }
 
+    /// Back-compat convenience — loads from Application Support.
     static func load() -> SyncState {
+        return load(location: .applicationSupport, vaultPath: "")
+    }
+
+    /// Load the sync state from `location`. `seedFromAppSupportIfMissing`
+    /// controls the first-use migration (see below); production keeps it on,
+    /// tests turn it off for deterministic, App-Support-independent behavior.
+    static func load(location: SyncConfiguration.SyncStateLocation, vaultPath: String, seedFromAppSupportIfMissing: Bool = true) -> SyncState {
+        guard let url = stateURL(location: location, vaultPath: vaultPath) else {
+            // Couldn't resolve the requested location (e.g. vault path empty) —
+            // fall back to App Support so we still reuse existing mappings.
+            return loadFile(at: appSupportURL, persistMigrationTo: .applicationSupport, vaultPath: vaultPath)
+        }
+
+        // Seed-on-first-use: switching to vault storage when the vault has no
+        // state file yet should inherit this machine's existing App Support
+        // mappings instead of starting empty (which would force a full
+        // reconnect-by-title pass). Only when the vault file is genuinely
+        // absent — once it exists, it is the shared source of truth.
+        if seedFromAppSupportIfMissing, location == .vault, !FileManager.default.fileExists(atPath: url.path) {
+            let seeded = loadFile(at: appSupportURL, persistMigrationTo: nil, vaultPath: vaultPath)
+            if !seeded.mappings.isEmpty {
+                print("Sync state: seeding vault store from existing Application Support mappings (\(seeded.mappings.count)).")
+                seeded.save(location: .vault, vaultPath: vaultPath)
+                return seeded
+            }
+        }
+
+        return loadFile(at: url, persistMigrationTo: location, vaultPath: vaultPath)
+    }
+
+    /// Decode + migrate a state file at `url`. On a version-bump migration that
+    /// keeps mappings, persists the bumped state back to `persistMigrationTo`
+    /// (nil = don't persist, used for the read-only seed probe). Any failure
+    /// (missing/corrupt file) degrades to a fresh empty state — same as before.
+    private static func loadFile(at url: URL?, persistMigrationTo: SyncConfiguration.SyncStateLocation?, vaultPath: String) -> SyncState {
         do {
-            guard let url = stateURL else { return SyncState() }
+            guard let url = url else { return SyncState() }
             let data = try Data(contentsOf: url)
             let state = try JSONDecoder().decode(SyncState.self, from: data)
 
@@ -131,12 +198,16 @@ class SyncState: Codable {
                     //   transition without deleting/recreating destination tasks.
                     print("Sync state v\(state.stateVersion) → v\(currentStateVersion): ID format migration. Keeping mappings for re-linking.")
                     state.stateVersion = currentStateVersion
-                    state.save()
+                    if let target = persistMigrationTo {
+                        state.save(location: target, vaultPath: vaultPath)
+                    }
                 } else {
                     // Older versions: full reset
                     print("Sync state version outdated (v\(state.stateVersion) → v\(currentStateVersion)). Resetting sync state for re-sync.")
                     let fresh = SyncState()
-                    fresh.save()
+                    if let target = persistMigrationTo {
+                        fresh.save(location: target, vaultPath: vaultPath)
+                    }
                     return fresh
                 }
             }

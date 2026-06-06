@@ -83,6 +83,9 @@ class SyncConfiguration: ObservableObject, Codable {
     // still want the notes-side fallback (e.g. for older clients) can re-enable.
     @Published var appendTaskLinkToNotes: Bool
 
+    /// Where the sync-state mapping table is stored. (#15) See `SyncStateLocation`.
+    @Published var syncStateLocation: SyncStateLocation
+
     // MARK: - TaskNotes Custom Status Mapping (#10)
     @Published var taskNotesCompletedStatuses: [String]  // Statuses that mean "completed" (e.g., ["done", "completed", "cancelled"])
     @Published var taskNotesOpenStatus: String  // Status to write when marking incomplete (default: "open")
@@ -209,6 +212,34 @@ class SyncConfiguration: ObservableObject, Codable {
         }
     }
 
+    /// Where `sync_state.json` (the Obsidian↔destination mapping table) is
+    /// stored. (#15)
+    ///
+    /// - `.applicationSupport` (default): `~/Library/Application Support/Remindian`.
+    ///   Per-machine — each Mac keeps its own mappings. The original behavior.
+    /// - `.vault`: `<vault>/.remindian/sync_state.json`. Because the state file
+    ///   lives inside the vault, whatever the user already uses to sync the
+    ///   vault across machines (Obsidian Sync, iCloud Drive, Dropbox, git…)
+    ///   also carries the mappings — so a second Mac reuses the existing
+    ///   reminders instead of recreating duplicates. Requires no extra
+    ///   entitlement: the app already writes task files into the vault.
+    ///
+    /// iCloud-container storage is intentionally NOT offered: it needs a paid
+    /// Apple Developer membership and a provisioned ubiquity container, which
+    /// can't be tested/shipped reliably right now. The `.vault` option achieves
+    /// the same multi-device outcome through the user's existing vault sync.
+    enum SyncStateLocation: String, Codable, CaseIterable {
+        case applicationSupport = "appSupport"
+        case vault
+
+        var displayName: String {
+            switch self {
+            case .applicationSupport: return "Application Support (this Mac only)"
+            case .vault: return "Inside vault (.remindian — shared across devices)"
+            }
+        }
+    }
+
     enum CodingKeys: String, CodingKey {
         case vaultPath, syncIntervalMinutes, enableAutoSync, syncOnLaunch
         case listMappings, defaultList, taskFilesPattern, excludedFolders, includedFolders
@@ -220,6 +251,7 @@ class SyncConfiguration: ObservableObject, Codable {
         case taskSourceType, taskDestinationType, things3AuthToken, taskNotesFolder, taskNotesIntegrationMode
         case taskNotesMtnPath, taskNotesApiUrl
         case launchAtLogin, maxCompletedTaskAgeDays, syncedRemindersLists, excludedRemindersLists, addTaskLinkToReminders, appendTaskLinkToNotes
+        case syncStateLocation
         case taskNotesCompletedStatuses, taskNotesOpenStatus, taskNotesDoneStatus
         case obsidianTasksOpenMarkers, obsidianTasksCompletedMarkers, obsidianTasksIgnoredMarkers
         case taskNotesFieldMapping, taskNotesListField
@@ -282,6 +314,7 @@ class SyncConfiguration: ObservableObject, Codable {
         excludedTags: [String] = [],
         addTaskLinkToReminders: Bool = true,
         appendTaskLinkToNotes: Bool = false,
+        syncStateLocation: SyncStateLocation = .applicationSupport,
         taskNotesCompletedStatuses: [String] = ["done", "completed", "cancelled"],
         taskNotesOpenStatus: String = "open",
         taskNotesDoneStatus: String = "done",
@@ -345,6 +378,7 @@ class SyncConfiguration: ObservableObject, Codable {
         self.excludedTags = excludedTags
         self.addTaskLinkToReminders = addTaskLinkToReminders
         self.appendTaskLinkToNotes = appendTaskLinkToNotes
+        self.syncStateLocation = syncStateLocation
         self.taskNotesCompletedStatuses = taskNotesCompletedStatuses
         self.taskNotesOpenStatus = taskNotesOpenStatus
         self.taskNotesDoneStatus = taskNotesDoneStatus
@@ -410,6 +444,7 @@ class SyncConfiguration: ObservableObject, Codable {
         excludedRemindersLists = try container.decodeIfPresent([String].self, forKey: .excludedRemindersLists) ?? []
         excludedTags = try container.decodeIfPresent([String].self, forKey: .excludedTags) ?? []
         addTaskLinkToReminders = try container.decodeIfPresent(Bool.self, forKey: .addTaskLinkToReminders) ?? true
+        syncStateLocation = try container.decodeIfPresent(SyncStateLocation.self, forKey: .syncStateLocation) ?? .applicationSupport
         // Defaults to `false` for both fresh installs AND existing users
         // upgrading from v5.9.x — the whole point of #69 is that the noisy
         // URL-in-notes is opt-in going forward. Users who want it can toggle
@@ -485,6 +520,7 @@ class SyncConfiguration: ObservableObject, Codable {
         try container.encode(excludedTags, forKey: .excludedTags)
         try container.encode(addTaskLinkToReminders, forKey: .addTaskLinkToReminders)
         try container.encode(appendTaskLinkToNotes, forKey: .appendTaskLinkToNotes)
+        try container.encode(syncStateLocation, forKey: .syncStateLocation)
         try container.encode(taskNotesCompletedStatuses, forKey: .taskNotesCompletedStatuses)
         try container.encode(taskNotesOpenStatus, forKey: .taskNotesOpenStatus)
         try container.encode(taskNotesDoneStatus, forKey: .taskNotesDoneStatus)

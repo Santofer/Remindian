@@ -10,18 +10,39 @@ class SyncEngine {
     private let backupService = FileBackupService.shared
     private var syncState: SyncState
 
-    /// Production init — loads sync state from disk.
+    /// Where the sync-state file is read from / written to. (#15) Set at
+    /// construction from config; all `syncState.save()` and `resetSyncState()`
+    /// calls route through these so the file consistently lives in the
+    /// configured location (Application Support or the vault's `.remindian`).
+    private let stateLocation: SyncConfiguration.SyncStateLocation
+    private let stateVaultPath: String
+
+    /// Back-compat / test convenience — Application Support storage.
     convenience init(source: TaskSource, destination: TaskDestination) {
         self.init(source: source, destination: destination, syncState: SyncState.load())
     }
 
+    /// Production init — loads sync state from the configured location.
+    /// SyncManager rebuilds the engine before every sync, so this re-reads the
+    /// (possibly vault-shared) state each time, which is exactly what lets a
+    /// second device pick up the first device's mappings. (#15)
+    convenience init(source: TaskSource, destination: TaskDestination, stateLocation: SyncConfiguration.SyncStateLocation, vaultPath: String) {
+        let loaded = SyncState.load(location: stateLocation, vaultPath: vaultPath)
+        self.init(source: source, destination: destination, syncState: loaded,
+                  stateLocation: stateLocation, stateVaultPath: vaultPath)
+    }
+
     /// Designated init exposing the SyncState seam so tests can drive
     /// `performSync(...)` without touching the real Application Support
-    /// directory. Production callers should use the convenience init above.
-    init(source: TaskSource, destination: TaskDestination, syncState: SyncState) {
+    /// directory. Production callers should use a convenience init above.
+    init(source: TaskSource, destination: TaskDestination, syncState: SyncState,
+         stateLocation: SyncConfiguration.SyncStateLocation = .applicationSupport,
+         stateVaultPath: String = "") {
         self.source = source
         self.destination = destination
         self.syncState = syncState
+        self.stateLocation = stateLocation
+        self.stateVaultPath = stateVaultPath
     }
 
     // Mutex to prevent concurrent sync operations
@@ -1211,7 +1232,7 @@ class SyncEngine {
             // Step 7: Save sync state (skip in dry run)
             if !config.dryRunMode {
                 syncState.lastSyncDate = Date()
-                syncState.save()
+                syncState.save(location: stateLocation, vaultPath: stateVaultPath)
             }
 
         } catch {
@@ -1354,7 +1375,7 @@ class SyncEngine {
             remindersHash: hash
         )
 
-        syncState.save()
+        syncState.save(location: stateLocation, vaultPath: stateVaultPath)
     }
 
     // MARK: - Date Comparison
@@ -1378,7 +1399,7 @@ class SyncEngine {
 
     func resetSyncState() {
         syncState = SyncState()
-        syncState.save()
+        syncState.save(location: stateLocation, vaultPath: stateVaultPath)
     }
 }
 
