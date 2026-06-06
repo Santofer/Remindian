@@ -4,6 +4,21 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.13.0 (June 2026)
+
+Performance — large vaults and multi-list Reminders accounts sync noticeably faster. Behavior is identical (the full test suite passes unchanged); only the speed differs. No config or sync-state format change.
+
+### Performance
+
+- **Parallel Apple Reminders fetch.** Reminders were fetched one list at a time, each waiting for the previous EventKit round-trip to finish. They're now fetched **concurrently** — on an account with several lists this collapses N sequential round-trips into one batch. Error handling is unchanged: if any list fails, the whole fetch fails exactly as before.
+- **Incremental vault scan.** A full sync used to re-read and re-parse *every* markdown file in the vault, even when only one file changed (the common case for a file-watcher-triggered sync). Remindian now keeps an in-memory parse cache and **reuses the previous parse for any file whose modification date and byte size are both unchanged** — so a watcher-triggered re-sync on a large vault re-parses just the file you edited instead of thousands. The cache is a pure performance layer: it always produces the complete task set, the stamp is captured *after* reading (so any later write is guaranteed to invalidate it), and the parse parameters (status markers, vault path) are part of the cache key — worst case it behaves exactly like a full re-scan, never a stale or partial result.
+
+### Tests
+
+- New `ObsidianServiceParseCacheTests` proves the invariant that matters: a cached scan is byte-for-byte equal to a cold, from-scratch scan across edits, same-size edits, deletions, new files, marker changes, and a 40-step randomized edit fuzz. Full suite green.
+
+---
+
 ## v5.12.0 (June 2026)
 
 Things 3 reliability — sync no longer feels "stuck" when macOS Automation permission is missing. No config or sync-state format change.

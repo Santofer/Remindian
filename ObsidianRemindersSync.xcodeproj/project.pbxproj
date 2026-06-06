@@ -59,6 +59,7 @@
 		T0F /* TaskNotesSlugTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1E; };
 		T0G /* SyncStateIndexTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1F; };
 		T0H /* SyncEngineReconnectFailureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1G; };
+		T0I /* ObsidianServiceParseCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1H; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -128,6 +129,7 @@
 		T1E /* TaskNotesSlugTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskNotesSlugTests.swift; sourceTree = "<group>"; };
 		T1F /* SyncStateIndexTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncStateIndexTests.swift; sourceTree = "<group>"; };
 		T1G /* SyncEngineReconnectFailureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncEngineReconnectFailureTests.swift; sourceTree = "<group>"; };
+		T1H /* ObsidianServiceParseCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObsidianServiceParseCacheTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -278,6 +280,7 @@
 				T1E /* TaskNotesSlugTests.swift */,
 				T1F /* SyncStateIndexTests.swift */,
 				T1G /* SyncEngineReconnectFailureTests.swift */,
+				T1H /* ObsidianServiceParseCacheTests.swift */,
 			);
 			path = RemindianTests;
 			sourceTree = "<group>";
@@ -431,6 +434,7 @@
 				T0F /* TaskNotesSlugTests.swift in Sources */,
 				T0G /* SyncStateIndexTests.swift in Sources */,
 				T0H /* SyncEngineReconnectFailureTests.swift in Sources */,
+				T0I /* ObsidianServiceParseCacheTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -584,7 +588,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 5.12.0;
+				MARKETING_VERSION = 5.13.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -612,7 +616,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 5.12.0;
+				MARKETING_VERSION = 5.13.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

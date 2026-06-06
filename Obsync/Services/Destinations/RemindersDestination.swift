@@ -29,23 +29,39 @@ class RemindersDestination: TaskDestination {
 
     func fetchAllTasks() async throws -> [SyncTask] {
         let lists = eventStore.calendars(for: .reminder)
-        var allTasks: [SyncTask] = []
 
-        for list in lists {
-            let predicate = eventStore.predicateForReminders(in: [list])
-            let reminders = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[EKReminder], Error>) in
-                eventStore.fetchReminders(matching: predicate) { reminders in
-                    if let reminders = reminders {
-                        continuation.resume(returning: reminders)
-                    } else {
-                        continuation.resume(throwing: RemindersError.fetchFailed)
+        // Fetch every list concurrently. EventKit's `fetchReminders` is
+        // independent per-predicate and safe to run in parallel, so on an
+        // account with several lists this collapses N sequential round-trips
+        // into one concurrent batch. Result order is irrelevant — downstream
+        // dedup/mapping keys on stable task identity, not array position.
+        //
+        // Error semantics are unchanged: if any list fails, the group cancels
+        // the rest and the error propagates, exactly as the old sequential loop
+        // aborted on the first failure.
+        return try await withThrowingTaskGroup(of: [SyncTask].self) { group in
+            for list in lists {
+                group.addTask {
+                    let predicate = self.eventStore.predicateForReminders(in: [list])
+                    let reminders = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[EKReminder], Error>) in
+                        self.eventStore.fetchReminders(matching: predicate) { reminders in
+                            if let reminders = reminders {
+                                continuation.resume(returning: reminders)
+                            } else {
+                                continuation.resume(throwing: RemindersError.fetchFailed)
+                            }
+                        }
                     }
+                    return reminders.map { SyncTask.fromReminder($0, listName: list.title) }
                 }
             }
-            allTasks.append(contentsOf: reminders.map { SyncTask.fromReminder($0, listName: list.title) })
-        }
 
-        return allTasks
+            var allTasks: [SyncTask] = []
+            for try await listTasks in group {
+                allTasks.append(contentsOf: listTasks)
+            }
+            return allTasks
+        }
     }
 
     func getAvailableLists() async -> [String] {

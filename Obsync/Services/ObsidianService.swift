@@ -8,6 +8,53 @@ class ObsidianService {
     private let backupService = FileBackupService.shared
     private let auditLog = AuditLog.shared
 
+    // MARK: - Incremental-scan parse cache
+
+    /// The parse parameters that, together with the file's bytes, fully
+    /// determine the parsed tasks. A cached entry is only reusable when these
+    /// match the current scan — otherwise (e.g. the user changed their status
+    /// markers) the same file would parse differently.
+    private struct ParseSignature: Equatable {
+        let vaultPath: String
+        let openMarkers: Set<Character>
+        let completedMarkers: Set<Character>
+        let ignoredMarkers: Set<Character>
+    }
+
+    /// One file's cached parse. Reused only when the file's modification date
+    /// AND byte size are both unchanged since we parsed it, and the parse
+    /// signature matches — so a cache hit yields byte-for-byte the tasks a
+    /// fresh parse would produce. The stamp is captured *after* reading, so it
+    /// always reflects the exact content we cached (any write afterwards moves
+    /// the mtime forward → guaranteed miss → re-read). This makes the cache a
+    /// pure performance layer: worst case it behaves identically to a full
+    /// re-scan, never producing a stale or partial task set.
+    private struct CachedParse {
+        let modificationDate: Date
+        let size: Int
+        let signature: ParseSignature
+        let tasks: [SyncTask]
+    }
+
+    /// Keyed by absolute file path. Persists across syncs for the lifetime of
+    /// this service instance (the source is recreated when the vault/config
+    /// changes, so a new instance starts cold). The big win is a
+    /// file-watcher-triggered re-sync: only the one edited file re-parses, the
+    /// rest of a large vault comes straight from cache.
+    private var parseCache: [String: CachedParse] = [:]
+
+    /// Drop the incremental-scan cache. Not required for correctness (the
+    /// signature check already invalidates on parameter changes and the
+    /// mtime/size check on content changes) — exposed for tests and for
+    /// explicit "force full rescan" callers.
+    func clearParseCache() {
+        parseCache.removeAll()
+    }
+
+    /// Number of files served from the parse cache during the most recent
+    /// `scanVault` call (vs. read+parsed fresh). Exposed for tests/diagnostics.
+    private(set) var lastScanCacheHits: Int = 0
+
     // MARK: - Reading Tasks
 
     /// Scan vault for all tasks matching the Obsidian Tasks format
@@ -34,7 +81,36 @@ class ObsidianService {
         let markdownFiles = try findMarkdownFiles(in: vaultURL, excluding: excludedFolders, including: includedFolders)
         debugLog("[ObsidianService] Found \(markdownFiles.count) markdown files")
 
+        // Incremental scan: reuse the previous parse for any file whose mtime,
+        // size, and parse signature are all unchanged. Always produces the full
+        // task set — this only skips the read+parse of untouched files.
+        let signature = ParseSignature(
+            vaultPath: path,
+            openMarkers: openMarkers,
+            completedMarkers: completedMarkers,
+            ignoredMarkers: ignoredMarkers
+        )
+        var liveKeys = Set<String>(minimumCapacity: markdownFiles.count)
+        var cacheHits = 0
+
         for fileURL in markdownFiles {
+            let key = fileURL.path
+            liveKeys.insert(key)
+
+            // Stat before reading: a hit requires the stamp we recorded last
+            // time (which was captured *after* that read) to still match.
+            let preAttrs = try? fileManager.attributesOfItem(atPath: key)
+            if let modDate = preAttrs?[.modificationDate] as? Date,
+               let size = preAttrs?[.size] as? Int,
+               let cached = parseCache[key],
+               cached.modificationDate == modDate,
+               cached.size == size,
+               cached.signature == signature {
+                tasks.append(contentsOf: cached.tasks)
+                cacheHits += 1
+                continue
+            }
+
             do {
                 let fileTasks = try parseTasksFromFile(
                     fileURL,
@@ -44,14 +120,34 @@ class ObsidianService {
                     ignoredMarkers: ignoredMarkers
                 )
                 tasks.append(contentsOf: fileTasks)
+
+                // Re-stat after the read so the stored stamp matches the exact
+                // bytes we just parsed (TOCTOU-safe: a write during the read
+                // bumps the mtime past this value → next scan re-reads). Only
+                // cache when we have a reliable stamp to validate against.
+                if let postAttrs = try? fileManager.attributesOfItem(atPath: key),
+                   let postMod = postAttrs[.modificationDate] as? Date,
+                   let postSize = postAttrs[.size] as? Int {
+                    parseCache[key] = CachedParse(modificationDate: postMod, size: postSize, signature: signature, tasks: fileTasks)
+                } else {
+                    parseCache.removeValue(forKey: key)
+                }
             } catch {
                 // Skip files that can't be read (e.g., deleted between scan and read,
-                // permission issues, or broken symlinks)
+                // permission issues, or broken symlinks). Drop any stale cache entry.
+                parseCache.removeValue(forKey: key)
                 debugLog("[ObsidianService] Skipping unreadable file: \(fileURL.lastPathComponent) — \(error.localizedDescription)")
             }
         }
 
-        debugLog("[ObsidianService] Total tasks found: \(tasks.count)")
+        // Prune cache entries for files that no longer appear in the scan
+        // (deleted, moved, or newly excluded) so the cache can't grow unbounded.
+        if parseCache.count > liveKeys.count {
+            parseCache = parseCache.filter { liveKeys.contains($0.key) }
+        }
+
+        lastScanCacheHits = cacheHits
+        debugLog("[ObsidianService] Total tasks found: \(tasks.count) (\(cacheHits)/\(markdownFiles.count) files served from cache)")
         return tasks
     }
 
