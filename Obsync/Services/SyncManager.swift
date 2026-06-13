@@ -52,6 +52,9 @@ class SyncManager: ObservableObject {
     @Published var previewResult: SyncEngine.SyncResult?
     /// Number of vault files restorable via "Undo last sync" (0 = nothing to undo).
     @Published var lastSyncUndoCount: Int = 0
+    /// Open tasks due today or earlier, for the menu-bar "Today" glance. (Today list)
+    @Published var agenda: [SyncTask] = []
+    @Published var isLoadingAgenda = false
     @Published var lastSyncResult: SyncEngine.SyncResult?
     @Published var lastSyncDate: Date?
     @Published var hasDestinationAccess = false
@@ -520,6 +523,36 @@ class SyncManager: ObservableObject {
             await performSync()
         }
         return true
+    }
+
+    // MARK: - Today agenda (menu-bar glance)
+
+    /// Scan the active profile's source and populate `agenda` with open tasks
+    /// due today or earlier. Read-only; reuses the active source so its parse
+    /// cache stays warm. (Today list)
+    func refreshAgenda() async {
+        guard !config.vaultPath.isEmpty,
+              FileManager.default.isReadableFile(atPath: config.vaultPath) else {
+            agenda = []
+            return
+        }
+        isLoadingAgenda = true
+        defer { isLoadingAgenda = false }
+        let tasks = (try? taskSource.scanTasks(config: config)) ?? []
+        agenda = AgendaBuilder.build(from: tasks, now: Date())
+    }
+
+    /// Mark an agenda task complete in the source (Obsidian = source of truth),
+    /// drop it from the list immediately, then sync so the destination follows.
+    func completeAgendaItem(_ task: SyncTask) async {
+        do {
+            _ = try taskSource.markTaskComplete(task: task, completionDate: Date(), config: config)
+            agenda.removeAll { $0.id == task.id }
+        } catch {
+            showErrorMessage("Couldn't complete “\(task.title)”: \(error.localizedDescription)")
+            return
+        }
+        await performSync()
     }
 
     // MARK: - Diff preview (forced dry-run)

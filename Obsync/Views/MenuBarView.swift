@@ -109,6 +109,11 @@ struct MenuBarView: View {
 
             Divider()
 
+            // Today — due-today + overdue, check off inline.
+            todaySection
+
+            Divider()
+
             // Last sync results
             if let result = syncManager.lastSyncResult {
                 VStack(alignment: .leading, spacing: 4) {
@@ -187,6 +192,88 @@ struct MenuBarView: View {
         }
         .padding(.vertical, 4)
         .frame(width: 250)
+        .task { await syncManager.refreshAgenda() }
+    }
+
+    // MARK: - Today section (Today list)
+
+    private static let maxAgendaRows = 6
+
+    @ViewBuilder
+    private var todaySection: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text("Today")
+                    .font(menuFont).fontWeight(.semibold)
+                if !syncManager.agenda.isEmpty {
+                    Text("\(syncManager.agenda.count)")
+                        .font(.caption2).foregroundColor(.secondary)
+                }
+                Spacer()
+                if syncManager.isLoadingAgenda {
+                    ProgressView().scaleEffect(0.5).frame(height: 10)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 2)
+
+            if syncManager.agenda.isEmpty {
+                Text(syncManager.isLoadingAgenda ? "Loading…" : "Nothing due today 🎉")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 2)
+            } else {
+                ForEach(syncManager.agenda.prefix(Self.maxAgendaRows)) { task in
+                    agendaRow(task)
+                }
+                if syncManager.agenda.count > Self.maxAgendaRows {
+                    Button {
+                        openMainWindow()
+                    } label: {
+                        Text("+ \(syncManager.agenda.count - Self.maxAgendaRows) more…")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 14)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func agendaRow(_ task: SyncTask) -> some View {
+        let overdue = AgendaBuilder.isOverdue(task, now: Date())
+        HStack(spacing: 6) {
+            Button {
+                Task { await syncManager.completeAgendaItem(task) }
+            } label: {
+                Image(systemName: "circle")
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Mark complete")
+
+            Text(task.title)
+                .font(menuFont)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer()
+            if let due = task.dueDate {
+                Text(overdue ? "overdue" : dueLabel(due))
+                    .font(.caption2)
+                    .foregroundColor(overdue ? .red : .secondary)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 1)
+    }
+
+    private func dueLabel(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d"
+        return f.string(from: date)
     }
 
     /// Consistent menu-style button with system font

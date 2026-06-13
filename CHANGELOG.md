@@ -4,6 +4,20 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.19.0 (June 2026)
+
+A "Today" glance right in the menu bar.
+
+### New
+
+- **Today list in the menu bar.** The menu now shows your open tasks **due today or overdue**, soonest first, with overdue ones flagged in red. Click the circle next to any task to **complete it inline** — it's marked done in your vault (the source of truth) and synced to your destination, without opening Obsidian or Reminders. The list refreshes when you open the menu; long lists show the first few with a "+ N more…" link to the main window.
+
+### Tests
+
+- New `AgendaBuilderTests` (overdue + due-today selection, exclude completed / no-date, soonest-first ordering, overdue boundary). Full suite green; Release build clean.
+
+---
+
 ## v5.18.0 (June 2026)
 
 Capture from anywhere — Shortcuts/Spotlight actions and a menu-bar quick-add with natural-language parsing.

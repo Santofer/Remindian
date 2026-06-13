@@ -48,6 +48,7 @@
 		039 /* PreviewChangesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 141; };
 		040 /* QuickAddParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 142; };
 		041 /* RemindianAppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 143; };
+		042 /* AgendaBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 144; };
 		T01 /* TaskParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T10; };
 		T02 /* DeduplicationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T11; };
 		T03 /* TaskNotesParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T12; };
@@ -71,6 +72,7 @@
 		T0L /* ProfileStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1K; };
 		T0M /* FileBackupRestoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1L; };
 		T0N /* QuickAddParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1M; };
+		T0O /* AgendaBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1N; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -128,6 +130,7 @@
 		141 /* PreviewChangesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewChangesView.swift; sourceTree = "<group>"; };
 		142 /* QuickAddParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickAddParser.swift; sourceTree = "<group>"; };
 		143 /* RemindianAppIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemindianAppIntents.swift; sourceTree = "<group>"; };
+		144 /* AgendaBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgendaBuilder.swift; sourceTree = "<group>"; };
 		T00 /* RemindianTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RemindianTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		T10 /* TaskParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskParserTests.swift; sourceTree = "<group>"; };
 		T11 /* DeduplicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeduplicationTests.swift; sourceTree = "<group>"; };
@@ -152,6 +155,7 @@
 		T1K /* ProfileStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileStoreTests.swift; sourceTree = "<group>"; };
 		T1L /* FileBackupRestoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileBackupRestoreTests.swift; sourceTree = "<group>"; };
 		T1M /* QuickAddParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickAddParserTests.swift; sourceTree = "<group>"; };
+		T1N /* AgendaBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgendaBuilderTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -241,6 +245,7 @@
 				114 /* FileBackupService.swift */,
 				142 /* QuickAddParser.swift */,
 				143 /* RemindianAppIntents.swift */,
+				144 /* AgendaBuilder.swift */,
 				115 /* NotificationService.swift */,
 				116 /* HotKeyService.swift */,
 				117 /* AuditLog.swift */,
@@ -314,6 +319,7 @@
 				T1K /* ProfileStoreTests.swift */,
 				T1L /* FileBackupRestoreTests.swift */,
 				T1M /* QuickAddParserTests.swift */,
+				T1N /* AgendaBuilderTests.swift */,
 			);
 			path = RemindianTests;
 			sourceTree = "<group>";
@@ -449,6 +455,7 @@
 				039 /* PreviewChangesView.swift in Sources */,
 				040 /* QuickAddParser.swift in Sources */,
 				041 /* RemindianAppIntents.swift in Sources */,
+				042 /* AgendaBuilder.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -479,6 +486,7 @@
 				T0L /* ProfileStoreTests.swift in Sources */,
 				T0M /* FileBackupRestoreTests.swift in Sources */,
 				T0N /* QuickAddParserTests.swift in Sources */,
+				T0O /* AgendaBuilderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -632,7 +640,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 5.18.0;
+				MARKETING_VERSION = 5.19.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -660,7 +668,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 5.18.0;
+				MARKETING_VERSION = 5.19.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
