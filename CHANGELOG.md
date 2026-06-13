@@ -4,6 +4,19 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.20.1 (June 2026)
+
+Correctness fix for Reminders → Obsidian writeback (#75, PR #74).
+
+### Bug fixes
+
+- **Due-date changes made in Apple Reminders are no longer silently lost.** With "Sync due date changes back" enabled, if the task's `.md` file's modification time bumped between the start of a sync and the writeback check (Obsidian indexing, Spotlight, a file-watcher tick…), the writeback was skipped **but the sync state was still advanced as if it had succeeded** — so the next sync saw nothing to retry, and a later "Obsidian wins" pass pushed the stale Obsidian date back, reverting the user's Reminders edit on both sides. Now the pre-sync hashes are preserved when the file-modification guard skips a writeback, so the next sync re-detects the change and retries, and the skip is surfaced as a non-fatal logged error.
+- **No more phantom "N updated" on every sync.** A task in the inbox (no `#tag`) or whose tag differed in case from the list name was reported "updated" forever, because the stored reminders-side hash was seeded from the Obsidian task (empty/lowercase list) instead of the live reminder's resolved list. The reminders-side hash is now seeded with the resolved destination list, so the two agree and the redundant re-push stops.
+
+With thanks to the contributor who root-caused both bugs and provided the fix and regression tests (`FileModSkipRegressionTests`).
+
+---
+
 ## v5.20.0 (June 2026)
 
 Due times and alarms for Apple Reminders.
