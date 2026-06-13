@@ -16,6 +16,9 @@ class SyncEngine {
     /// configured location (Application Support or the vault's `.remindian`).
     private let stateLocation: SyncConfiguration.SyncStateLocation
     private let stateVaultPath: String
+    /// Per-profile state-file key (empty = the legacy `sync_state.json`, used by
+    /// the Default profile so existing installs are untouched). (multi-profile)
+    private let stateProfileKey: String
 
     /// Back-compat / test convenience — Application Support storage.
     convenience init(source: TaskSource, destination: TaskDestination) {
@@ -25,11 +28,12 @@ class SyncEngine {
     /// Production init — loads sync state from the configured location.
     /// SyncManager rebuilds the engine before every sync, so this re-reads the
     /// (possibly vault-shared) state each time, which is exactly what lets a
-    /// second device pick up the first device's mappings. (#15)
-    convenience init(source: TaskSource, destination: TaskDestination, stateLocation: SyncConfiguration.SyncStateLocation, vaultPath: String) {
-        let loaded = SyncState.load(location: stateLocation, vaultPath: vaultPath)
+    /// second device pick up the first device's mappings. (#15) `profileKey`
+    /// scopes the state file to a sync profile (multi-profile).
+    convenience init(source: TaskSource, destination: TaskDestination, stateLocation: SyncConfiguration.SyncStateLocation, vaultPath: String, profileKey: String = "") {
+        let loaded = SyncState.load(location: stateLocation, vaultPath: vaultPath, profileKey: profileKey)
         self.init(source: source, destination: destination, syncState: loaded,
-                  stateLocation: stateLocation, stateVaultPath: vaultPath)
+                  stateLocation: stateLocation, stateVaultPath: vaultPath, stateProfileKey: profileKey)
     }
 
     /// Designated init exposing the SyncState seam so tests can drive
@@ -37,12 +41,14 @@ class SyncEngine {
     /// directory. Production callers should use a convenience init above.
     init(source: TaskSource, destination: TaskDestination, syncState: SyncState,
          stateLocation: SyncConfiguration.SyncStateLocation = .applicationSupport,
-         stateVaultPath: String = "") {
+         stateVaultPath: String = "",
+         stateProfileKey: String = "") {
         self.source = source
         self.destination = destination
         self.syncState = syncState
         self.stateLocation = stateLocation
         self.stateVaultPath = stateVaultPath
+        self.stateProfileKey = stateProfileKey
     }
 
     // Mutex to prevent concurrent sync operations
@@ -1232,7 +1238,7 @@ class SyncEngine {
             // Step 7: Save sync state (skip in dry run)
             if !config.dryRunMode {
                 syncState.lastSyncDate = Date()
-                syncState.save(location: stateLocation, vaultPath: stateVaultPath)
+                syncState.save(location: stateLocation, vaultPath: stateVaultPath, profileKey: stateProfileKey)
             }
 
         } catch {
@@ -1375,7 +1381,7 @@ class SyncEngine {
             remindersHash: hash
         )
 
-        syncState.save(location: stateLocation, vaultPath: stateVaultPath)
+        syncState.save(location: stateLocation, vaultPath: stateVaultPath, profileKey: stateProfileKey)
     }
 
     // MARK: - Date Comparison
@@ -1399,7 +1405,7 @@ class SyncEngine {
 
     func resetSyncState() {
         syncState = SyncState()
-        syncState.save(location: stateLocation, vaultPath: stateVaultPath)
+        syncState.save(location: stateLocation, vaultPath: stateVaultPath, profileKey: stateProfileKey)
     }
 }
 

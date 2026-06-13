@@ -37,6 +37,15 @@ struct MenuBarView: View {
                     .padding(.bottom, 4)
             }
 
+            // Multi-profile indicator: "Sync Now" runs every enabled profile.
+            if syncManager.profileStore.profiles.count > 1 {
+                Text("\(syncManager.profileStore.enabledProfiles.count) of \(syncManager.profileStore.profiles.count) sync profiles enabled")
+                    .font(menuFont)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 4)
+            }
+
             Divider()
 
             // Quick actions

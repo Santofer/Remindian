@@ -38,7 +38,13 @@ class SyncManager: ObservableObject {
 
     // MARK: - Published State
 
+    /// The ACTIVE profile's configuration. All existing Settings bindings edit
+    /// this object, so the single-profile UI works unchanged — it just edits
+    /// whichever profile is selected. (multi-profile)
     @Published var config: SyncConfiguration
+    /// All sync profiles + which one is active. The active profile's `config` is
+    /// mirrored into `config` above. Persisted to profiles.json.
+    @Published var profileStore: ProfileStore
     @Published var isSyncing = false
     @Published var lastSyncResult: SyncEngine.SyncResult?
     @Published var lastSyncDate: Date?
@@ -55,6 +61,9 @@ class SyncManager: ObservableObject {
     private var syncEngine: SyncEngine
     private var syncTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
+    /// Subscription to the *active* config's per-property changes. Re-created on
+    /// every profile switch so edits to the newly-active profile are observed.
+    private var activeConfigCancellable: AnyCancellable?
     private var isFirstSync = true
     private var appearanceObservation: NSKeyValueObservation?
     private var currentSyncTask: Task<Void, Never>?
@@ -72,21 +81,27 @@ class SyncManager: ObservableObject {
         // the previous debugLog will still have been flushed.
         debugLog("[SyncManager.init] start")
 
-        let loadedConfig = SyncConfiguration.load()
-        debugLog("[SyncManager.init] config loaded: source=\(loadedConfig.taskSourceType), destination=\(loadedConfig.taskDestinationType), vaultPath='\(loadedConfig.vaultPath)'")
+        // Load profiles (migrates the legacy config.json into a Default profile
+        // on first run). The active profile's config drives the UI + active engine.
+        let store = ProfileStore.load()
+        self.profileStore = store
+        let activeProfile = store.activeProfile ?? store.profiles[0]
+        let loadedConfig = activeProfile.config
+        debugLog("[SyncManager.init] profiles loaded: \(store.profiles.count), active='\(activeProfile.name)', source=\(loadedConfig.taskSourceType), destination=\(loadedConfig.taskDestinationType), vaultPath='\(loadedConfig.vaultPath)'")
         self.config = loadedConfig
 
         self.syncLog = SyncLog.load()
         debugLog("[SyncManager.init] sync log loaded")
 
-        // Initialize source and destination from config
+        // Initialize source and destination from the active profile's config
         let src = SyncManager.createSource(for: loadedConfig.taskSourceType, config: loadedConfig)
         let dst = SyncManager.createDestination(for: loadedConfig.taskDestinationType, config: loadedConfig)
         self.taskSource = src
         self.taskDestination = dst
         self.syncEngine = SyncEngine(source: src, destination: dst,
                                      stateLocation: loadedConfig.syncStateLocation,
-                                     vaultPath: loadedConfig.vaultPath)
+                                     vaultPath: loadedConfig.vaultPath,
+                                     profileKey: activeProfile.stateKey)
         debugLog("[SyncManager.init] engine ready")
 
         setupAutoSync()
@@ -170,7 +185,8 @@ class SyncManager: ObservableObject {
         taskDestination = SyncManager.createDestination(for: config.taskDestinationType, config: config)
         syncEngine = SyncEngine(source: taskSource, destination: taskDestination,
                                 stateLocation: config.syncStateLocation,
-                                vaultPath: config.vaultPath)
+                                vaultPath: config.vaultPath,
+                                profileKey: profileStore.activeProfile?.stateKey ?? "")
         debugLog("[SyncManager] Updated source=\(taskSource.sourceName), destination=\(taskDestination.destinationName)")
 
         // Re-request access for the new destination
@@ -180,29 +196,105 @@ class SyncManager: ObservableObject {
     }
 
     private func setupConfigObserver() {
-        // Observe the config object being replaced
+        // Observe the config object being replaced (e.g. on profile switch).
         $config
             .debounce(for: .seconds(1), scheduler: RunLoop.main)
-            .sink { [weak self] config in
-                config.save()
-                self?.setupAutoSync()
-                self?.updateHotKey()
-                self?.updateFileWatcher()
+            .sink { [weak self] _ in
+                self?.persistAndApplyConfigChange()
             }
             .store(in: &cancellables)
 
-        // Observe internal @Published property changes within the config object
-        // ($config only fires when the whole object is replaced, not when its
-        // internal properties change — this catches settings edits)
-        config.objectWillChange
+        // And observe per-property edits within the *active* config object.
+        subscribeToActiveConfig()
+    }
+
+    /// (Re)subscribe to the active config's `objectWillChange`. Called on init
+    /// and on every profile switch so settings edits to the newly-active profile
+    /// are observed (the old subscription is dropped).
+    private func subscribeToActiveConfig() {
+        activeConfigCancellable = config.objectWillChange
             .debounce(for: .seconds(1), scheduler: RunLoop.main)
             .sink { [weak self] _ in
-                self?.config.save()
-                self?.setupAutoSync()
-                self?.updateHotKey()
-                self?.updateFileWatcher()
+                self?.persistAndApplyConfigChange()
             }
-            .store(in: &cancellables)
+    }
+
+    /// Persist a config change: keep global singleton settings identical across
+    /// all profiles, save the whole profile store (and the active config.json as
+    /// a back-compat backstop), then re-apply app-wide side effects.
+    private func persistAndApplyConfigChange() {
+        profileStore.propagateGlobalSettings()
+        profileStore.save()
+        config.save() // backstop: keeps config.json roughly current for the active profile
+        setupAutoSync()
+        updateHotKey()
+        updateFileWatcher()
+    }
+
+    // MARK: - Profile management (multi-profile)
+
+    /// Switch the active profile. Re-points `config` at the chosen profile's
+    /// configuration (the UI rebinds automatically), rebuilds the active engine,
+    /// and restarts the file watcher on the new vault.
+    func switchProfile(to id: String) {
+        guard let profile = profileStore.profiles.first(where: { $0.id == id }) else { return }
+        profileStore.activeProfileId = id
+        config = profile.config            // @Published → UI rebinds to this profile
+        subscribeToActiveConfig()          // observe the newly-active config's edits
+        updateSourceAndDestination()       // rebuild engine/source/destination for it
+        updateFileWatcher()
+        profileStore.save()
+        debugLog("[SyncManager] Switched to profile '\(profile.name)'")
+    }
+
+    /// Add a new profile, seeded from a deep copy of the current active config
+    /// (so tokens/vault carry over as a starting point), then switch to it.
+    @discardableResult
+    func addProfile(name: String) -> String {
+        let newConfig = config.deepCopy()
+        let profile = SyncProfile(name: name.isEmpty ? "New Profile" : name, enabled: true, isDefault: false, config: newConfig)
+        profileStore.profiles.append(profile)
+        profileStore.propagateGlobalSettings()
+        profileStore.save()
+        switchProfile(to: profile.id)
+        return profile.id
+    }
+
+    func renameProfile(id: String, to name: String) {
+        guard let idx = profileStore.profiles.firstIndex(where: { $0.id == id }) else { return }
+        profileStore.profiles[idx].name = name
+        profileStore.save()
+    }
+
+    func setProfileEnabled(id: String, enabled: Bool) {
+        guard let idx = profileStore.profiles.firstIndex(where: { $0.id == id }) else { return }
+        profileStore.profiles[idx].enabled = enabled
+        profileStore.save()
+    }
+
+    /// Delete a profile. The default profile and the last remaining profile
+    /// cannot be deleted. Also removes that profile's sync-state file. If the
+    /// active profile is deleted, switches to the default.
+    func deleteProfile(id: String) {
+        guard profileStore.profiles.count > 1,
+              let profile = profileStore.profiles.first(where: { $0.id == id }),
+              !profile.isDefault else {
+            debugLog("[SyncManager] Refusing to delete profile (default or last remaining).")
+            return
+        }
+        // Remove its per-profile state file (best-effort; never the default's).
+        if let url = SyncState.stateURL(location: profile.config.syncStateLocation,
+                                        vaultPath: profile.config.vaultPath,
+                                        profileKey: profile.stateKey) {
+            try? FileManager.default.removeItem(at: url)
+        }
+        profileStore.profiles.removeAll { $0.id == id }
+        if profileStore.activeProfileId == id {
+            let fallback = profileStore.profiles.first(where: { $0.isDefault }) ?? profileStore.profiles[0]
+            switchProfile(to: fallback.id)
+        } else {
+            profileStore.save()
+        }
     }
 
     private func setupOAuthObserver() {
@@ -285,59 +377,138 @@ class SyncManager: ObservableObject {
 
     // MARK: - Sync Operations
 
+    /// Profile-scoped pre-sync failures (vault/destination access, config).
+    private enum ProfileSyncIssue: LocalizedError {
+        case notConfigured(String)
+        case vaultAccess(String, String)
+        case destinationAccess(String, String)
+        var errorDescription: String? {
+            switch self {
+            case .notConfigured(let name):
+                return "Profile “\(name)”: no vault path configured."
+            case .vaultAccess(let name, let path):
+                return "Profile “\(name)”: can't read its vault (\(path)). Select this profile in Settings and re-choose its vault to grant access."
+            case .destinationAccess(let name, let dest):
+                return "Profile “\(name)”: no access to \(dest). Check its configuration in Settings."
+            }
+        }
+    }
+
+    /// Sync all enabled profiles (sequentially). The single-profile case is a
+    /// loop of one and behaves exactly as before. (multi-profile)
     func performSync() async {
         guard !isSyncing else {
             debugLog("[SyncManager] Skipped: already syncing")
             return
         }
-        // Ensure source/destination reflect latest config before each sync
+        // Keep the active engine/source/destination current for the active
+        // profile (also used by list pickers, reset, conflict resolution).
         updateSourceAndDestination()
-        guard hasDestinationAccess else {
-            showErrorMessage("No access to \(taskDestination.destinationName). Please check your configuration in Settings.")
-            return
-        }
-        guard !config.vaultPath.isEmpty else {
-            showErrorMessage("Please configure your Obsidian vault path first.")
+
+        let enabled = profileStore.enabledProfiles
+        guard !enabled.isEmpty else {
+            showErrorMessage("No sync profiles are enabled. Enable a profile in Settings.")
             return
         }
 
-        debugLog("[SyncManager] Starting sync. Vault: \(config.vaultPath), dryRun: \(config.dryRunMode)")
-
-        // Ensure we have file access to the vault (sandbox requires security-scoped bookmark)
-        if !FileManager.default.isReadableFile(atPath: config.vaultPath) {
-            debugLog("[SyncManager] Vault not readable, attempting to resolve bookmark...")
-            if !resolveVaultBookmark() {
-                debugLog("[SyncManager] Bookmark resolution failed, auto-prompting vault re-selection")
-                // Automatically show file picker to re-grant access
-                selectVaultPath()
-                // Check if access was granted after re-selection
-                if config.vaultPath.isEmpty || !FileManager.default.isReadableFile(atPath: config.vaultPath) {
-                    showErrorMessage("Cannot read Obsidian vault. Please select your vault folder to restore access.")
-                    return
-                }
-            }
+        let activeId = profileStore.activeProfileId
+        // Preserve the interactive vault re-selection flow for the active
+        // profile (the common single-profile experience).
+        if enabled.contains(where: { $0.id == activeId }) {
+            _ = ensureActiveVaultAccess()
         }
 
         isSyncing = true
         statusMessage = config.dryRunMode ? "Dry run..." : "Syncing..."
-
         let wasFirstSync = isFirstSync
-        let result = await syncEngine.performSync(config: config) { [weak self] message in
-            Task { @MainActor in
-                self?.statusMessage = message
-            }
-        }
-        debugLog("[SyncManager] Sync result: \(result.summary), errors: \(result.errors.count), details: \(result.details.count)")
+        let multi = enabled.count > 1
 
+        var aggregate = SyncEngine.SyncResult()
+        aggregate.isDryRun = config.dryRunMode
+        for (index, profile) in enabled.enumerated() {
+            if multi { statusMessage = "Syncing “\(profile.name)” (\(index + 1)/\(enabled.count))…" }
+            let result = await syncSingleProfile(profile, isActive: profile.id == activeId)
+            aggregate = SyncManager.mergeResults(aggregate, result)
+            debugLog("[SyncManager] Profile '\(profile.name)' result: \(result.summary)")
+        }
+
+        finalizeSyncResult(aggregate, wasFirstSync: wasFirstSync)
+        isSyncing = false
+    }
+
+    /// Ensure the active profile's vault is readable, prompting re-selection if
+    /// the bookmark can't be resolved. Returns true if accessible.
+    @discardableResult
+    private func ensureActiveVaultAccess() -> Bool {
+        guard !config.vaultPath.isEmpty else { return false }
+        if FileManager.default.isReadableFile(atPath: config.vaultPath) { return true }
+        debugLog("[SyncManager] Active vault not readable, attempting to resolve bookmark...")
+        if resolveVaultBookmark() { return true }
+        debugLog("[SyncManager] Bookmark resolution failed, auto-prompting vault re-selection")
+        selectVaultPath()
+        return !config.vaultPath.isEmpty && FileManager.default.isReadableFile(atPath: config.vaultPath)
+    }
+
+    /// Sync one profile, building (or reusing, for the active profile) its
+    /// engine and verifying vault + destination access first.
+    private func syncSingleProfile(_ profile: SyncProfile, isActive: Bool) async -> SyncEngine.SyncResult {
+        let cfg = profile.config
+        var pre = SyncEngine.SyncResult()
+        pre.isDryRun = cfg.dryRunMode
+
+        guard !cfg.vaultPath.isEmpty else {
+            pre.errors.append(ProfileSyncIssue.notConfigured(profile.name)); return pre
+        }
+        if !FileManager.default.isReadableFile(atPath: cfg.vaultPath),
+           !resolveVaultBookmark(forPath: cfg.vaultPath),
+           !FileManager.default.isReadableFile(atPath: cfg.vaultPath) {
+            pre.errors.append(ProfileSyncIssue.vaultAccess(profile.name, cfg.vaultPath)); return pre
+        }
+
+        let source = isActive ? taskSource : SyncManager.createSource(for: cfg.taskSourceType, config: cfg)
+        let destination = isActive ? taskDestination : SyncManager.createDestination(for: cfg.taskDestinationType, config: cfg)
+
+        let access = (try? await destination.requestAccess()) ?? false
+        if isActive { hasDestinationAccess = access }
+        guard access else {
+            pre.errors.append(ProfileSyncIssue.destinationAccess(profile.name, destination.destinationName)); return pre
+        }
+
+        let engine = isActive
+            ? syncEngine
+            : SyncEngine(source: source, destination: destination,
+                         stateLocation: cfg.syncStateLocation, vaultPath: cfg.vaultPath,
+                         profileKey: profile.stateKey)
+        return await engine.performSync(config: cfg) { [weak self] message in
+            Task { @MainActor in self?.statusMessage = message }
+        }
+    }
+
+    /// Combine two sync results into one aggregate (counts summed, lists concatenated).
+    private static func mergeResults(_ a: SyncEngine.SyncResult, _ b: SyncEngine.SyncResult) -> SyncEngine.SyncResult {
+        var r = SyncEngine.SyncResult()
+        r.created = a.created + b.created
+        r.updated = a.updated + b.updated
+        r.deleted = a.deleted + b.deleted
+        r.completionsWrittenBack = a.completionsWrittenBack + b.completionsWrittenBack
+        r.metadataWrittenBack = a.metadataWrittenBack + b.metadataWrittenBack
+        r.conflicts = a.conflicts + b.conflicts
+        r.errors = a.errors + b.errors
+        r.details = a.details + b.details
+        r.isDryRun = a.isDryRun || b.isDryRun
+        r.duration = a.duration + b.duration
+        return r
+    }
+
+    /// Apply the aggregated result to published state, logging, and notifications.
+    private func finalizeSyncResult(_ result: SyncEngine.SyncResult, wasFirstSync: Bool) {
+        debugLog("[SyncManager] Sync complete: \(result.summary), errors: \(result.errors.count), details: \(result.details.count)")
         lastSyncResult = result
         lastSyncDate = Date()
         pendingConflicts = result.conflicts
         isFirstSync = false
-
-        // Log the sync operation
         syncLog.addEntry(from: result)
 
-        // Send notifications if enabled
         if config.enableNotifications {
             if !result.errors.isEmpty {
                 NotificationService.shared.sendNotification(
@@ -357,24 +528,17 @@ class SyncManager: ObservableObject {
         if result.errors.isEmpty {
             statusMessage = result.summary
         } else {
-            // Deduplicate identical error messages (e.g. multiple -3002 errors)
             var seen = Set<String>()
             var uniqueMessages: [String] = []
             for error in result.errors {
                 let msg = error.localizedDescription
-                if seen.insert(msg).inserted {
-                    uniqueMessages.append(msg)
-                }
+                if seen.insert(msg).inserted { uniqueMessages.append(msg) }
             }
             let errorSummary = uniqueMessages.joined(separator: "\n")
-            let countNote = result.errors.count > uniqueMessages.count
-                ? " (\(result.errors.count) total)"
-                : ""
+            let countNote = result.errors.count > uniqueMessages.count ? " (\(result.errors.count) total)" : ""
             showErrorMessage("Sync completed with errors\(countNote):\n\(errorSummary)")
             statusMessage = "Sync completed with \(result.errors.count) error\(result.errors.count == 1 ? "" : "s")"
         }
-
-        isSyncing = false
     }
 
     /// Cancel a running sync operation (#26)
@@ -482,6 +646,9 @@ class SyncManager: ObservableObject {
                     relativeTo: nil
                 )
                 UserDefaults.standard.set(bookmark, forKey: "vaultBookmark")
+                // Also store keyed by path so other profiles pointing at this
+                // same vault can resolve access without re-prompting. (multi-profile)
+                UserDefaults.standard.set(bookmark, forKey: Self.bookmarkKey(forPath: url.path))
                 debugLog("[SyncManager] Saved vault bookmark for: \(url.path)")
 
                 // Start accessing immediately
@@ -502,6 +669,22 @@ class SyncManager: ObservableObject {
                 await performSync()
             }
         }
+    }
+
+    /// UserDefaults key for a per-vault-path security-scoped bookmark.
+    static func bookmarkKey(forPath path: String) -> String { "vaultBookmark::\(path)" }
+
+    /// Resolve a security-scoped bookmark for a specific vault path (non-active
+    /// profiles). Best-effort, no prompting. Returns true if access started.
+    @discardableResult
+    func resolveVaultBookmark(forPath path: String) -> Bool {
+        let data = UserDefaults.standard.data(forKey: Self.bookmarkKey(forPath: path))
+            ?? (path == config.vaultPath ? UserDefaults.standard.data(forKey: "vaultBookmark") : nil)
+        guard let data = data else { return false }
+        var isStale = false
+        guard let url = try? URL(resolvingBookmarkData: data, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale),
+              !isStale else { return false }
+        return url.startAccessingSecurityScopedResource()
     }
 
     /// Resolve the saved bookmark on app launch to restore file access.

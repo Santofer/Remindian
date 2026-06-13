@@ -4,6 +4,29 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.16.0 (June 2026)
+
+Multiple sync profiles — Remindian becomes a sync **hub** instead of a single pipe. Fully backward compatible: your current setup becomes the "Default" profile automatically and behaves exactly as before.
+
+### New
+
+- **Sync profiles.** Settings → General → **Sync Profiles** lets you run several independent source → destination pipelines at once — e.g. *Work vault → Todoist* and *Personal vault → Apple Reminders*. Each profile has its own source, destination, vault, list mappings, filters, writeback toggles, tokens, and **its own sync state**, so their mappings never collide.
+  - Add / rename / delete / pause profiles. "Sync Now" (and auto-sync, and the file watcher) run **all enabled profiles**; paused profiles are skipped.
+  - The settings panes always edit the **selected** profile — pick a profile at the top of General and everything below applies to it.
+  - App-wide settings (global hotkey, launch-at-login, notifications, auto-sync interval, dock/appearance) stay consistent across all profiles automatically.
+
+### Migration & safety
+
+- Your existing `config.json` is migrated into a single **Default** profile on first launch, and that profile keeps using the existing `sync_state.json` **verbatim** — zero migration, no mapping loss, no re-sync. Additional profiles get their own `sync_state_<id>.json`.
+- Each profile can point at a different vault; Remindian stores a security-scoped bookmark per vault path. A profile whose vault isn't yet authorized reports a clear, actionable message instead of failing silently.
+- The Obsidian Tasks parser, the surgical writeback engine, and all existing Settings bindings are untouched — multi-profile is an additive layer around the proven single-profile path.
+
+### Tests
+
+- New `ProfileStoreTests` (migration shape, normalization invariants, deep copy, global-settings propagation, Codable round-trip) and extended `SyncStateLocationTests` (per-profile state file keying, isolation, default-file-untouched, no cross-seed). Full suite green; Release build clean.
+
+---
+
 ## v5.15.0 (June 2026)
 
 Generic Markdown source (#27) — Remindian now syncs **NotePlan** and other plain-markdown task tools, not just Obsidian. Additive and opt-in; the Obsidian Tasks path is completely untouched.

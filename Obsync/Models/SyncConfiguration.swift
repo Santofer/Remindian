@@ -632,6 +632,38 @@ class SyncConfiguration: ObservableObject, Codable {
         }
     }
 
+    // MARK: - Multi-profile support
+
+    /// A value-semantics copy of this configuration. `SyncConfiguration` is a
+    /// reference type, so duplicating a profile needs a genuine deep copy —
+    /// done via a Codable round-trip so every nested struct/array is cloned.
+    func deepCopy() -> SyncConfiguration {
+        if let data = try? JSONEncoder().encode(self),
+           let copy = try? JSONDecoder().decode(SyncConfiguration.self, from: data) {
+            return copy
+        }
+        return SyncConfiguration()
+    }
+
+    /// Settings that are genuinely app-wide singletons (one OS hotkey, one login
+    /// item, one notification preference, one auto-sync timer, one dock/appearance).
+    /// With multiple profiles these must stay identical across profiles, so they
+    /// are propagated from the active profile to all others on save. Everything
+    /// NOT in this list is per-profile (source/destination, vault, mappings,
+    /// filters, writeback, tokens, state location, etc.).
+    func applyGlobalSettings(from other: SyncConfiguration) {
+        enableAutoSync = other.enableAutoSync
+        syncIntervalMinutes = other.syncIntervalMinutes
+        syncOnLaunch = other.syncOnLaunch
+        enableNotifications = other.enableNotifications
+        globalHotKeyEnabled = other.globalHotKeyEnabled
+        globalHotKeyCode = other.globalHotKeyCode
+        globalHotKeyModifiers = other.globalHotKeyModifiers
+        launchAtLogin = other.launchAtLogin
+        hideDockIcon = other.hideDockIcon
+        forceDarkIcon = other.forceDarkIcon
+    }
+
     // MARK: - Helpers
 
     /// Map an Obsidian tag to a Reminders list name.

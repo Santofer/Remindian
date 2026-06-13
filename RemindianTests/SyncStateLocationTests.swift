@@ -153,4 +153,54 @@ final class SyncStateLocationTests: XCTestCase {
         let decoded = try JSONDecoder().decode(SyncConfiguration.self, from: data)
         XCTAssertEqual(decoded.syncStateLocation, .vault)
     }
+
+    // MARK: - Per-profile state keying (multi-profile)
+
+    func test_stateFileName_emptyKeyIsLegacyFile() {
+        // The default profile (empty key) MUST keep the historical filename so
+        // existing installs' state is untouched — zero migration.
+        XCTAssertEqual(SyncState.stateFileName(profileKey: ""), "sync_state.json")
+        XCTAssertEqual(SyncState.stateFileName(profileKey: "   "), "sync_state.json")
+    }
+
+    func test_stateFileName_nonEmptyKeyIsSuffixed_andSanitized() {
+        XCTAssertEqual(SyncState.stateFileName(profileKey: "work"), "sync_state_work.json")
+        // Unsafe filename chars become dashes.
+        XCTAssertEqual(SyncState.stateFileName(profileKey: "a/b c"), "sync_state_a-b-c.json")
+        // UUID-style keys (what profiles actually use) pass through intact.
+        XCTAssertEqual(SyncState.stateFileName(profileKey: "1A2B-3C4D"), "sync_state_1A2B-3C4D.json")
+    }
+
+    func test_vaultURL_perProfileKey() {
+        let def = SyncState.stateURL(location: .vault, vaultPath: vaultURL.path, profileKey: "")
+        let p2 = SyncState.stateURL(location: .vault, vaultPath: vaultURL.path, profileKey: "p2")
+        XCTAssertEqual(def?.lastPathComponent, "sync_state.json")
+        XCTAssertEqual(p2?.lastPathComponent, "sync_state_p2.json")
+    }
+
+    func test_perProfileVaultState_isIsolated_andDefaultUntouched() {
+        // Default profile (empty key)
+        let d = makeState(2)
+        d.save(location: .vault, vaultPath: vaultURL.path, profileKey: "")
+        // A second profile sharing the same vault
+        let p = makeState(5)
+        p.save(location: .vault, vaultPath: vaultURL.path, profileKey: "work")
+
+        let dir = vaultURL.appendingPathComponent(".remindian")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent("sync_state.json").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent("sync_state_work.json").path))
+
+        // Each loads back its own mappings — no cross-contamination.
+        let dLoaded = SyncState.load(location: .vault, vaultPath: vaultURL.path, seedFromAppSupportIfMissing: false, profileKey: "")
+        let pLoaded = SyncState.load(location: .vault, vaultPath: vaultURL.path, seedFromAppSupportIfMissing: false, profileKey: "work")
+        XCTAssertEqual(dLoaded.mappings.count, 2)
+        XCTAssertEqual(pLoaded.mappings.count, 5)
+    }
+
+    func test_nonDefaultProfile_doesNotSeedFromAppSupport() {
+        // A brand-new non-default profile with no vault file must start empty,
+        // NOT inherit the default/App Support mappings. (seed gate on empty key)
+        let loaded = SyncState.load(location: .vault, vaultPath: vaultURL.path, profileKey: "fresh")
+        XCTAssertEqual(loaded.mappings.count, 0)
+    }
 }

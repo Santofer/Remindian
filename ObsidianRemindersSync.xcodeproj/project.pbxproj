@@ -44,6 +44,7 @@
 		035 /* RecurrenceConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 137; };
 		036 /* GenericMarkdownParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 138; };
 		037 /* GenericMarkdownSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 139; };
+		038 /* ProfileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 140; };
 		T01 /* TaskParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T10; };
 		T02 /* DeduplicationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T11; };
 		T03 /* TaskNotesParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T12; };
@@ -64,6 +65,7 @@
 		T0I /* ObsidianServiceParseCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1H; };
 		T0J /* SyncStateLocationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1I; };
 		T0K /* GenericMarkdownTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1J; };
+		T0L /* ProfileStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1K; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -117,6 +119,7 @@
 		137 /* RecurrenceConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurrenceConverter.swift; sourceTree = "<group>"; };
 		138 /* GenericMarkdownParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenericMarkdownParser.swift; sourceTree = "<group>"; };
 		139 /* GenericMarkdownSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenericMarkdownSource.swift; sourceTree = "<group>"; };
+		140 /* ProfileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileStore.swift; sourceTree = "<group>"; };
 		T00 /* RemindianTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RemindianTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		T10 /* TaskParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskParserTests.swift; sourceTree = "<group>"; };
 		T11 /* DeduplicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeduplicationTests.swift; sourceTree = "<group>"; };
@@ -138,6 +141,7 @@
 		T1H /* ObsidianServiceParseCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObsidianServiceParseCacheTests.swift; sourceTree = "<group>"; };
 		T1I /* SyncStateLocationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncStateLocationTests.swift; sourceTree = "<group>"; };
 		T1J /* GenericMarkdownTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenericMarkdownTests.swift; sourceTree = "<group>"; };
+		T1K /* ProfileStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileStoreTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -210,6 +214,7 @@
 				105 /* SyncTask.swift */,
 				106 /* SyncConfiguration.swift */,
 				107 /* SyncState.swift */,
+				140 /* ProfileStore.swift */,
 				118 /* SyncLog.swift */,
 			);
 			path = Models;
@@ -293,6 +298,7 @@
 				T1H /* ObsidianServiceParseCacheTests.swift */,
 				T1I /* SyncStateLocationTests.swift */,
 				T1J /* GenericMarkdownTests.swift */,
+				T1K /* ProfileStoreTests.swift */,
 			);
 			path = RemindianTests;
 			sourceTree = "<group>";
@@ -424,6 +430,7 @@
 				035 /* RecurrenceConverter.swift in Sources */,
 				036 /* GenericMarkdownParser.swift in Sources */,
 				037 /* GenericMarkdownSource.swift in Sources */,
+				038 /* ProfileStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -451,6 +458,7 @@
 				T0I /* ObsidianServiceParseCacheTests.swift in Sources */,
 				T0J /* SyncStateLocationTests.swift in Sources */,
 				T0K /* GenericMarkdownTests.swift in Sources */,
+				T0L /* ProfileStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -604,7 +612,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 5.15.0;
+				MARKETING_VERSION = 5.16.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -632,7 +640,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 5.15.0;
+				MARKETING_VERSION = 5.16.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

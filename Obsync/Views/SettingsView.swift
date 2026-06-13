@@ -39,10 +39,49 @@ struct SettingsView: View {
 
 struct GeneralSettingsView: View {
     @EnvironmentObject var syncManager: SyncManager
+    @State private var showNewProfileAlert = false
+    @State private var showRenameAlert = false
+    @State private var showDeleteProfileConfirm = false
+    @State private var profileNameField = ""
 
     var body: some View {
         ScrollView {
             Form {
+                // Sync Profiles — independent source→destination pipelines. (multi-profile)
+                Section {
+                    Picker("Active profile", selection: Binding(
+                        get: { syncManager.profileStore.activeProfileId },
+                        set: { syncManager.switchProfile(to: $0) }
+                    )) {
+                        ForEach(syncManager.profileStore.profiles) { profile in
+                            Text(profile.enabled ? profile.name : "\(profile.name) (paused)").tag(profile.id)
+                        }
+                    }
+
+                    Toggle("Include this profile when syncing", isOn: Binding(
+                        get: { syncManager.profileStore.activeProfile?.enabled ?? true },
+                        set: { syncManager.setProfileEnabled(id: syncManager.profileStore.activeProfileId, enabled: $0) }
+                    ))
+
+                    HStack {
+                        Button("New Profile…") { profileNameField = ""; showNewProfileAlert = true }
+                        Button("Rename…") {
+                            profileNameField = syncManager.profileStore.activeProfile?.name ?? ""
+                            showRenameAlert = true
+                        }
+                        Spacer()
+                        Button("Delete", role: .destructive) { showDeleteProfileConfirm = true }
+                            .disabled((syncManager.profileStore.activeProfile?.isDefault ?? true)
+                                      || syncManager.profileStore.profiles.count <= 1)
+                    }
+
+                    Text("Each profile is an independent source → destination pipeline with its own mappings, filters, tokens, and sync state. All enabled profiles sync together. Every setting below applies to the selected profile.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } header: {
+                    Text("Sync Profiles")
+                }
+
                 // Source & Destination — primary choice, belongs in General
                 Section {
                     Picker("Task Source", selection: $syncManager.config.taskSourceType) {
@@ -439,6 +478,34 @@ struct GeneralSettingsView: View {
                 }
             }
             .formStyle(.grouped)
+        }
+        .alert("New Profile", isPresented: $showNewProfileAlert) {
+            TextField("Profile name", text: $profileNameField)
+            Button("Create") {
+                let name = profileNameField.trimmingCharacters(in: .whitespaces)
+                syncManager.addProfile(name: name.isEmpty ? "New Profile" : name)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Creates a new sync pipeline, copied from the current profile as a starting point. Adjust its source, destination, vault, and mappings below.")
+        }
+        .alert("Rename Profile", isPresented: $showRenameAlert) {
+            TextField("Profile name", text: $profileNameField)
+            Button("Save") {
+                let name = profileNameField.trimmingCharacters(in: .whitespaces)
+                if !name.isEmpty {
+                    syncManager.renameProfile(id: syncManager.profileStore.activeProfileId, to: name)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .alert("Delete this profile?", isPresented: $showDeleteProfileConfirm) {
+            Button("Delete", role: .destructive) {
+                syncManager.deleteProfile(id: syncManager.profileStore.activeProfileId)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Removes the profile and its sync-state mappings. Tasks already synced to your destination are not deleted.")
         }
     }
 }
