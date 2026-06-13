@@ -4,6 +4,21 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.20.0 (June 2026)
+
+Due times and alarms for Apple Reminders.
+
+### New
+
+- **Alarms on synced reminders (#6).** Apple Reminders only notify you if the reminder has an *alarm* — and until now Remindian never set one, so synced reminders were silent. Settings → General → **Add an alarm to reminders** (Apple Reminders only) now gives each synced reminder with a due date an alarm: at its specific time if it has one, otherwise at a configurable hour (default **09:00**) for all-day tasks. **Off by default** — existing reminders and their alarms are never touched; the alarm is only added to reminders that don't already have one, so repeated syncs never pile up duplicates.
+- **Due times from Obsidian.** The task parser now optionally reads a time after a date — `📅 2026-03-15 14:30` or `📅 2026-03-15T14:30` (also for `🛫` start). With "Include time in due dates" enabled, that time flows through to the reminder (and its alarm). Plain `📅 2026-03-15` lines behave exactly as before.
+
+### Tests
+
+- New `TimeAndAlarmTests` (due-time parsing incl. back-compat for date-only lines, and alarm fire-date computation: all-day hour, exact time, time-sync-off fallback, hour clamping). Full suite green; Release build clean.
+
+---
+
 ## v5.19.0 (June 2026)
 
 A "Today" glance right in the menu bar.

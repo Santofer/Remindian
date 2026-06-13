@@ -79,7 +79,9 @@ class RemindersDestination: TaskDestination {
             includeDueTime: config.includeDueTime,
             addTaskLink: config.addTaskLinkToReminders,
             vaultPath: config.vaultPath,
-            appendLinkToNotes: config.appendTaskLinkToNotes
+            appendLinkToNotes: config.appendTaskLinkToNotes,
+            addReminderAlarm: config.addReminderAlarm,
+            allDayAlarmHour: config.reminderAlarmHour
         )
         try await retryEventKitOperation(label: "create '\(task.title)'") {
             try self.eventStore.save(reminder, commit: true)
@@ -96,7 +98,9 @@ class RemindersDestination: TaskDestination {
             includeDueTime: config.includeDueTime,
             addTaskLink: config.addTaskLinkToReminders,
             vaultPath: config.vaultPath,
-            appendLinkToNotes: config.appendTaskLinkToNotes
+            appendLinkToNotes: config.appendTaskLinkToNotes,
+            addReminderAlarm: config.addReminderAlarm,
+            allDayAlarmHour: config.reminderAlarmHour
         )
         try await retryEventKitOperation(label: "update '\(task.title)'") {
             try self.eventStore.save(reminder, commit: true)

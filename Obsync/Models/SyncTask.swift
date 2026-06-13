@@ -178,11 +178,14 @@ extension SyncTask {
         // Tag / list token (supports hierarchical #a/b/c and +prefix).
         static let tag = make("[#+][\\w-]+(?:/[\\w-]+)*")
 
-        // Date fields, keyed by emoji. Captures yyyy-MM-dd.
+        // Date fields, keyed by emoji. Group 1 = yyyy-MM-dd, optional group 2 =
+        // HH:mm (separated by a space or `T`). The time is non-standard for the
+        // Obsidian Tasks plugin but harmless to capture — it only reaches the
+        // destination when "Include time in due dates" is on (#6). (multi-profile)
         static let dateByEmoji: [String: NSRegularExpression] = [
-            "📅": make("📅\u{FE0F}?\\s*(\\d{4}-\\d{2}-\\d{2})"),
-            "🛫": make("🛫\u{FE0F}?\\s*(\\d{4}-\\d{2}-\\d{2})"),
-            "⏳": make("⏳\u{FE0F}?\\s*(\\d{4}-\\d{2}-\\d{2})"),
+            "📅": make("📅\u{FE0F}?\\s*(\\d{4}-\\d{2}-\\d{2})(?:[ T](\\d{1,2}:\\d{2}))?"),
+            "🛫": make("🛫\u{FE0F}?\\s*(\\d{4}-\\d{2}-\\d{2})(?:[ T](\\d{1,2}:\\d{2}))?"),
+            "⏳": make("⏳\u{FE0F}?\\s*(\\d{4}-\\d{2}-\\d{2})(?:[ T](\\d{1,2}:\\d{2}))?"),
             "✅": make("✅\u{FE0F}?\\s*(\\d{4}-\\d{2}-\\d{2})"),
         ]
 
@@ -604,7 +607,7 @@ extension SyncTask {
             regex = cached
         } else {
             guard let compiled = try? NSRegularExpression(
-                pattern: "\(emoji)\u{FE0F}?\\s*(\\d{4}-\\d{2}-\\d{2})", options: []
+                pattern: "\(emoji)\u{FE0F}?\\s*(\\d{4}-\\d{2}-\\d{2})(?:[ T](\\d{1,2}:\\d{2}))?", options: []
             ) else { return nil }
             regex = compiled
         }
@@ -612,15 +615,27 @@ extension SyncTask {
         let range = NSRange(content.startIndex..., in: content)
         guard let match = regex.firstMatch(in: content, options: [], range: range),
               let dateRange = Range(match.range(at: 1), in: content) else { return nil }
-        
+
         let dateString = String(content[dateRange])
-        
+
+        // Optional time component (group 2), e.g. "📅 2026-03-15 14:30".
+        var timeString: String?
+        if match.numberOfRanges > 2, let timeRange = Range(match.range(at: 2), in: content) {
+            timeString = String(content[timeRange])
+        }
+
         // Remove the matched portion from content
         if let fullRange = Range(match.range, in: content) {
             content.removeSubrange(fullRange)
         }
-        
+
         let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        if let time = timeString {
+            formatter.dateFormat = "yyyy-MM-dd HH:mm"
+            if let dated = formatter.date(from: "\(dateString) \(time)") { return dated }
+            // Fall through to date-only if the time failed to parse.
+        }
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.date(from: dateString)
     }
@@ -728,7 +743,21 @@ extension SyncTask {
     ///   URL field as a clickable icon, so the notes-side copy was just
     ///   visual clutter (#69). Older clients that don't surface the URL
     ///   field can opt back in via the corresponding Settings toggle.
-    func applyToReminder(_ reminder: EKReminder, includeDueTime: Bool = false, addTaskLink: Bool = false, vaultPath: String = "", appendLinkToNotes: Bool = false) {
+    /// Compute when a reminder's alarm should fire for a given due date. (#6)
+    ///
+    /// If the due date carries a real time-of-day (and time sync is on), the
+    /// alarm fires at that exact moment. Otherwise (an all-day due) it fires at
+    /// `allDayHour:00` on the due day so the user still gets a notification
+    /// instead of a silent all-day reminder. Pure + testable.
+    static func alarmFireDate(due: Date, includeTime: Bool, allDayHour: Int, calendar: Calendar = .current) -> Date {
+        let comps = calendar.dateComponents([.hour, .minute], from: due)
+        let hasTimeOfDay = includeTime && ((comps.hour ?? 0) != 0 || (comps.minute ?? 0) != 0)
+        if hasTimeOfDay { return due }
+        let hour = max(0, min(23, allDayHour))
+        return calendar.date(bySettingHour: hour, minute: 0, second: 0, of: due) ?? due
+    }
+
+    func applyToReminder(_ reminder: EKReminder, includeDueTime: Bool = false, addTaskLink: Bool = false, vaultPath: String = "", appendLinkToNotes: Bool = false, addReminderAlarm: Bool = false, allDayAlarmHour: Int = 9) {
         reminder.title = title
         reminder.isCompleted = isCompleted
         reminder.priority = priority.toRemindersPriority
@@ -795,6 +824,15 @@ extension SyncTask {
 
         if isCompleted {
             reminder.completionDate = completedDate ?? Date()
+        }
+
+        // Alarm (#6) — opt-in. A synced reminder with a due date otherwise never
+        // notifies the user. We only ADD an alarm when the reminder has none, so
+        // we never duplicate on repeated syncs nor clobber a user-added alarm.
+        // Completed reminders get no alarm.
+        if addReminderAlarm, !isCompleted, let due = dueDate, (reminder.alarms?.isEmpty ?? true) {
+            let fire = SyncTask.alarmFireDate(due: due, includeTime: includeDueTime, allDayHour: allDayAlarmHour)
+            reminder.addAlarm(EKAlarm(absoluteDate: fire))
         }
 
         // Recurrence rule (#57 Phase B) — convert our preserved Obsidian-format

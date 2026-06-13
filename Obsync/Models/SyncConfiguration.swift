@@ -45,6 +45,12 @@ class SyncConfiguration: ObservableObject, Codable {
     @Published var deleteCompletedAfterDays: Int?
     @Published var conflictResolution: ConflictResolution
     @Published var includeDueTime: Bool
+    /// Add an alarm to synced Apple Reminders so they actually notify (#6).
+    /// Off by default — existing installs are unchanged. When on, a reminder
+    /// with a due date gets an alarm at its time (if any), else at `reminderAlarmHour`.
+    @Published var addReminderAlarm: Bool
+    /// Hour of day (0–23) for alarms on all-day (date-only) due dates. Default 9.
+    @Published var reminderAlarmHour: Int
     @Published var hideDockIcon: Bool
     @Published var forceDarkIcon: Bool
     @Published var dryRunMode: Bool
@@ -302,7 +308,7 @@ class SyncConfiguration: ObservableObject, Codable {
         case vaultPath, syncIntervalMinutes, enableAutoSync, syncOnLaunch
         case listMappings, defaultList, taskFilesPattern, excludedFolders, includedFolders
         case syncCompletedTasks, deleteCompletedAfterDays, conflictResolution
-        case includeDueTime, hideDockIcon, forceDarkIcon, dryRunMode, enableCompletionWriteback
+        case includeDueTime, addReminderAlarm, reminderAlarmHour, hideDockIcon, forceDarkIcon, dryRunMode, enableCompletionWriteback
         case enableDueDateWriteback, enableStartDateWriteback, enablePriorityWriteback
         case enableNewTaskWriteback, enableTagWriteback, inboxFilePath, enableFileWatcher
         case enableNotifications, globalHotKeyEnabled, globalHotKeyCode, globalHotKeyModifiers
@@ -343,6 +349,8 @@ class SyncConfiguration: ObservableObject, Codable {
         deleteCompletedAfterDays: Int? = nil,
         conflictResolution: ConflictResolution = .obsidianWins,
         includeDueTime: Bool = false,
+        addReminderAlarm: Bool = false,
+        reminderAlarmHour: Int = 9,
         hideDockIcon: Bool = false,
         dryRunMode: Bool = false,
         enableCompletionWriteback: Bool = true,
@@ -408,6 +416,8 @@ class SyncConfiguration: ObservableObject, Codable {
         self.deleteCompletedAfterDays = deleteCompletedAfterDays
         self.conflictResolution = conflictResolution
         self.includeDueTime = includeDueTime
+        self.addReminderAlarm = addReminderAlarm
+        self.reminderAlarmHour = reminderAlarmHour
         self.hideDockIcon = hideDockIcon
         self.forceDarkIcon = forceDarkIcon
         self.dryRunMode = dryRunMode
@@ -476,6 +486,8 @@ class SyncConfiguration: ObservableObject, Codable {
         deleteCompletedAfterDays = try container.decodeIfPresent(Int.self, forKey: .deleteCompletedAfterDays)
         conflictResolution = try container.decode(ConflictResolution.self, forKey: .conflictResolution)
         includeDueTime = try container.decodeIfPresent(Bool.self, forKey: .includeDueTime) ?? false
+        addReminderAlarm = try container.decodeIfPresent(Bool.self, forKey: .addReminderAlarm) ?? false
+        reminderAlarmHour = try container.decodeIfPresent(Int.self, forKey: .reminderAlarmHour) ?? 9
         hideDockIcon = try container.decodeIfPresent(Bool.self, forKey: .hideDockIcon) ?? false
         forceDarkIcon = try container.decodeIfPresent(Bool.self, forKey: .forceDarkIcon) ?? false
         dryRunMode = try container.decodeIfPresent(Bool.self, forKey: .dryRunMode) ?? false
@@ -552,6 +564,8 @@ class SyncConfiguration: ObservableObject, Codable {
         try container.encode(deleteCompletedAfterDays, forKey: .deleteCompletedAfterDays)
         try container.encode(conflictResolution, forKey: .conflictResolution)
         try container.encode(includeDueTime, forKey: .includeDueTime)
+        try container.encode(addReminderAlarm, forKey: .addReminderAlarm)
+        try container.encode(reminderAlarmHour, forKey: .reminderAlarmHour)
         try container.encode(hideDockIcon, forKey: .hideDockIcon)
         try container.encode(forceDarkIcon, forKey: .forceDarkIcon)
         try container.encode(dryRunMode, forKey: .dryRunMode)

@@ -348,6 +348,31 @@ struct GeneralSettingsView: View {
 
                     Toggle("Include time in due dates", isOn: $syncManager.config.includeDueTime)
                         .help("When disabled, reminders will be all-day tasks without a specific time")
+
+                    if syncManager.config.taskDestinationType == .appleReminders {
+                        Toggle("Add an alarm to reminders", isOn: $syncManager.config.addReminderAlarm)
+                            .help("Apple Reminders only notify you if they have an alarm. When on, each synced reminder with a due date gets one.")
+
+                        if syncManager.config.addReminderAlarm {
+                            HStack {
+                                Text("Alarm time for all-day tasks:")
+                                    .foregroundColor(.secondary)
+                                Picker("", selection: $syncManager.config.reminderAlarmHour) {
+                                    ForEach(0..<24, id: \.self) { hour in
+                                        Text(String(format: "%02d:00", hour)).tag(hour)
+                                    }
+                                }
+                                .labelsHidden()
+                                .frame(width: 90)
+                            }
+                            .padding(.leading, 20)
+
+                            Text("Tasks with a specific time alarm at that time; date-only tasks alarm at the time above. Existing reminders' alarms aren't changed.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .padding(.leading, 20)
+                        }
+                    }
                 } header: {
                     Label("Obsidian \u{2192} \(syncManager.config.taskDestinationType.displayName)", systemImage: "arrow.right")
                 }
