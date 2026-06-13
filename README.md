@@ -95,7 +95,7 @@ brew install --cask Santofer/tap/remindian
 </tr>
 </table>
 
-**Also includes:** Multiple sync profiles (run several source→destination pipelines at once) · Auto-updater · Onboarding wizard · Global hotkey · GoodTask tag writeback · New task writeback to Obsidian inbox · Automatic file backups · Launch at login · macOS native (SwiftUI, no dependencies)
+**Also includes:** Preview changes before applying (dry-run diff) · Undo last sync (restore vault files) · Multiple sync profiles (run several source→destination pipelines at once) · Auto-updater · Onboarding wizard · Global hotkey · GoodTask tag writeback · New task writeback to Obsidian inbox · Automatic file backups · Launch at login · macOS native (SwiftUI, no dependencies)
 
 ## Quick Start
 

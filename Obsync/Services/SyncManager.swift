@@ -46,6 +46,12 @@ class SyncManager: ObservableObject {
     /// mirrored into `config` above. Persisted to profiles.json.
     @Published var profileStore: ProfileStore
     @Published var isSyncing = false
+    /// Diff-preview state: a forced dry-run result the user can review before
+    /// applying. (Diff preview + Undo)
+    @Published var isPreviewing = false
+    @Published var previewResult: SyncEngine.SyncResult?
+    /// Number of vault files restorable via "Undo last sync" (0 = nothing to undo).
+    @Published var lastSyncUndoCount: Int = 0
     @Published var lastSyncResult: SyncEngine.SyncResult?
     @Published var lastSyncDate: Date?
     @Published var hasDestinationAccess = false
@@ -67,6 +73,8 @@ class SyncManager: ObservableObject {
     private var isFirstSync = true
     private var appearanceObservation: NSKeyValueObservation?
     private var currentSyncTask: Task<Void, Never>?
+    /// Per-(last)-sync undo manifest: one earliest pre-sync backup per file.
+    private var lastSyncUndoManifest: [FileBackupService.BackupRecord] = []
 
     // Protocol-based source and destination
     private(set) var taskSource: TaskSource
@@ -422,6 +430,7 @@ class SyncManager: ObservableObject {
         statusMessage = config.dryRunMode ? "Dry run..." : "Syncing..."
         let wasFirstSync = isFirstSync
         let multi = enabled.count > 1
+        let syncStart = Date()
 
         var aggregate = SyncEngine.SyncResult()
         aggregate.isDryRun = config.dryRunMode
@@ -432,8 +441,115 @@ class SyncManager: ObservableObject {
             debugLog("[SyncManager] Profile '\(profile.name)' result: \(result.summary)")
         }
 
+        // Build the undo manifest from backups taken during this sync (skip in
+        // dry run — nothing was written). One earliest (pre-sync) backup per file.
+        if !aggregate.isDryRun {
+            captureUndoManifest(since: syncStart)
+        }
+
         finalizeSyncResult(aggregate, wasFirstSync: wasFirstSync)
         isSyncing = false
+    }
+
+    /// Snapshot the vault backups made during the last sync into an undo
+    /// manifest (earliest pre-sync copy per file).
+    private func captureUndoManifest(since: Date) {
+        let recent = FileBackupService.shared.sessionBackups.filter { $0.date >= since }
+        var earliestByPath: [String: FileBackupService.BackupRecord] = [:]
+        for record in recent {
+            if let existing = earliestByPath[record.originalPath] {
+                if record.date < existing.date { earliestByPath[record.originalPath] = record }
+            } else {
+                earliestByPath[record.originalPath] = record
+            }
+        }
+        lastSyncUndoManifest = Array(earliestByPath.values)
+        lastSyncUndoCount = lastSyncUndoManifest.count
+    }
+
+    /// Restore the vault files changed by the last sync to their pre-sync
+    /// content. Each restore backs up the current content first, so this is
+    /// itself reversible. Returns the number of files restored. (Undo)
+    @discardableResult
+    func undoLastSyncVaultChanges() -> Int {
+        guard !lastSyncUndoManifest.isEmpty else { return 0 }
+        var restored = 0
+        for record in lastSyncUndoManifest {
+            do {
+                try FileBackupService.shared.restoreFile(from: record.backupURL, to: record.originalPath)
+                restored += 1
+            } catch {
+                debugLog("[SyncManager] Undo failed for \(record.originalPath): \(error.localizedDescription)")
+            }
+        }
+        lastSyncUndoManifest = []
+        lastSyncUndoCount = 0
+        statusMessage = "Restored \(restored) vault file\(restored == 1 ? "" : "s") from before the last sync"
+        debugLog("[SyncManager] Undo restored \(restored) vault file(s)")
+        return restored
+    }
+
+    // MARK: - Diff preview (forced dry-run)
+
+    /// Run a forced dry-run across all enabled profiles and stash the aggregated
+    /// result in `previewResult` for the UI to display. Mutates nothing on disk
+    /// (dry-run skips every write and state save). (Diff preview)
+    func startPreview() async {
+        guard !isSyncing, !isPreviewing else { return }
+        updateSourceAndDestination()
+        let enabled = profileStore.enabledProfiles
+        guard !enabled.isEmpty else {
+            showErrorMessage("No sync profiles are enabled. Enable a profile in Settings.")
+            return
+        }
+        if enabled.contains(where: { $0.id == profileStore.activeProfileId }) {
+            _ = ensureActiveVaultAccess()
+        }
+
+        isPreviewing = true
+        previewResult = nil
+        statusMessage = "Previewing changes…"
+
+        var aggregate = SyncEngine.SyncResult()
+        aggregate.isDryRun = true
+        for profile in enabled {
+            let result = await previewSingleProfile(profile)
+            aggregate = SyncManager.mergeResults(aggregate, result)
+        }
+
+        previewResult = aggregate
+        isPreviewing = false
+        statusMessage = "Preview ready: \(aggregate.summary)"
+    }
+
+    private func previewSingleProfile(_ profile: SyncProfile) async -> SyncEngine.SyncResult {
+        let cfg = profile.config.deepCopy()
+        cfg.dryRunMode = true
+        var pre = SyncEngine.SyncResult()
+        pre.isDryRun = true
+
+        guard !cfg.vaultPath.isEmpty else {
+            pre.errors.append(ProfileSyncIssue.notConfigured(profile.name)); return pre
+        }
+        if !FileManager.default.isReadableFile(atPath: cfg.vaultPath),
+           !resolveVaultBookmark(forPath: cfg.vaultPath),
+           !FileManager.default.isReadableFile(atPath: cfg.vaultPath) {
+            pre.errors.append(ProfileSyncIssue.vaultAccess(profile.name, cfg.vaultPath)); return pre
+        }
+        let source = SyncManager.createSource(for: cfg.taskSourceType, config: cfg)
+        let destination = SyncManager.createDestination(for: cfg.taskDestinationType, config: cfg)
+        let access = (try? await destination.requestAccess()) ?? false
+        guard access else {
+            pre.errors.append(ProfileSyncIssue.destinationAccess(profile.name, destination.destinationName)); return pre
+        }
+        // Dry-run engine — never writes mappings or files (Step 7 + edits are
+        // gated on !dryRunMode), so this is purely read-only.
+        let engine = SyncEngine(source: source, destination: destination,
+                                stateLocation: cfg.syncStateLocation, vaultPath: cfg.vaultPath,
+                                profileKey: profile.stateKey)
+        return await engine.performSync(config: cfg) { [weak self] message in
+            Task { @MainActor in self?.statusMessage = "Preview: \(message)" }
+        }
     }
 
     /// Ensure the active profile's vault is readable, prompting re-selection if

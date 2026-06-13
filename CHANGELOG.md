@@ -4,6 +4,21 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.17.0 (June 2026)
+
+Confidence features — see exactly what a sync will do before it happens, and roll back the file changes it made.
+
+### New
+
+- **Preview Changes.** A new **Preview Changes…** action (menu bar) opens a window that runs a forced dry-run across all enabled profiles and shows precisely what *would* change — grouped into create / update / delete in the destination, and complete / write-metadata back to Obsidian — with the affected file paths. Nothing is written until you click **Apply Changes**. It mutates nothing on disk (dry-run skips every write and the state save), so previewing is always safe.
+- **Undo Last Sync.** After a sync that wrote back to your vault, an **Undo Last Sync** action restores those Obsidian files to their exact pre-sync content. It's built on the automatic per-edit backups, targets each file by its recorded original path, and **backs up the current content first** — so the undo is itself reversible. (Scope: this restores *vault* files changed by writeback; reminders created in your destination aren't auto-removed — use Preview to vet those before applying.)
+
+### Tests
+
+- New `FileBackupRestoreTests` (pre-edit content round-trip, restore-backs-up-current, original-path recorded). Dry-run change-list population is covered by the existing engine/parser suites. Full suite green; Release build clean.
+
+---
+
 ## v5.16.0 (June 2026)
 
 Multiple sync profiles — Remindian becomes a sync **hub** instead of a single pipe. Fully backward compatible: your current setup becomes the "Default" profile automatically and behaves exactly as before.

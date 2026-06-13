@@ -59,6 +59,19 @@ struct MenuBarView: View {
                     Task { await syncManager.performSync() }
                 }
                 .disabled(!syncManager.hasDestinationAccess)
+
+                menuButton("Preview Changes…", icon: "eye") {
+                    syncManager.previewResult = nil
+                    openPreviewWindow()
+                }
+                .disabled(!syncManager.hasDestinationAccess)
+
+                if syncManager.lastSyncUndoCount > 0 {
+                    menuButton("Undo Last Sync (\(syncManager.lastSyncUndoCount) file\(syncManager.lastSyncUndoCount == 1 ? "" : "s"))", icon: "arrow.uturn.backward") {
+                        syncManager.undoLastSyncVaultChanges()
+                    }
+                    .help("Restore the Obsidian files changed by the last sync to their previous content. Reversible — the current content is backed up first.")
+                }
             }
 
             if !syncManager.pendingConflicts.isEmpty {
