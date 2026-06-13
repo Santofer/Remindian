@@ -3,8 +3,16 @@ import SwiftUI
 struct MenuBarView: View {
     @EnvironmentObject var syncManager: SyncManager
     @StateObject private var updater = UpdaterService.shared
+    @State private var quickAddText = ""
 
     private let menuFont = Font.system(size: 13)
+
+    private func submitQuickAdd() {
+        let text = quickAddText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        quickAddText = ""
+        Task { await syncManager.quickAddTask(text) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -79,6 +87,25 @@ struct MenuBarView: View {
                     openMainWindow()
                 }
             }
+
+            Divider()
+
+            // Quick add — capture a task into the Obsidian inbox (NL dates/priority/#tags).
+            HStack(spacing: 6) {
+                Image(systemName: "plus.circle")
+                    .foregroundColor(.secondary)
+                TextField("Add task… e.g. Pay rent friday !! #home", text: $quickAddText)
+                    .textFieldStyle(.plain)
+                    .font(menuFont)
+                    .onSubmit { submitQuickAdd() }
+                if !quickAddText.isEmpty {
+                    Button("Add") { submitQuickAdd() }
+                        .font(.system(size: 11))
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .help("Type a task and press Return. Understands dates (\"friday\"), priority (!, !!, !!!) and #tags.")
 
             Divider()
 

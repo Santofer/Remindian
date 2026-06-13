@@ -489,6 +489,39 @@ class SyncManager: ObservableObject {
         return restored
     }
 
+    // MARK: - Quick add (Shortcuts + menu-bar capture)
+
+    /// Parse a free-text quick-add string and append it to the active profile's
+    /// source inbox (Obsidian is the source of truth), then optionally sync so
+    /// it reaches the destination. Returns true on success. (Shortcuts + quick-add)
+    @discardableResult
+    func quickAddTask(_ text: String, triggerSync: Bool = true) async -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        guard !config.vaultPath.isEmpty else {
+            showErrorMessage("Set your Obsidian vault path in Settings before adding tasks.")
+            return false
+        }
+        if !FileManager.default.isReadableFile(atPath: config.vaultPath) {
+            _ = ensureActiveVaultAccess()
+        }
+
+        let task = QuickAddParser.parse(trimmed)
+        let source = SyncManager.createSource(for: config.taskSourceType, config: config)
+        do {
+            _ = try source.appendNewTask(task, config: config)
+            debugLog("[SyncManager] Quick-added task '\(task.title)'")
+        } catch {
+            showErrorMessage("Couldn't add task: \(error.localizedDescription)")
+            return false
+        }
+
+        if triggerSync {
+            await performSync()
+        }
+        return true
+    }
+
     // MARK: - Diff preview (forced dry-run)
 
     /// Run a forced dry-run across all enabled profiles and stash the aggregated

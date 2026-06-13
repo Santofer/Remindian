@@ -4,6 +4,25 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.18.0 (June 2026)
+
+Capture from anywhere — Shortcuts/Spotlight actions and a menu-bar quick-add with natural-language parsing.
+
+### New
+
+- **macOS Shortcuts & Spotlight actions.** Remindian now ships two App Intents:
+  - **Sync Now** — runs a sync of all enabled profiles (e.g. "Hey Siri, sync Remindian", or as a step in any Shortcut / automation).
+  - **Add Task to Obsidian** — capture a task into your vault inbox from a Shortcut, Spotlight, or the Share sheet.
+- **Menu-bar quick-add.** A text field in the menu bar: type a task, press Return, and it's captured into your Obsidian inbox and synced. Understands **natural-language dates** ("friday", "tomorrow 3pm", "April 15"), **priority** (`!` / `!!` / `!!!`), and **`#tags`** — e.g. `Pay rent friday !! #home`.
+
+Quick-add writes to the **active profile's** source inbox (Obsidian stays the source of truth), then syncs so the task reaches your destination.
+
+### Tests
+
+- New `QuickAddParserTests` (dates parsed + stripped, priority levels, `!`-in-word ignored, tags, combined, edge cases). Full suite green; Release build clean.
+
+---
+
 ## v5.17.0 (June 2026)
 
 Confidence features — see exactly what a sync will do before it happens, and roll back the file changes it made.

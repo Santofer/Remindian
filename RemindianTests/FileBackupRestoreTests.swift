@@ -9,11 +9,16 @@ import XCTest
 final class FileBackupRestoreTests: XCTestCase {
 
     private var dir: URL!
+    /// Unique per-test stem. FileBackupService keys backups by filename + second
+    /// in a shared dir, so distinct test files must have distinct names to avoid
+    /// cross-test collisions (a same-name same-second backup is skipped).
+    private var stem: String!
 
     override func setUp() {
         super.setUp()
         dir = FileManager.default.temporaryDirectory.appendingPathComponent("remindian-backup-\(UUID().uuidString)")
         try! FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        stem = "bk-\(UUID().uuidString.prefix(8))"
     }
 
     override func tearDown() {
@@ -23,7 +28,7 @@ final class FileBackupRestoreTests: XCTestCase {
     }
 
     func test_backupThenRestore_returnsPreEditContent() throws {
-        let file = dir.appendingPathComponent("note.md")
+        let file = dir.appendingPathComponent("\(stem!)-note.md")
         try "- [ ] Original\n".write(to: file, atomically: true, encoding: .utf8)
 
         // Back up (pre-edit), then mutate the file.
@@ -37,7 +42,7 @@ final class FileBackupRestoreTests: XCTestCase {
     }
 
     func test_restore_backsUpCurrentContentFirst() throws {
-        let file = dir.appendingPathComponent("note2.md")
+        let file = dir.appendingPathComponent("\(stem!)-note2.md")
         try "v1\n".write(to: file, atomically: true, encoding: .utf8)
         let backupV1 = try FileBackupService.shared.backupFile(at: file)
         try "v2\n".write(to: file, atomically: true, encoding: .utf8)
@@ -53,7 +58,7 @@ final class FileBackupRestoreTests: XCTestCase {
     }
 
     func test_sessionBackup_recordsOriginalPath() throws {
-        let file = dir.appendingPathComponent("tracked.md")
+        let file = dir.appendingPathComponent("\(stem!)-tracked.md")
         try "content\n".write(to: file, atomically: true, encoding: .utf8)
         _ = try FileBackupService.shared.backupFile(at: file)
         XCTAssertTrue(FileBackupService.shared.sessionBackups.contains { $0.originalPath == file.path },
