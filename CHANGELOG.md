@@ -4,6 +4,16 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.20.2 (June 2026)
+
+Critical hotfix.
+
+### Bug fixes
+
+- **App froze / beachballed when opening the menu (regression from v5.19.0).** The new menu-bar "Today" list scanned the entire vault on the **main thread** every time the menu appeared, which locked up the whole app on real vaults. The scan now runs on a **background task** (the UI never blocks), and the refresh is re-entrancy-guarded and throttled so the menu can open freely. If you upgraded to v5.19–v5.20.1 and the app became unresponsive, this fixes it.
+
+---
+
 ## v5.20.1 (June 2026)
 
 Correctness fix for Reminders → Obsidian writeback (#75, PR #74).

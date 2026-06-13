@@ -78,6 +78,8 @@ class SyncManager: ObservableObject {
     private var currentSyncTask: Task<Void, Never>?
     /// Per-(last)-sync undo manifest: one earliest pre-sync backup per file.
     private var lastSyncUndoManifest: [FileBackupService.BackupRecord] = []
+    /// Throttle for the Today-agenda refresh (menu `.task` can fire often).
+    private var lastAgendaRefresh: Date?
 
     // Protocol-based source and destination
     private(set) var taskSource: TaskSource
@@ -130,7 +132,7 @@ class SyncManager: ObservableObject {
 
     // MARK: - Source/Destination Factory
 
-    static func createSource(for type: SyncConfiguration.TaskSourceType, config: SyncConfiguration? = nil) -> TaskSource {
+    nonisolated static func createSource(for type: SyncConfiguration.TaskSourceType, config: SyncConfiguration? = nil) -> TaskSource {
         switch type {
         case .obsidianTasks:
             return ObsidianTasksSource()
@@ -528,9 +530,15 @@ class SyncManager: ObservableObject {
     // MARK: - Today agenda (menu-bar glance)
 
     /// Scan the active profile's source and populate `agenda` with open tasks
-    /// due today or earlier. Read-only; reuses the active source so its parse
-    /// cache stays warm. (Today list)
-    func refreshAgenda() async {
+    /// due today or earlier. (Today list)
+    ///
+    /// CRITICAL: the vault scan runs on a **background task**, never on the main
+    /// actor — a full scan on `@MainActor` froze the whole app/menu on real
+    /// vaults. Re-entrancy-guarded and throttled so the menu's `.task` can fire
+    /// freely without ever stacking scans.
+    func refreshAgenda(force: Bool = false) async {
+        guard !isLoadingAgenda else { return }
+        if !force, let last = lastAgendaRefresh, Date().timeIntervalSince(last) < 10 { return }
         guard !config.vaultPath.isEmpty,
               FileManager.default.isReadableFile(atPath: config.vaultPath) else {
             agenda = []
@@ -538,8 +546,18 @@ class SyncManager: ObservableObject {
         }
         isLoadingAgenda = true
         defer { isLoadingAgenda = false }
-        let tasks = (try? taskSource.scanTasks(config: config)) ?? []
-        agenda = AgendaBuilder.build(from: tasks, now: Date())
+
+        // Snapshot config on the main actor, then scan off-main so the UI never
+        // blocks. A fresh source is built inside the background task (createSource
+        // is pure), so we never touch the main-actor `taskSource` from off-main.
+        let cfg = config.deepCopy()
+        let type = cfg.taskSourceType
+        let scanned: [SyncTask] = await Task.detached(priority: .utility) {
+            let source = SyncManager.createSource(for: type, config: cfg)
+            return (try? source.scanTasks(config: cfg)) ?? []
+        }.value
+        agenda = AgendaBuilder.build(from: scanned, now: Date())
+        lastAgendaRefresh = Date()
     }
 
     /// Mark an agenda task complete in the source (Obsidian = source of truth),
