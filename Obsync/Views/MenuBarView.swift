@@ -15,7 +15,6 @@ struct MenuBarView: View {
     }
 
     var body: some View {
-        ScrollView {
         VStack(alignment: .leading, spacing: 0) {
             // Status section
             HStack {
@@ -192,9 +191,7 @@ struct MenuBarView: View {
             }
         }
         .padding(.vertical, 4)
-        }
-        .frame(width: 290)
-        .frame(maxHeight: 560) // cap so a long Today list scrolls instead of overflowing the screen (audit #7)
+        .frame(width: 330)
         .task { await syncManager.refreshAgenda() }
     }
 

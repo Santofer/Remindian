@@ -4,6 +4,19 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.20.4 (June 2026)
+
+Critical hotfix for v5.20.3.
+
+### Bug fixes
+
+- **The menu bar opened to an empty panel in v5.20.3.** The height-capping `ScrollView` added in v5.20.3 collapses to zero height in a window-style menu (a `ScrollView` is greedy vertically and has no fixed height to fill), so the whole menu showed nothing. Reverted to an auto-sizing panel — the Today list is already capped at 6 rows, so there's no overflow risk. The menu renders correctly again, with each task on one line.
+- Widened the menu panel slightly so longer task titles aren't truncated as aggressively.
+
+**If you installed v5.20.3 and the menu is blank, upgrade to this version.**
+
+---
+
 ## v5.20.3 (June 2026)
 
 Menu-bar overhaul + a sweep of fixes from a full multi-dimension audit of the app.
