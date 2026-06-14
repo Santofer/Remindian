@@ -489,6 +489,15 @@ class SyncEngine {
             // any subsequent metadata writeback on the same task.
             var completionWritebackIds: Set<String> = Set()
 
+            // Files this sync's own writebacks have touched. The file-mod guard
+            // below compares the file's mtime to a single sync-start timestamp,
+            // so once the engine writes file X (e.g. a completion), the NEXT
+            // task in X would see "modified during sync" — caused by US, not an
+            // external editor. Track our own writes and don't flag them. This is
+            // what produced spurious "File was modified during sync" errors when
+            // several tasks live in the same file (and on iCloud vaults).
+            var filesWrittenByEngine: Set<String> = Set()
+
             for mapping in syncState.mappings {
                 let obsidianTask = obsidianMap[mapping.obsidianId]
                 let remindersTask = remindersMap[mapping.remindersId]
@@ -509,6 +518,12 @@ class SyncEngine {
                     // Pre-check file modification for writeback safety
                     // (computed once before any writes to avoid false positives from our own edits)
                     let fileNotModifiedBeforeSync: Bool = {
+                        // Our own earlier writeback to this file isn't an external
+                        // modification — don't let it block subsequent writebacks
+                        // to the same file (or trip on iCloud mtime churn we caused).
+                        if let fp = oTask.obsidianSource?.filePath, filesWrittenByEngine.contains(fp) {
+                            return true
+                        }
                         return !source.hasFileChanged(
                             task: oTask,
                             since: syncStartTimestamp,
@@ -594,6 +609,7 @@ class SyncEngine {
                                         if inserted > 0, let src = oTask.obsidianSource {
                                             fileInsertions[src.filePath, default: []].append(src.lineNumber)
                                         }
+                                        if let fp = oTask.obsidianSource?.filePath { filesWrittenByEngine.insert(fp) }
                                         completionWritebackIds.insert(mapping.obsidianId)
                                         debugLog("[SyncEngine] Completion writeback succeeded for: \"\(oTask.title)\" (lines inserted: \(inserted))")
                                         result.completionsWrittenBack += 1
@@ -706,6 +722,7 @@ class SyncEngine {
                                             }
                                             do {
                                                 try source.updateTaskMetadata(task: adjustedTask, changes: metadataChanges, config: config)
+                                                if let fp = oTask.obsidianSource?.filePath { filesWrittenByEngine.insert(fp) }
                                             } catch {
                                                 debugLog("[SyncEngine] Metadata writeback failed for \"\(oTask.title)\": \(error)")
                                                 result.errors.append(error)

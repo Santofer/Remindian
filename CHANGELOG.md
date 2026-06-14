@@ -4,6 +4,16 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.21.1 (June 2026)
+
+Hotfix: completing a task from the menu no longer fails with a false "file modified" error.
+
+### Bug fixes
+
+- **"File was modified during sync operation. Skipping write for safety." when completing tasks.** Each sync compares every file's modification time against a single sync-start timestamp to refuse writing into a file something else changed mid-sync. But the engine's *own* writebacks (marking a task done, updating its metadata) bump that file's modification time — so a second task living in the same file (or in a file iCloud re-touched mid-sync) tripped the guard and was skipped, surfacing as several "file modified" errors when you completed something from the menu. The engine now remembers the files it wrote itself this cycle and no longer treats its own writes as outside interference. The real protection (line-level content verification before any edit) is unchanged.
+
+---
+
 ## v5.21.0 (June 2026)
 
 Cleanup tools + a menu fix, after diagnosing duplicate build-up from older buggy versions.
