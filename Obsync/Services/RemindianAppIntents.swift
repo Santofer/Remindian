@@ -14,7 +14,7 @@ struct SyncNowIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        await SyncManager.shared.performSync()
+        await SyncManager.shared.performSync(interactive: false)
         let summary = SyncManager.shared.lastSyncResult?.summary ?? "Done"
         return .result(dialog: "Remindian sync complete — \(summary)")
     }
@@ -30,7 +30,7 @@ struct AddTaskIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let added = await SyncManager.shared.quickAddTask(text)
+        let added = await SyncManager.shared.quickAddTask(text, interactive: false)
         return .result(dialog: added
             ? "Added “\(text)” to your Obsidian inbox."
             : "Couldn't add the task — open Remindian to check your vault setup.")

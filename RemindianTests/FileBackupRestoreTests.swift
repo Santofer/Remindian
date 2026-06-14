@@ -47,12 +47,12 @@ final class FileBackupRestoreTests: XCTestCase {
         let backupV1 = try FileBackupService.shared.backupFile(at: file)
         try "v2\n".write(to: file, atomically: true, encoding: .utf8)
 
-        let beforeRestoreCount = FileBackupService.shared.sessionBackups.count
+        let beforeRestoreCount = FileBackupService.shared.sessionBackups(since: .distantPast).count
         try FileBackupService.shared.restoreFile(from: backupV1, to: file.path)
 
         // restoreFile must have backed up the current ("v2") content first, so a
         // record was appended — the undo is itself reversible.
-        XCTAssertGreaterThan(FileBackupService.shared.sessionBackups.count, beforeRestoreCount,
+        XCTAssertGreaterThan(FileBackupService.shared.sessionBackups(since: .distantPast).count, beforeRestoreCount,
                              "Restoring should back up the current content first.")
         XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), "v1\n")
     }
@@ -61,7 +61,35 @@ final class FileBackupRestoreTests: XCTestCase {
         let file = dir.appendingPathComponent("\(stem!)-tracked.md")
         try "content\n".write(to: file, atomically: true, encoding: .utf8)
         _ = try FileBackupService.shared.backupFile(at: file)
-        XCTAssertTrue(FileBackupService.shared.sessionBackups.contains { $0.originalPath == file.path },
+        XCTAssertTrue(FileBackupService.shared.sessionBackups(since: .distantPast).contains { $0.originalPath == file.path },
                       "The backup manifest must record the file's original absolute path so undo can target it.")
+    }
+
+    // MARK: - audit #2: same-basename files must not collide on restore
+
+    func test_sameBasenameDifferentFolders_doNotCorruptEachOther() throws {
+        // Two different files sharing a basename ("Inbox.md"), backed up in the
+        // same window. Each must restore its OWN pre-edit content — never the
+        // other's. (Regression for the Work/Inbox.md ↔ Personal/Inbox.md bug.)
+        let workDir = dir.appendingPathComponent("Work"); let persoDir = dir.appendingPathComponent("Personal")
+        try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: persoDir, withIntermediateDirectories: true)
+        let work = workDir.appendingPathComponent("Inbox.md")
+        let perso = persoDir.appendingPathComponent("Inbox.md")
+        try "WORK original\n".write(to: work, atomically: true, encoding: .utf8)
+        try "PERSO original\n".write(to: perso, atomically: true, encoding: .utf8)
+
+        let workBackup = try FileBackupService.shared.backupFile(at: work)
+        let persoBackup = try FileBackupService.shared.backupFile(at: perso)
+        XCTAssertNotEqual(workBackup, persoBackup, "Same-basename files must get distinct backups.")
+
+        // Mutate both, then restore each from its own backup.
+        try "WORK edited\n".write(to: work, atomically: true, encoding: .utf8)
+        try "PERSO edited\n".write(to: perso, atomically: true, encoding: .utf8)
+        try FileBackupService.shared.restoreFile(from: workBackup, to: work.path)
+        try FileBackupService.shared.restoreFile(from: persoBackup, to: perso.path)
+
+        XCTAssertEqual(try String(contentsOf: work, encoding: .utf8), "WORK original\n")
+        XCTAssertEqual(try String(contentsOf: perso, encoding: .utf8), "PERSO original\n", "Personal/Inbox.md must NOT be overwritten with Work/Inbox.md content.")
     }
 }

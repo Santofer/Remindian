@@ -4,6 +4,27 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.20.3 (June 2026)
+
+Menu-bar overhaul + a sweep of fixes from a full multi-dimension audit of the app.
+
+### Menu bar
+
+- **The menu now renders as a proper panel** (`.window` style). Previously the menu-bar dropdown used the native menu style, which split each Today-list task into separate stacked lines (checkbox, then title, then "overdue") — a mess. Now **each task is one clean line**, and the quick-add field works as intended. The panel is height-capped and scrolls instead of overflowing the screen on long lists.
+
+### Bug fixes (from the audit)
+
+- **Another UI freeze fixed.** Completing a task from the Today list ran a full file backup + read + write **on the main thread**, freezing the menu on large notes — the same class of bug as the earlier Today-list scan. Both completing a task and quick-adding now do their file work off the main thread.
+- **Undo could corrupt a note with a duplicate name.** Two vault files sharing a basename (e.g. a per-folder `Inbox.md`) could collide in the backup store, so "Undo last sync" might overwrite one with the other's content. Backups are now disambiguated by full path (with a regression test).
+- **Fixed a data race** on the backup manifest (written from the sync engine off-main and from quick-add on-main) — now lock-guarded.
+- **Shortcuts/automation no longer pop a modal file picker.** Quick-add and Sync from a Shortcut, the auto-sync timer, the file watcher, and the global hotkey now run non-interactively instead of stealing focus with a vault-picker dialog.
+- **Single-task actions sync only the active profile** (quick-add, completing a Today item) instead of sweeping every enabled profile and rebuilding everything — much faster.
+- **TickTick tokens now persist to `profiles.json`** (they were written only to the legacy config file and could be lost on reload).
+
+The audit surfaced 22 verified issues; the highest-impact ones are fixed here, the rest (minor performance edges) are tracked for follow-up.
+
+---
+
 ## v5.20.2 (June 2026)
 
 Critical hotfix.

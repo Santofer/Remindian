@@ -1,25 +1,11 @@
-# Xcode
+# Build output
 build/
 DerivedData/
-*.xcuserdata
-*.xcworkspace
+*.xcuserstate
 xcuserdata/
-*.xcscmblueprint
+
+# Release artifacts (attached to GitHub Releases, not source)
+dist/
 
 # macOS
 .DS_Store
-.AppleDouble
-.LSOverride
-._*
-
-# Swift Package Manager
-.build/
-Packages/
-Package.pins
-Package.resolved
-
-# Claude Code
-.claude/
-
-# Obsync Icons source (exported originals, not needed for build)
-Obsync Icons/

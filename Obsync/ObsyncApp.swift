@@ -38,6 +38,11 @@ struct RemindianApp: App {
                 .withSymbolConfiguration(config)
             Image(nsImage: nsImage ?? NSImage())
         }
+        // Render the menu as a real SwiftUI panel. The default `.menu` style
+        // is a native NSMenu that flattens multi-element rows (the Today list,
+        // quick-add field, etc.) into separate stacked items — `.window` lays
+        // them out exactly as designed (one row = one line).
+        .menuBarExtraStyle(.window)
     }
 }
 

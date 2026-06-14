@@ -15,6 +15,7 @@ struct MenuBarView: View {
     }
 
     var body: some View {
+        ScrollView {
         VStack(alignment: .leading, spacing: 0) {
             // Status section
             HStack {
@@ -191,7 +192,9 @@ struct MenuBarView: View {
             }
         }
         .padding(.vertical, 4)
-        .frame(width: 250)
+        }
+        .frame(width: 290)
+        .frame(maxHeight: 560) // cap so a long Today list scrolls instead of overflowing the screen (audit #7)
         .task { await syncManager.refreshAgenda() }
     }
 
@@ -259,15 +262,17 @@ struct MenuBarView: View {
                 .font(menuFont)
                 .lineLimit(1)
                 .truncationMode(.tail)
-            Spacer()
+            Spacer(minLength: 6)
             if let due = task.dueDate {
                 Text(overdue ? "overdue" : dueLabel(due))
                     .font(.caption2)
                     .foregroundColor(overdue ? .red : .secondary)
+                    .fixedSize()
             }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 1)
+        .padding(.vertical, 3)
+        .contentShape(Rectangle())
     }
 
     private func dueLabel(_ date: Date) -> String {

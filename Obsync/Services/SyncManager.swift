@@ -409,7 +409,11 @@ class SyncManager: ObservableObject {
 
     /// Sync all enabled profiles (sequentially). The single-profile case is a
     /// loop of one and behaves exactly as before. (multi-profile)
-    func performSync() async {
+    /// `interactive` controls whether a missing vault may pop a modal file
+    /// picker. User-initiated syncs (menu "Sync Now", quick-add, complete,
+    /// preview) pass true; unattended triggers (auto-sync timer, file watcher,
+    /// hotkey, Shortcuts) pass false so they never steal focus with a dialog. (audit #14)
+    func performSync(interactive: Bool = true) async {
         guard !isSyncing else {
             debugLog("[SyncManager] Skipped: already syncing")
             return
@@ -426,8 +430,8 @@ class SyncManager: ObservableObject {
 
         let activeId = profileStore.activeProfileId
         // Preserve the interactive vault re-selection flow for the active
-        // profile (the common single-profile experience).
-        if enabled.contains(where: { $0.id == activeId }) {
+        // profile (the common single-profile experience) — only when interactive.
+        if interactive, enabled.contains(where: { $0.id == activeId }) {
             _ = ensureActiveVaultAccess()
         }
 
@@ -459,7 +463,7 @@ class SyncManager: ObservableObject {
     /// Snapshot the vault backups made during the last sync into an undo
     /// manifest (earliest pre-sync copy per file).
     private func captureUndoManifest(since: Date) {
-        let recent = FileBackupService.shared.sessionBackups.filter { $0.date >= since }
+        let recent = FileBackupService.shared.sessionBackups(since: since)
         var earliestByPath: [String: FileBackupService.BackupRecord] = [:]
         for record in recent {
             if let existing = earliestByPath[record.originalPath] {
@@ -500,7 +504,7 @@ class SyncManager: ObservableObject {
     /// source inbox (Obsidian is the source of truth), then optionally sync so
     /// it reaches the destination. Returns true on success. (Shortcuts + quick-add)
     @discardableResult
-    func quickAddTask(_ text: String, triggerSync: Bool = true) async -> Bool {
+    func quickAddTask(_ text: String, triggerSync: Bool = true, interactive: Bool = true) async -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
         guard !config.vaultPath.isEmpty else {
@@ -508,23 +512,49 @@ class SyncManager: ObservableObject {
             return false
         }
         if !FileManager.default.isReadableFile(atPath: config.vaultPath) {
-            _ = ensureActiveVaultAccess()
+            // Never pop a modal picker from a Shortcut/background invocation. (audit #4)
+            if !ensureActiveVaultAccess(interactive: interactive) {
+                showErrorMessage("Vault access expired — open Remindian to re-select your vault.")
+                return false
+            }
         }
 
+        // Append off the main actor — file I/O on @MainActor janks the UI. (audit #5)
         let task = QuickAddParser.parse(trimmed)
-        let source = SyncManager.createSource(for: config.taskSourceType, config: config)
-        do {
-            _ = try source.appendNewTask(task, config: config)
-            debugLog("[SyncManager] Quick-added task '\(task.title)'")
-        } catch {
-            showErrorMessage("Couldn't add task: \(error.localizedDescription)")
+        let cfg = config.deepCopy()
+        let type = cfg.taskSourceType
+        let ok: Bool = await Task.detached(priority: .userInitiated) {
+            let source = SyncManager.createSource(for: type, config: cfg)
+            do { _ = try source.appendNewTask(task, config: cfg); return true }
+            catch { return false }
+        }.value
+        guard ok else {
+            showErrorMessage("Couldn't add task to your inbox.")
             return false
         }
+        debugLog("[SyncManager] Quick-added task '\(task.title)'")
 
         if triggerSync {
-            await performSync()
+            await syncActiveProfileOnly()
         }
         return true
+    }
+
+    /// Sync ONLY the active profile (used by single-task flows like quick-add and
+    /// agenda-complete). Avoids a full all-profiles sweep + engine rebuild for one
+    /// task, and reuses the warm active source/engine. (audit #9, #11)
+    func syncActiveProfileOnly() async {
+        guard !isSyncing else { return }
+        guard let active = profileStore.activeProfile else { await performSync(interactive: false); return }
+        updateSourceAndDestination()
+        isSyncing = true
+        statusMessage = config.dryRunMode ? "Dry run..." : "Syncing..."
+        let wasFirstSync = isFirstSync
+        let syncStart = Date()
+        let result = await syncSingleProfile(active, isActive: true)
+        if !result.isDryRun { captureUndoManifest(since: syncStart) }
+        finalizeSyncResult(result, wasFirstSync: wasFirstSync)
+        isSyncing = false
     }
 
     // MARK: - Today agenda (menu-bar glance)
@@ -562,15 +592,23 @@ class SyncManager: ObservableObject {
 
     /// Mark an agenda task complete in the source (Obsidian = source of truth),
     /// drop it from the list immediately, then sync so the destination follows.
+    /// The file mutation runs off the main actor so the menu never freezes. (audit #1)
     func completeAgendaItem(_ task: SyncTask) async {
-        do {
-            _ = try taskSource.markTaskComplete(task: task, completionDate: Date(), config: config)
-            agenda.removeAll { $0.id == task.id }
-        } catch {
+        let cfg = config.deepCopy()
+        let type = cfg.taskSourceType
+        let result: Result<Void, Error> = await Task.detached(priority: .userInitiated) {
+            let source = SyncManager.createSource(for: type, config: cfg)
+            do { _ = try source.markTaskComplete(task: task, completionDate: Date(), config: cfg); return .success(()) }
+            catch { return .failure(error) }
+        }.value
+        switch result {
+        case .success:
+            agenda.removeAll { $0.id == task.id } // optimistic UI on main
+        case .failure(let error):
             showErrorMessage("Couldn't complete “\(task.title)”: \(error.localizedDescription)")
             return
         }
-        await performSync()
+        await syncActiveProfileOnly()
     }
 
     // MARK: - Diff preview (forced dry-run)
@@ -636,14 +674,19 @@ class SyncManager: ObservableObject {
         }
     }
 
-    /// Ensure the active profile's vault is readable, prompting re-selection if
-    /// the bookmark can't be resolved. Returns true if accessible.
+    /// Ensure the active profile's vault is readable. When `interactive`, falls
+    /// back to a modal vault-picker; otherwise resolves the bookmark silently
+    /// and returns false on failure (never pops a dialog). (audit #14)
     @discardableResult
-    private func ensureActiveVaultAccess() -> Bool {
+    private func ensureActiveVaultAccess(interactive: Bool = true) -> Bool {
         guard !config.vaultPath.isEmpty else { return false }
         if FileManager.default.isReadableFile(atPath: config.vaultPath) { return true }
         debugLog("[SyncManager] Active vault not readable, attempting to resolve bookmark...")
         if resolveVaultBookmark() { return true }
+        guard interactive else {
+            debugLog("[SyncManager] Vault not readable (non-interactive) — skipping picker.")
+            return false
+        }
         debugLog("[SyncManager] Bookmark resolution failed, auto-prompting vault re-selection")
         selectVaultPath()
         return !config.vaultPath.isEmpty && FileManager.default.isReadableFile(atPath: config.vaultPath)
@@ -778,7 +821,7 @@ class SyncManager: ObservableObject {
         let interval = TimeInterval(minutes * 60)
         syncTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                await self?.performSync()
+                await self?.performSync(interactive: false)
             }
         }
     }
@@ -792,7 +835,7 @@ class SyncManager: ObservableObject {
                 modifiers: config.globalHotKeyModifiers
             ) { [weak self] in
                 Task { @MainActor in
-                    await self?.performSync()
+                    await self?.performSync(interactive: false)
                 }
             }
         } else {
@@ -807,7 +850,7 @@ class SyncManager: ObservableObject {
             FileWatcherService.shared.startWatching(path: config.vaultPath) { [weak self] in
                 Task { @MainActor in
                     debugLog("[SyncManager] File watcher triggered sync")
-                    await self?.performSync()
+                    await self?.performSync(interactive: false)
                 }
             }
         } else {
@@ -1110,7 +1153,7 @@ class SyncManager: ObservableObject {
                 config.tickTickAccessToken = destination.accessToken
                 config.tickTickRefreshToken = destination.refreshToken
                 config.tickTickTokenExpiry = destination.tokenExpiry
-                config.save()
+                persistAndApplyConfigChange() // writes profiles.json, not just the legacy config.json (audit #16)
 
                 // Recreate destination with new tokens
                 updateSourceAndDestination()
@@ -1129,7 +1172,7 @@ class SyncManager: ObservableObject {
         config.tickTickAccessToken = ""
         config.tickTickRefreshToken = ""
         config.tickTickTokenExpiry = nil
-        config.save()
+        persistAndApplyConfigChange() // persist to profiles.json (audit #16)
         updateSourceAndDestination()
         debugLog("[SyncManager] TickTick disconnected")
     }
