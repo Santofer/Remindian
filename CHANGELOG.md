@@ -4,6 +4,20 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.21.0 (June 2026)
+
+Cleanup tools + a menu fix, after diagnosing duplicate build-up from older buggy versions.
+
+### New
+
+- **Remove Duplicate Reminders.** Settings → Advanced → Troubleshooting (Apple Reminders only) now has a **Remove Duplicate Reminders…** action. It finds reminders that are exact duplicates — same title, due date, and list — left over from older versions that created the same reminder repeatedly, and removes all but one of each. The copy carrying the `obsidian://` link (your synced canonical one) is always kept, and it shows a count + confirmation before deleting. Obsidian stays your source of truth, so anything still in your vault is re-created on the next sync.
+
+### Bug fixes
+
+- **The menu "Today" list no longer shows duplicates.** It now de-duplicates by title + due day, so a task that exists in more than one vault file (e.g. your inbox *and* its project note) appears once instead of several times.
+
+---
+
 ## v5.20.4 (June 2026)
 
 Critical hotfix for v5.20.3.

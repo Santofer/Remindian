@@ -48,4 +48,20 @@ final class AgendaBuilderTests: XCTestCase {
     func test_emptyInput() {
         XCTAssertTrue(AgendaBuilder.build(from: [], now: now).isEmpty)
     }
+
+    func test_dedupesSameTitleAndDueDay() {
+        // The same task appearing in multiple vault files (e.g. Inbox.md + its
+        // real file) must show ONCE in the menu, not once per copy.
+        let tasks = [
+            task("Pay rent", due: 0),
+            task("Pay rent", due: 0),   // duplicate copy
+            task("PAY RENT", due: 0),   // case variant — still the same task
+            task("Pay rent", due: -1),  // same title, different day → kept
+            task("Other", due: 0),
+        ]
+        let agenda = AgendaBuilder.build(from: tasks, now: now)
+        let payRent = agenda.filter { $0.title.lowercased() == "pay rent" }
+        XCTAssertEqual(payRent.count, 2, "One 'Pay rent' per distinct due day (today + yesterday), de-duplicated across copies.")
+        XCTAssertEqual(agenda.filter { $0.title == "Other" }.count, 1)
+    }
 }

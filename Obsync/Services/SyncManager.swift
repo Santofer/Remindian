@@ -1200,6 +1200,26 @@ class SyncManager: ObservableObject {
         syncLog.clear()
     }
 
+    // MARK: - Maintenance: remove duplicate reminders (Apple Reminders only)
+
+    /// Count duplicate reminders that "Remove Duplicate Reminders" would delete
+    /// (a dry run). Returns 0 if the active destination isn't Apple Reminders.
+    func previewDuplicateReminders() async -> Int {
+        updateSourceAndDestination()
+        guard let dest = taskDestination as? RemindersDestination else { return 0 }
+        return (try? await dest.removeDuplicateReminders(dryRun: true)) ?? 0
+    }
+
+    /// Delete duplicate reminders. Returns the number removed.
+    @discardableResult
+    func removeDuplicateReminders() async -> Int {
+        guard let dest = taskDestination as? RemindersDestination else { return 0 }
+        let removed = (try? await dest.removeDuplicateReminders(dryRun: false)) ?? 0
+        statusMessage = "Removed \(removed) duplicate reminder\(removed == 1 ? "" : "s")"
+        debugLog("[SyncManager] Removed \(removed) duplicate reminders")
+        return removed
+    }
+
     // MARK: - Error Handling
 
     private func showErrorMessage(_ message: String) {

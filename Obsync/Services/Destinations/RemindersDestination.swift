@@ -68,6 +68,62 @@ class RemindersDestination: TaskDestination {
         return eventStore.calendars(for: .reminder).map { $0.title }
     }
 
+    // MARK: - Maintenance: de-duplicate reminders
+
+    /// Remove duplicate reminders. Two reminders are "duplicates" only when they
+    /// share title + due day + completion state + list — a conservative key, so
+    /// genuinely-different reminders that happen to share a title are never
+    /// touched. Within each duplicate group the copy carrying an `obsidian://`
+    /// URL (the synced/canonical one) is kept, else the first. `dryRun` only
+    /// counts what would be removed. Returns the count removed / removable.
+    ///
+    /// This cleans up the mess left by older buggy versions that created the same
+    /// reminder many times. (cleanup tool)
+    func removeDuplicateReminders(dryRun: Bool) async throws -> Int {
+        let lists = eventStore.calendars(for: .reminder)
+        let all: [EKReminder] = try await withThrowingTaskGroup(of: [EKReminder].self) { group in
+            for list in lists {
+                group.addTask {
+                    let predicate = self.eventStore.predicateForReminders(in: [list])
+                    return try await withCheckedThrowingContinuation { (c: CheckedContinuation<[EKReminder], Error>) in
+                        self.eventStore.fetchReminders(matching: predicate) { c.resume(returning: $0 ?? []) }
+                    }
+                }
+            }
+            var out: [EKReminder] = []
+            for try await r in group { out.append(contentsOf: r) }
+            return out
+        }
+
+        func key(_ r: EKReminder) -> String {
+            let title = (r.title ?? "").trimmingCharacters(in: .whitespaces)
+            let due: String
+            if let c = r.dueDateComponents { due = "\(c.year ?? 0)-\(c.month ?? 0)-\(c.day ?? 0)" } else { due = "none" }
+            let list = r.calendar?.calendarIdentifier ?? "?"
+            return "\(title)|\(due)|\(r.isCompleted)|\(list)"
+        }
+
+        var groups: [String: [EKReminder]] = [:]
+        for r in all { groups[key(r), default: []].append(r) }
+
+        var toDelete: [EKReminder] = []
+        for (_, members) in groups where members.count > 1 {
+            let keepIdx = members.firstIndex { $0.url?.scheme == "obsidian" } ?? 0
+            for (i, r) in members.enumerated() where i != keepIdx { toDelete.append(r) }
+        }
+
+        if dryRun { return toDelete.count }
+
+        var removed = 0
+        for r in toDelete {
+            do { try eventStore.remove(r, commit: false); removed += 1 }
+            catch { debugLog("[RemindersDestination] Failed to remove duplicate '\(r.title ?? "?")': \(error.localizedDescription)") }
+        }
+        if removed > 0 { try? eventStore.commit() }
+        debugLog("[RemindersDestination] Removed \(removed) duplicate reminder(s) of \(toDelete.count) candidates across \(all.count) total.")
+        return removed
+    }
+
     // MARK: - CRUD
 
     func createTask(from task: SyncTask, inList listName: String, config: SyncConfiguration) async throws -> String {

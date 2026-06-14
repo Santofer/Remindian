@@ -990,6 +990,9 @@ struct FieldMappingRow: View {
 struct AdvancedSettingsView: View {
     @EnvironmentObject var syncManager: SyncManager
     @State private var showResetConfirmation = false
+    @State private var isCheckingDuplicates = false
+    @State private var duplicateCount: Int?
+    @State private var showDuplicateConfirm = false
 
     var body: some View {
         ScrollView {
@@ -1254,6 +1257,25 @@ struct AdvancedSettingsView: View {
                 Text("Clears all sync mappings, history, and logs. The next sync will treat all tasks as new.")
                     .font(.caption)
                     .foregroundColor(.secondary)
+
+                if syncManager.config.taskDestinationType == .appleReminders {
+                    Divider()
+                    HStack {
+                        Button(isCheckingDuplicates ? "Checking…" : "Remove Duplicate Reminders…") {
+                            Task {
+                                isCheckingDuplicates = true
+                                duplicateCount = await syncManager.previewDuplicateReminders()
+                                isCheckingDuplicates = false
+                                showDuplicateConfirm = true
+                            }
+                        }
+                        .disabled(isCheckingDuplicates)
+                        if isCheckingDuplicates { ProgressView().scaleEffect(0.6) }
+                    }
+                    Text("Finds reminders that are exact duplicates (same title, due date, list) — left over from older buggy versions — and removes all but one. Reminders synced from Obsidian (with the obsidian:// link) are kept.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             } header: {
                 Text("Troubleshooting")
             }
@@ -1293,6 +1315,22 @@ struct AdvancedSettingsView: View {
             }
         } message: {
             Text("This will clear all sync mappings, history, and logs. The next sync will treat all tasks as new and re-create them in Reminders.")
+        }
+        .alert("Remove duplicate reminders?", isPresented: $showDuplicateConfirm) {
+            if (duplicateCount ?? 0) > 0 {
+                Button("Cancel", role: .cancel) { }
+                Button("Remove \(duplicateCount ?? 0)", role: .destructive) {
+                    Task { await syncManager.removeDuplicateReminders() }
+                }
+            } else {
+                Button("OK", role: .cancel) { }
+            }
+        } message: {
+            if let n = duplicateCount, n > 0 {
+                Text("Found \(n) duplicate reminder\(n == 1 ? "" : "s") (same title, due date and list). Remove all but one of each? Reminders synced from Obsidian are kept. This can't be undone — but Obsidian stays your source of truth, so the next sync re-creates anything still in your vault.")
+            } else {
+                Text("No duplicate reminders found 🎉")
+            }
         }
     }
 }
