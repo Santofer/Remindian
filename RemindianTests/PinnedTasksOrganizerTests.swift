@@ -95,6 +95,28 @@ final class PinnedTasksOrganizerTests: XCTestCase {
         XCTAssertTrue(PinnedTasksOrganizer.sections(from: tasks, grouping: .date, now: now, query: "zzz").isEmpty)
     }
 
+    func test_flat_singleUnheaderedSectionSortedByDue() {
+        let tasks = [task("c", due: 5), task("a", due: -1), task("b", due: 0)]
+        let s = PinnedTasksOrganizer.sections(from: tasks, grouping: .flat, now: now)
+        XCTAssertEqual(s.count, 1, "Flat mode = one section.")
+        XCTAssertEqual(s.first?.title, "", "Flat section has no header title.")
+        XCTAssertEqual(s.first?.tasks.map { $0.title }, ["a", "b", "c"], "Soonest-due first.")
+    }
+
+    func test_flat_excludesCompletedAndApplisSearch() {
+        let tasks = [task("Pay rent", due: 0), task("done", due: 0, completed: true), task("Buy milk", due: 0)]
+        let s = PinnedTasksOrganizer.sections(from: tasks, grouping: .flat, now: now, query: "pay")
+        XCTAssertEqual(s.first?.tasks.map { $0.title }, ["Pay rent"])
+    }
+
+    func test_grouping_labelsAreUserFacing() {
+        XCTAssertEqual(PinnedTasksOrganizer.Grouping.flat.label, "Tasks")
+        XCTAssertEqual(PinnedTasksOrganizer.Grouping.date.label, "Deadlines")
+        XCTAssertEqual(PinnedTasksOrganizer.Grouping.priority.label, "Priorities")
+        XCTAssertEqual(PinnedTasksOrganizer.Grouping.tag.label, "Tags")
+        XCTAssertEqual(PinnedTasksOrganizer.Grouping.recurrence.label, "Recurring")
+    }
+
     func test_emptyInput() {
         XCTAssertTrue(PinnedTasksOrganizer.sections(from: [], grouping: .date, now: now).isEmpty)
     }

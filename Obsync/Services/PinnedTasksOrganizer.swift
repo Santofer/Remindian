@@ -7,25 +7,32 @@ import Foundation
 struct PinnedTasksOrganizer {
 
     /// How the task list is grouped. Persisted as a raw string by the view.
+    /// `.flat` ("Tasks") is the default — a single ungrouped list. The others
+    /// group into sections.
     enum Grouping: String, CaseIterable, Identifiable {
-        case date, priority, tag, recurrence
+        case flat, date, priority, tag, recurrence
         var id: String { rawValue }
+        /// User-facing name (also the toolbar pull-down title).
         var label: String {
             switch self {
-            case .date: return "Date"
-            case .priority: return "Priority"
-            case .tag: return "Tag"
+            case .flat: return "Tasks"
+            case .date: return "Deadlines"
+            case .priority: return "Priorities"
+            case .tag: return "Tags"
             case .recurrence: return "Recurring"
             }
         }
         var systemImage: String {
             switch self {
+            case .flat: return "list.bullet"
             case .date: return "calendar"
             case .priority: return "flag"
             case .tag: return "number"
             case .recurrence: return "repeat"
             }
         }
+        /// True when the list should render with no section headers.
+        var isFlat: Bool { self == .flat }
     }
 
     /// A semantic accent for a section header dot — mapped to a real color in the
@@ -56,11 +63,18 @@ struct PinnedTasksOrganizer {
         let searched = tasks.filter { matches($0, query: query) }
         let open = dedup(searched.filter { !$0.isCompleted }, calendar: calendar)
         switch grouping {
+        case .flat:       return byFlat(open)
         case .date:       return byDate(open, now: now, calendar: calendar)
         case .priority:   return byPriority(open, now: now, calendar: calendar)
         case .tag:        return byTag(open, now: now, calendar: calendar)
         case .recurrence: return byRecurrence(open, now: now, calendar: calendar)
         }
+    }
+
+    /// One ungrouped section with all open tasks (the "Tasks" mode). The view
+    /// renders these without a header.
+    private static func byFlat(_ tasks: [SyncTask]) -> [Section] {
+        [nonEmpty("all", "", .gray, tasks)].compactMap { $0 }
     }
 
     // MARK: - Search

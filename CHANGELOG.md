@@ -4,6 +4,18 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.25.2 (June 2026)
+
+Pinned Tasks window: seamless toolbar, search back, and a "Tasks" view.
+
+### Pinned Tasks window
+
+- **The toolbar now blends with the window** — a transparent, full-height vibrancy background instead of a slightly darker bar.
+- **Search is back** as a native toolbar search field, filtering by title or #tag live.
+- **New default "Tasks" view** — a single, ungrouped list. The pull-down now offers **Tasks / Deadlines / Priorities / Tags / Recurring**; pick one to group (or stay on the flat "Tasks" list). The control shows the current view's name.
+
+---
+
 ## v5.25.1 (June 2026)
 
 Pinned Tasks window: everything on one line, no opaque titlebar.
