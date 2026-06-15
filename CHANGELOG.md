@@ -4,6 +4,16 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.24.6 (June 2026)
+
+Pinned Tasks window: cleaner toolbar (no double-decoration).
+
+### Bug fixes
+
+- **The toolbar items looked doubly-decorated** on macOS Tahoe — the system draws a "Liquid Glass" pill behind each toolbar item, and the app was drawing its *own* pill on top. Removed the app's pills so each control shows a single, native button. The items are now sized to their content (so the pill hugs the text), the **open-task count moved into the grouping popover** (a small "N open" line), and the trailing item is just the refresh button.
+
+---
+
 ## v5.24.5 (June 2026)
 
 Pinned Tasks window: native toolbar — the title popup is clickable again.

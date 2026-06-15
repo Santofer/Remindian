@@ -98,19 +98,26 @@ final class PinnedToolbarDelegate: NSObject, NSToolbarDelegate {
         case .pinnedGrouping:
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
             let host = NSHostingView(rootView: GroupingTitleView())
-            host.frame = NSRect(x: 0, y: 0, width: 150, height: 28)
+            host.frame = NSRect(origin: .zero, size: fitting(host, minWidth: 90))
             item.view = host
             item.visibilityPriority = .high
             return item
         case .pinnedTrailing:
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
             let host = NSHostingView(rootView: PinnedTrailingView())
-            host.frame = NSRect(x: 0, y: 0, width: 78, height: 28)
+            host.frame = NSRect(origin: .zero, size: fitting(host, minWidth: 24))
             item.view = host
             return item
         default:
             return nil
         }
+    }
+
+    /// Size a hosting view to its SwiftUI content so the system toolbar pill
+    /// hugs the content instead of a fixed, oversized box.
+    private func fitting(_ host: NSView, minWidth: CGFloat) -> NSSize {
+        let s = host.fittingSize
+        return NSSize(width: max(s.width, minWidth), height: max(s.height, 22))
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -126,6 +133,7 @@ final class PinnedToolbarDelegate: NSObject, NSToolbarDelegate {
 struct GroupingTitleView: View {
     @AppStorage("pinnedTasksGrouping") private var groupingRaw = PinnedTasksOrganizer.Grouping.date.rawValue
     @ObservedObject private var model = PinnedTasksModel.shared
+    @ObservedObject private var syncManager = SyncManager.shared
     @State private var showOptions = false
     @FocusState private var searchFocused: Bool
 
@@ -134,6 +142,8 @@ struct GroupingTitleView: View {
     }
 
     var body: some View {
+        // No custom background — the toolbar item provides the (single) native
+        // button styling. Drawing our own pill on top double-decorated it. (pinned window toolbar)
         Button { showOptions.toggle() } label: {
             HStack(spacing: 5) {
                 Text(menuTitle(grouping))
@@ -149,10 +159,9 @@ struct GroupingTitleView: View {
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundColor(.secondary)
             }
-            .padding(.horizontal, 11)
-            .padding(.vertical, 4)
-            .background(Capsule().fill(Color.primary.opacity(0.07)))
-            .contentShape(Capsule())
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help("Choose grouping & search")
@@ -170,9 +179,22 @@ struct GroupingTitleView: View {
 
     private var optionsPopover: some View {
         VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Tasks")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.secondary)
+                Spacer()
+                Text("\(syncManager.allOpenTasks.count) open")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 9)
+            .padding(.bottom, 2)
+
             searchField
                 .padding(.horizontal, 10)
-                .padding(.top, 10)
+                .padding(.top, 6)
                 .padding(.bottom, 9)
 
             Divider()
@@ -246,23 +268,21 @@ struct PinnedTrailingView: View {
     @ObservedObject private var syncManager = SyncManager.shared
 
     var body: some View {
-        HStack(spacing: 7) {
-            if !syncManager.allOpenTasks.isEmpty {
-                Text("\(syncManager.allOpenTasks.count)")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 6).padding(.vertical, 1)
-                    .background(Capsule().fill(Color.primary.opacity(0.08)))
-            }
+        // Just the refresh control — the toolbar item supplies the native button
+        // styling. The open-task count moved into the grouping popover. (pinned window toolbar)
+        Group {
             if syncManager.isLoadingAgenda {
-                ProgressView().controlSize(.mini).scaleEffect(0.7).frame(width: 14)
+                ProgressView().controlSize(.mini).scaleEffect(0.7).frame(width: 16, height: 16)
             } else {
                 Button {
                     Task { await syncManager.refreshAgenda(force: true) }
                 } label: {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.secondary)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 3)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help("Refresh")
