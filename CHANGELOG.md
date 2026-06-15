@@ -4,6 +4,16 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.24.1 (June 2026)
+
+Pinned Tasks window: a proper titlebar.
+
+### Menu bar / windows
+
+- **The Pinned Tasks window now uses a real titlebar.** "Tasks" is centered at the close-button level, and the **refresh button + open-task count** sit on the right of the same titlebar (a titlebar accessory) instead of a row below it. The in-window header is now just the grouping picker and the search field, so the list starts higher.
+
+---
+
 ## v5.24.0 (June 2026)
 
 Search in the Pinned Tasks window.

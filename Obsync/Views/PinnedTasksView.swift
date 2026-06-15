@@ -34,10 +34,15 @@ final class PinnedTasksWindowController: NSObject {
 
         let hosting = NSHostingController(rootView: PinnedTasksView().environmentObject(SyncManager.shared))
         let p = NSPanel(contentViewController: hosting)
-        p.styleMask = [.titled, .closable, .resizable, .fullSizeContentView, .nonactivatingPanel, .utilityWindow]
+        // Standard titlebar: the native title sits centered at the close-button
+        // level, and a right titlebar accessory holds the refresh button + count
+        // on the same toolbar line. Still a non-activating floating panel, just
+        // with a normal-height titlebar so the centered title + accessory render
+        // predictably. (pinned window toolbar)
+        p.styleMask = [.titled, .closable, .resizable, .nonactivatingPanel]
         p.title = "Tasks"
         p.titlebarAppearsTransparent = true
-        p.titleVisibility = .hidden
+        p.titleVisibility = .visible
         p.isFloatingPanel = true                 // floats above the app's own windows
         p.level = .floating                      // …and above other apps' normal windows
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]  // every Space + over fullscreen
@@ -46,6 +51,15 @@ final class PinnedTasksWindowController: NSObject {
         p.isMovableByWindowBackground = true
         p.standardWindowButton(.zoomButton)?.isHidden = true
         p.standardWindowButton(.miniaturizeButton)?.isHidden = true
+
+        // Refresh + count, parked at the right end of the titlebar.
+        let accessory = NSTitlebarAccessoryViewController()
+        let accessoryView = NSHostingView(rootView: PinnedToolbarAccessory().environmentObject(SyncManager.shared))
+        accessoryView.frame = NSRect(x: 0, y: 0, width: 74, height: 28)
+        accessory.view = accessoryView
+        accessory.layoutAttribute = .trailing
+        p.addTitlebarAccessoryViewController(accessory)
+
         p.setContentSize(NSSize(width: 300, height: 440))
         p.minSize = NSSize(width: 260, height: 220)
         p.identifier = NSUserInterfaceItemIdentifier("pinned-tasks-window")
@@ -78,7 +92,6 @@ struct PinnedTasksView: View {
     private var sections: [PinnedTasksOrganizer.Section] {
         PinnedTasksOrganizer.sections(from: syncManager.allOpenTasks, grouping: grouping, now: Date(), query: query)
     }
-    private var totalCount: Int { sections.reduce(0) { $0 + $1.tasks.count } }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -92,32 +105,14 @@ struct PinnedTasksView: View {
     }
 
     // MARK: Header
+    //
+    // The title ("Tasks") and the refresh button + count live in the native
+    // titlebar now (centered title at the close-button level; refresh on the
+    // right via a titlebar accessory). The in-content header is just the
+    // grouping picker + search.
 
     private var header: some View {
         VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                Text("Tasks")
-                    .font(.system(size: 14, weight: .semibold))
-                Text("\(totalCount)")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 6).padding(.vertical, 1)
-                    .background(Capsule().fill(Color.primary.opacity(0.08)))
-                Spacer()
-                if syncManager.isLoadingAgenda {
-                    ProgressView().controlSize(.mini).scaleEffect(0.7)
-                } else {
-                    Button {
-                        Task { await syncManager.refreshAgenda(force: true) }
-                    } label: {
-                        Image(systemName: "arrow.clockwise").font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Refresh")
-                }
-            }
-
             Picker("", selection: $groupingRaw) {
                 ForEach(PinnedTasksOrganizer.Grouping.allCases) { g in
                     Text(g.label).tag(g.rawValue)
@@ -130,7 +125,7 @@ struct PinnedTasksView: View {
             searchField
         }
         .padding(.horizontal, 12)
-        .padding(.top, 10)
+        .padding(.top, 8)
         .padding(.bottom, 8)
     }
 
@@ -321,6 +316,43 @@ private struct PinnedTaskRow: View {
         if cal.isDateInTomorrow(due) { return ("Tomorrow", .secondary) }
         let f = DateFormatter(); f.dateFormat = "MMM d"
         return (f.string(from: due), .secondary)
+    }
+}
+
+// MARK: - Titlebar accessory (refresh + open-task count)
+//
+// Hosted in the window's right titlebar accessory, so it sits on the same line
+// as the centered "Tasks" title and the close button.
+
+private struct PinnedToolbarAccessory: View {
+    @EnvironmentObject var syncManager: SyncManager
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Spacer(minLength: 0)
+            if !syncManager.allOpenTasks.isEmpty {
+                Text("\(syncManager.allOpenTasks.count)")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .background(Capsule().fill(Color.primary.opacity(0.08)))
+            }
+            if syncManager.isLoadingAgenda {
+                ProgressView().controlSize(.mini).scaleEffect(0.7).frame(width: 14)
+            } else {
+                Button {
+                    Task { await syncManager.refreshAgenda(force: true) }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Refresh")
+            }
+        }
+        .padding(.trailing, 12)
+        .frame(maxHeight: .infinity)
     }
 }
 
