@@ -869,6 +869,18 @@ struct TaskNotesSettingsView: View {
                     Text("Relative path within your vault where TaskNotes stores task files.")
                         .font(.caption)
                         .foregroundColor(.secondary)
+
+                    HStack {
+                        Text("Default tag:")
+                            .foregroundColor(.secondary)
+                        TextField("e.g. task (optional)", text: $syncManager.config.taskNotesDefaultTag)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(maxWidth: .infinity)
+                    }
+
+                    Text("Automatically added to the tags of every note Remindian creates here from a reminder. Apple Reminders don't carry tags into the sync, so this lets you stamp a fixed one (e.g. \"task\"). Leave empty for none. (#78)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 } header: {
                     Text("Integration")
                 }

@@ -37,9 +37,11 @@ final class PinnedTasksWindowController: NSObject {
 
         let hosting = NSHostingController(rootView: PinnedTasksView().environmentObject(SyncManager.shared))
         let p = NSPanel(contentViewController: hosting)
-        // Seamless full-height vibrancy, hidden native title, transparent titlebar.
-        // The title control is drawn by the SwiftUI content on the titlebar line.
-        p.styleMask = [.titled, .closable, .resizable, .fullSizeContentView, .nonactivatingPanel]
+        // Compact standard titlebar (NO fullSizeContentView — on Tahoe that
+        // reserved a tall empty band above the content). Traffic lights sit in the
+        // thin titlebar; the grouping control + refresh are the first content row
+        // right below it. Hidden native title; the grouping control names the view.
+        p.styleMask = [.titled, .closable, .resizable, .nonactivatingPanel]
         p.titlebarAppearsTransparent = true
         p.titleVisibility = .hidden
         p.isFloatingPanel = true                 // floats above the app's own windows

@@ -137,6 +137,7 @@ class Things3Destination: TaskDestination {
 
         // Fetch from active lists
         let activeLists = ["Today", "Inbox", "Anytime", "Upcoming", "Someday"]
+        var activeListsSucceeded = 0
         for listName in activeLists {
             progressCallback?("Fetching Things 3 (\(listName))…")
             let listStart = Date()
@@ -145,6 +146,7 @@ class Things3Destination: TaskDestination {
                 let elapsed = Date().timeIntervalSince(listStart)
                 debugLog("[Things3] Fetched \(listTasks.count) tasks from '\(listName)' in \(String(format: "%.2f", elapsed))s")
                 tasks.append(contentsOf: listTasks)
+                activeListsSucceeded += 1
             } catch Things3Error.notAuthorized {
                 // Automation permission denied → every list and the Logbook will
                 // fail identically, and returning an empty task set would make
@@ -158,6 +160,25 @@ class Things3Destination: TaskDestination {
                 debugLog("[Things3] Failed to fetch '\(listName)' after \(String(format: "%.2f", elapsed))s: \(error.localizedDescription)")
                 listFailures.append((listName: listName, error: error))
                 // Continue with other lists — partial data is better than none.
+            }
+        }
+
+        // Locale fallback (#77): if NONE of the built-in lists could be read — the
+        // signature of a non-English Things, where "Today"/"Inbox"/… don't exist —
+        // fetch open to-dos by status instead, which doesn't depend on list names.
+        if activeListsSucceeded == 0 {
+            progressCallback?("Fetching Things 3 (open tasks)…")
+            do {
+                let openTasks = try await fetchOpenTasksByStatus()
+                debugLog("[Things3] Locale fallback fetched \(openTasks.count) open tasks by status.")
+                tasks.append(contentsOf: openTasks)
+                if !openTasks.isEmpty {
+                    // The named-list failures were just a localization artefact —
+                    // don't surface them as errors since the fallback succeeded.
+                    listFailures.removeAll { activeLists.contains($0.listName) }
+                }
+            } catch {
+                debugLog("[Things3] Locale fallback (open tasks by status) failed: \(error.localizedDescription)")
             }
         }
 
@@ -701,10 +722,24 @@ class Things3Destination: TaskDestination {
 
     /// Fetch tasks from a specific Things 3 list via AppleScript (with 30s timeout).
     private func fetchTasksFromList(_ listName: String) async throws -> [SyncTask] {
+        // `list "Name"` is localized by Things (Today/Hoy/Aujourd'hui…). Used for
+        // the per-list pass; the locale-independent fallback below uses a status
+        // query instead. (#77)
+        try await fetchTasks(collection: "to dos of list \"\(listName)\"", defaultList: listName)
+    }
+
+    /// Locale-independent open-task fetch — doesn't reference any (localized)
+    /// built-in list name. The fallback when Things runs in a non-English
+    /// language and `list "Today"` etc. don't exist. (#77)
+    private func fetchOpenTasksByStatus() async throws -> [SyncTask] {
+        try await fetchTasks(collection: "(to dos whose status is open)", defaultList: "Things")
+    }
+
+    private func fetchTasks(collection: String, defaultList: String) async throws -> [SyncTask] {
         let scriptSource = """
             tell application id "com.culturedcode.ThingsMac"
                 set todoList to {}
-                repeat with toDo in to dos of list "\(listName)"
+                repeat with toDo in \(collection)
                     set todoId to id of toDo
                     set todoName to name of toDo
                     set todoNotes to notes of toDo
@@ -737,7 +772,7 @@ class Things3Destination: TaskDestination {
 
         guard let result = try await executeAppleScript(scriptSource, timeout: 30),
               let resultString = result.stringValue else {
-            debugLog("[Things3] AppleScript returned nil fetching \(listName)")
+            debugLog("[Things3] AppleScript returned nil fetching \(defaultList)")
             return []
         }
 
@@ -765,7 +800,7 @@ class Things3Destination: TaskDestination {
             let completionDate = parseAppleScriptDate(completionDateStr)
 
             let tags = tagNames.isEmpty ? [] : tagNames.components(separatedBy: ", ").map { "#\($0)" }
-            let targetList = !project.isEmpty ? project : (!area.isEmpty ? area : listName)
+            let targetList = !project.isEmpty ? project : (!area.isEmpty ? area : defaultList)
 
             let task = SyncTask(
                 title: name,

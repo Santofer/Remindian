@@ -4,6 +4,25 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.25.0 (June 2026)
+
+Three reported bugs fixed: Things 3 in non-English languages, TaskNotes tags, and international filenames.
+
+### Bug fixes
+
+- **Things 3 sync no longer fails in non-English languages (#77).** Remindian fetched tasks using the built-in list names "Today", "Inbox", etc., which Things *localizes* ("Hoy", "Entrada", …), so on a Spanish/French/… Things the sync errored with *Can't get list "Today"*. When none of the built-in lists can be read, Remindian now falls back to a **locale-independent** query (open to-dos by status) that doesn't depend on list names. English setups are unchanged.
+- **International characters are kept in TaskNotes filenames (#79).** "Nu försöker vi med åäö" now creates `nu-försöker-vi-med-åäö.md` instead of the stripped/transliterated `nu-forsoker-vi-med-aao`. The slug preserves letters from any script (Swedish å/ä/ö, accents, CJK, Cyrillic…) and only removes characters that are unsafe in a filename. (The note's displayed title was always correct — this is just the on-disk filename.)
+
+### New
+
+- **Default tag for reminders synced into TaskNotes (#78).** Apple Reminders don't carry tags into the sync, so **Settings → TaskNotes → Default tag** lets you set a fixed tag (e.g. `task`) that's automatically added to every note Remindian creates from a reminder. Leave it empty for none.
+
+### Pinned Tasks window
+
+- **Removed the big empty band** at the top of the window. It came from a full-size-content titlebar that, on macOS Tahoe, reserved a tall strip above the content. The window now uses a compact standard titlebar with the grouping control + refresh as the first content row right below it — no wasted space.
+
+---
+
 ## v5.24.8 (June 2026)
 
 Hotfix: the Pinned Tasks grouping popup is clickable again.

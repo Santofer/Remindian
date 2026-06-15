@@ -131,4 +131,42 @@ final class TaskNotesParserTests: XCTestCase {
         let isoDate = isoFormatter.date(from: "2026-03-15T14:30:00")
         XCTAssertNotNil(isoDate)
     }
+
+    // MARK: - #78 default tag for reminders synced into TaskNotes
+
+    private func makeFileSource(defaultTag: String) -> TaskNotesSource {
+        let source = TaskNotesSource()
+        source.integrationMode = .fileBased   // force the file writer (no mtn CLI)
+        source.defaultTag = defaultTag
+        return source
+    }
+
+    private func newNoteContent(_ source: TaskNotesSource, _ task: SyncTask) throws -> String {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        let config = SyncConfiguration()
+        config.vaultPath = tempDir.path
+        config.taskNotesFolder = "tasks"
+        let src = try source.appendNewTask(task, config: config)
+        let rel = src.filePath.hasPrefix("/") ? String(src.filePath.dropFirst()) : src.filePath
+        return try String(contentsOf: tempDir.appendingPathComponent(rel), encoding: .utf8)
+    }
+
+    func test_78_defaultTagStampedOnTaglessReminder() throws {
+        let content = try newNoteContent(makeFileSource(defaultTag: "task"), SyncTask(title: "Buy milk"))
+        XCTAssertTrue(content.contains("- task"), "Default tag must be written to frontmatter tags. Got:\n\(content)")
+    }
+
+    func test_78_defaultTagNotDuplicated() throws {
+        let task = SyncTask(title: "Buy milk", tags: ["#task"])
+        let content = try newNoteContent(makeFileSource(defaultTag: "task"), task)
+        let occurrences = content.components(separatedBy: "- task").count - 1
+        XCTAssertEqual(occurrences, 1, "Default tag must not be duplicated when already present. Got:\n\(content)")
+    }
+
+    func test_78_noTagsBlockWhenUnsetAndTagless() throws {
+        let content = try newNoteContent(makeFileSource(defaultTag: ""), SyncTask(title: "Buy milk"))
+        XCTAssertFalse(content.contains("tags:"), "No default tag + no task tags → no tags block. Got:\n\(content)")
+    }
 }

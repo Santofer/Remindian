@@ -31,25 +31,25 @@ class TaskNotesSource: TaskSource {
 
     /// Produce a filesystem-safe, human-readable slug from a task title.
     ///
-    /// Transliterates Latin diacritics (à→a, ö→o, ñ→n) instead of stripping
-    /// them, so "Från Mac till lördag" becomes "fran-mac-till-lordag" rather
-    /// than the old "frn-mac-till-lrdag". Characters outside the Latin script
-    /// (CJK, Cyrillic, …) have no ASCII fold, so they're dropped — and when
-    /// that would leave an empty slug we fall back to a stable token so we
-    /// never emit a bare ".md" filename or collide. (#73)
+    /// Unicode-aware: keeps letters, marks and numbers from ANY script, so
+    /// "Nu försöker vi med åäö" stays "nu-försöker-vi-med-åäö" and "买牛奶"
+    /// stays "买牛奶" — diacritics and non-Latin scripts are preserved, not
+    /// stripped (#79, replacing the old ASCII-folding behaviour from #73). Only
+    /// characters that are unsafe or noisy in a filename are removed (path
+    /// separators, punctuation, emoji); whitespace collapses to single hyphens
+    /// for tidy, link-friendly names. Falls back to a stable token when the
+    /// result would be empty so we never emit a bare ".md" filename.
     ///
     /// The displayed task title is always preserved separately in the file's
     /// YAML frontmatter (`title:`); this only affects the on-disk filename.
     static func slugify(_ title: String, maxLength: Int = 50) -> String {
-        let folded = title.folding(
-            options: .diacriticInsensitive,
-            locale: Locale(identifier: "en_US_POSIX")
-        )
-        let slug = folded
+        let slug = title
             .lowercased()
-            .replacingOccurrences(of: "[^a-z0-9\\s-]", with: "", options: .regularExpression)
+            // Keep Unicode letters (\p{L}), combining marks (\p{M}), numbers
+            // (\p{N}), whitespace, underscores and hyphens; drop the rest.
+            .replacingOccurrences(of: "[^\\p{L}\\p{M}\\p{N}\\s_-]", with: "", options: .regularExpression)
             .replacingOccurrences(of: "\\s+", with: "-", options: .regularExpression)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-_"))
             .prefix(maxLength)
         let result = String(slug)
         return result.isEmpty ? "task-\(UUID().uuidString.prefix(8))" : result
@@ -97,6 +97,11 @@ class TaskNotesSource: TaskSource {
 
     /// Which field determines Reminders list (#20): "tags", "project", "context", or custom
     var listField: String = "tags"
+
+    /// A tag automatically added to every note created from a reminder (#78).
+    /// Empty = none. Lets users who sync Reminders → TaskNotes stamp a fixed tag
+    /// (e.g. "task") even though Apple Reminders don't carry tags into EventKit.
+    var defaultTag: String = ""
 
     /// Check if a status value represents a completed task.
     func isStatusCompleted(_ status: String) -> Bool {
@@ -538,6 +543,12 @@ class TaskNotesSource: TaskSource {
             let tagName = tag.hasPrefix("#") ? tag : "#\(tag)"
             createText += " \(tagName)"
         }
+        // Stamp the configured default tag if it isn't already present. (#78)
+        if !defaultTag.isEmpty {
+            let dt = defaultTag.hasPrefix("#") ? defaultTag : "#\(defaultTag)"
+            let existing = task.tags.map { $0.hasPrefix("#") ? $0 : "#\($0)" }
+            if !existing.contains(dt) { createText += " \(dt)" }
+        }
 
         let output = try runMtn(args: ["create", createText], collectionPath: collectionPath)
         debugLog("[TaskNotes] Created task via CLI: \(output.trimmingCharacters(in: .whitespacesAndNewlines))")
@@ -598,8 +609,11 @@ class TaskNotesSource: TaskSource {
             frontmatter += "\(fm.scheduled): \(dateFormatter.string(from: startDate))\n"
         }
 
-        if !task.tags.isEmpty {
-            let tagNames = task.tags.map { $0.hasPrefix("#") ? String($0.dropFirst()) : $0 }
+        var tagNames = task.tags.map { $0.hasPrefix("#") ? String($0.dropFirst()) : $0 }
+        // Stamp the configured default tag if it isn't already present. (#78)
+        let dt = defaultTag.hasPrefix("#") ? String(defaultTag.dropFirst()) : defaultTag
+        if !dt.isEmpty && !tagNames.contains(dt) { tagNames.append(dt) }
+        if !tagNames.isEmpty {
             frontmatter += "\(fm.tags):\n"
             for tag in tagNames {
                 frontmatter += "  - \(tag)\n"

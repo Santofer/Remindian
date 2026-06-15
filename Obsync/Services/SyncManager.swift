@@ -155,6 +155,7 @@ class SyncManager: ObservableObject {
                 // Field mapping (#19) and list field (#20)
                 source.fieldMapping = config.taskNotesFieldMapping
                 source.listField = config.taskNotesListField
+                source.defaultTag = config.taskNotesDefaultTag
             }
             return source
         case .genericMarkdown:

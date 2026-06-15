@@ -127,6 +127,9 @@ class SyncConfiguration: ObservableObject, Codable {
 
     // MARK: - TaskNotes List Field (#20)
     @Published var taskNotesListField: String  // Which field determines Reminders list ("tags", "project", "context", or custom)
+    /// A tag automatically added to every note Remindian creates in TaskNotes from
+    /// a reminder (e.g. "task"). Empty = none. (#78)
+    @Published var taskNotesDefaultTag: String
 
     // MARK: - File Path Mappings (#37)
     @Published var filePathMappings: [FileMapping]  // Map specific files to specific destination lists
@@ -320,7 +323,7 @@ class SyncConfiguration: ObservableObject, Codable {
         case syncStateLocation, genericMarkdown
         case taskNotesCompletedStatuses, taskNotesOpenStatus, taskNotesDoneStatus
         case obsidianTasksOpenMarkers, obsidianTasksCompletedMarkers, obsidianTasksIgnoredMarkers
-        case taskNotesFieldMapping, taskNotesListField
+        case taskNotesFieldMapping, taskNotesListField, taskNotesDefaultTag
         case filePathMappings
         case folderPathMappings
         case enableDataviewFormat
@@ -393,6 +396,7 @@ class SyncConfiguration: ObservableObject, Codable {
         obsidianTasksIgnoredMarkers: [String] = [],
         taskNotesFieldMapping: TaskNotesFieldMapping = TaskNotesFieldMapping(),
         taskNotesListField: String = "tags",
+        taskNotesDefaultTag: String = "",
         filePathMappings: [FileMapping] = [],
         folderPathMappings: [FolderMapping] = [],
         enableDataviewFormat: Bool = false,
@@ -461,6 +465,7 @@ class SyncConfiguration: ObservableObject, Codable {
         self.obsidianTasksIgnoredMarkers = obsidianTasksIgnoredMarkers
         self.taskNotesFieldMapping = taskNotesFieldMapping
         self.taskNotesListField = taskNotesListField
+        self.taskNotesDefaultTag = taskNotesDefaultTag
         self.filePathMappings = filePathMappings
         self.folderPathMappings = folderPathMappings
         self.enableDataviewFormat = enableDataviewFormat
@@ -540,6 +545,7 @@ class SyncConfiguration: ObservableObject, Codable {
         obsidianTasksIgnoredMarkers = try container.decodeIfPresent([String].self, forKey: .obsidianTasksIgnoredMarkers) ?? []
         taskNotesFieldMapping = try container.decodeIfPresent(TaskNotesFieldMapping.self, forKey: .taskNotesFieldMapping) ?? TaskNotesFieldMapping()
         taskNotesListField = try container.decodeIfPresent(String.self, forKey: .taskNotesListField) ?? "tags"
+        taskNotesDefaultTag = try container.decodeIfPresent(String.self, forKey: .taskNotesDefaultTag) ?? ""
         filePathMappings = try container.decodeIfPresent([FileMapping].self, forKey: .filePathMappings) ?? []
         folderPathMappings = try container.decodeIfPresent([FolderMapping].self, forKey: .folderPathMappings) ?? []
         enableDataviewFormat = try container.decodeIfPresent(Bool.self, forKey: .enableDataviewFormat) ?? false
@@ -611,6 +617,7 @@ class SyncConfiguration: ObservableObject, Codable {
         try container.encode(obsidianTasksIgnoredMarkers, forKey: .obsidianTasksIgnoredMarkers)
         try container.encode(taskNotesFieldMapping, forKey: .taskNotesFieldMapping)
         try container.encode(taskNotesListField, forKey: .taskNotesListField)
+        try container.encode(taskNotesDefaultTag, forKey: .taskNotesDefaultTag)
         try container.encode(filePathMappings, forKey: .filePathMappings)
         try container.encode(folderPathMappings, forKey: .folderPathMappings)
         try container.encode(enableDataviewFormat, forKey: .enableDataviewFormat)
