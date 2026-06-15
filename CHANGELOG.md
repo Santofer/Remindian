@@ -4,6 +4,16 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.24.7 (June 2026)
+
+Pinned Tasks window: clean, minimal titlebar (no heavy toolbar glass).
+
+### Menu bar / windows
+
+- **Dropped the native toolbar** (which forced macOS Tahoe's heavy "Liquid Glass" pill + band) in favour of a clean, minimal titlebar: the centered **"By Date ⌄"** control is now a **subtle hairline pill** that highlights on hover, with a plain refresh button on the right. Both sit on the titlebar line (aligned with the traffic lights) and are made clickable via a non-draggable backing, so the filters+search popover opens reliably. The window background is fully seamless again — no toolbar band.
+
+---
+
 ## v5.24.6 (June 2026)
 
 Pinned Tasks window: cleaner toolbar (no double-decoration).
