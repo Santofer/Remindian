@@ -4,6 +4,16 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.24.5 (June 2026)
+
+Pinned Tasks window: native toolbar — the title popup is clickable again.
+
+### Bug fixes
+
+- **Clicking the centered title did nothing** in v5.24.4 (the title sat in the window's drag region, which swallowed the click). The window now uses a real **NSToolbar** with a **centered item** (the macOS-native, Things-style approach): the grouping popup and the trailing refresh + count are proper toolbar items, so they receive clicks reliably **and** align perfectly with the traffic lights — no fragile in-content titlebar layout. The popover (search + grouping choices) opens as expected, and the window body is still just the task list.
+
+---
+
 ## v5.24.4 (June 2026)
 
 Pinned Tasks window: titlebar alignment + cleaner separation.
