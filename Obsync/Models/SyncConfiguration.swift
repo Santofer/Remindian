@@ -53,6 +53,8 @@ class SyncConfiguration: ObservableObject, Codable {
     @Published var reminderAlarmHour: Int
     @Published var hideDockIcon: Bool
     @Published var forceDarkIcon: Bool
+    /// Show a count of due/overdue tasks on the menu-bar icon. (menu-bar badge)
+    @Published var showMenuBarTaskCount: Bool
     @Published var dryRunMode: Bool
     @Published var enableCompletionWriteback: Bool
     @Published var enableDueDateWriteback: Bool
@@ -308,7 +310,7 @@ class SyncConfiguration: ObservableObject, Codable {
         case vaultPath, syncIntervalMinutes, enableAutoSync, syncOnLaunch
         case listMappings, defaultList, taskFilesPattern, excludedFolders, includedFolders
         case syncCompletedTasks, deleteCompletedAfterDays, conflictResolution
-        case includeDueTime, addReminderAlarm, reminderAlarmHour, hideDockIcon, forceDarkIcon, dryRunMode, enableCompletionWriteback
+        case includeDueTime, addReminderAlarm, reminderAlarmHour, hideDockIcon, forceDarkIcon, showMenuBarTaskCount, dryRunMode, enableCompletionWriteback
         case enableDueDateWriteback, enableStartDateWriteback, enablePriorityWriteback
         case enableNewTaskWriteback, enableTagWriteback, inboxFilePath, enableFileWatcher
         case enableNotifications, globalHotKeyEnabled, globalHotKeyCode, globalHotKeyModifiers
@@ -352,6 +354,7 @@ class SyncConfiguration: ObservableObject, Codable {
         addReminderAlarm: Bool = false,
         reminderAlarmHour: Int = 9,
         hideDockIcon: Bool = false,
+        showMenuBarTaskCount: Bool = true,
         dryRunMode: Bool = false,
         enableCompletionWriteback: Bool = true,
         enableDueDateWriteback: Bool = false,
@@ -420,6 +423,7 @@ class SyncConfiguration: ObservableObject, Codable {
         self.reminderAlarmHour = reminderAlarmHour
         self.hideDockIcon = hideDockIcon
         self.forceDarkIcon = forceDarkIcon
+        self.showMenuBarTaskCount = showMenuBarTaskCount
         self.dryRunMode = dryRunMode
         self.enableCompletionWriteback = enableCompletionWriteback
         self.enableDueDateWriteback = enableDueDateWriteback
@@ -490,6 +494,7 @@ class SyncConfiguration: ObservableObject, Codable {
         reminderAlarmHour = try container.decodeIfPresent(Int.self, forKey: .reminderAlarmHour) ?? 9
         hideDockIcon = try container.decodeIfPresent(Bool.self, forKey: .hideDockIcon) ?? false
         forceDarkIcon = try container.decodeIfPresent(Bool.self, forKey: .forceDarkIcon) ?? false
+        showMenuBarTaskCount = try container.decodeIfPresent(Bool.self, forKey: .showMenuBarTaskCount) ?? true
         dryRunMode = try container.decodeIfPresent(Bool.self, forKey: .dryRunMode) ?? false
         enableCompletionWriteback = try container.decodeIfPresent(Bool.self, forKey: .enableCompletionWriteback) ?? true
         enableDueDateWriteback = try container.decodeIfPresent(Bool.self, forKey: .enableDueDateWriteback) ?? false
@@ -568,6 +573,7 @@ class SyncConfiguration: ObservableObject, Codable {
         try container.encode(reminderAlarmHour, forKey: .reminderAlarmHour)
         try container.encode(hideDockIcon, forKey: .hideDockIcon)
         try container.encode(forceDarkIcon, forKey: .forceDarkIcon)
+        try container.encode(showMenuBarTaskCount, forKey: .showMenuBarTaskCount)
         try container.encode(dryRunMode, forKey: .dryRunMode)
         try container.encode(enableCompletionWriteback, forKey: .enableCompletionWriteback)
         try container.encode(enableDueDateWriteback, forKey: .enableDueDateWriteback)
@@ -676,6 +682,7 @@ class SyncConfiguration: ObservableObject, Codable {
         launchAtLogin = other.launchAtLogin
         hideDockIcon = other.hideDockIcon
         forceDarkIcon = other.forceDarkIcon
+        showMenuBarTaskCount = other.showMenuBarTaskCount
     }
 
     // MARK: - Helpers

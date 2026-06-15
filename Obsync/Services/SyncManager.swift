@@ -462,6 +462,10 @@ class SyncManager: ObservableObject {
 
         finalizeSyncResult(aggregate, wasFirstSync: wasFirstSync)
         isSyncing = false
+
+        // Refresh the Today agenda so the menu list and the menu-bar count badge
+        // reflect the post-sync state even while the menu is closed. (menu-bar badge)
+        await refreshAgenda(force: true)
     }
 
     /// Snapshot the vault backups made during the last sync into an undo

@@ -470,6 +470,9 @@ struct GeneralSettingsView: View {
                         }
                         .help("App will only appear in the menu bar")
 
+                    Toggle("Show task count on menu bar icon", isOn: $syncManager.config.showMenuBarTaskCount)
+                        .help("Shows the number of tasks due today or overdue next to the menu bar icon")
+
                     Toggle("Force dark mode", isOn: $syncManager.config.forceDarkIcon)
                         .onChange(of: syncManager.config.forceDarkIcon) { _ in
                             syncManager.updateAppIcon()

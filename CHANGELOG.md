@@ -4,6 +4,16 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.23.2 (June 2026)
+
+A task count on the menu-bar icon, so you can glance without opening.
+
+### New
+
+- **Menu-bar icon count badge.** When you have tasks **due today or overdue**, the menu-bar icon shows the number next to it (and switches to a list glyph); when you're all clear it's the familiar checkmark, and during a sync it's the spinning arrows. Toggle it off in **Settings → Appearance & Shortcuts → "Show task count on menu bar icon."** The count refreshes after every sync and on launch, even while the menu is closed.
+
+---
+
 ## v5.23.1 (June 2026)
 
 Even leaner menu: the status badges now ride on the Sync Now row.
