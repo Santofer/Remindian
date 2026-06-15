@@ -102,27 +102,23 @@ struct PinnedTasksView: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            // Top safe-area inset == titlebar height → make the title strip exactly
-            // that tall and pull it onto the titlebar line, aligning with the
-            // traffic lights. (pinned window toolbar)
-            let barHeight = max(proxy.safeAreaInsets.top, 28)
-            VStack(spacing: 0) {
-                titleBar
-                    .frame(height: barHeight)
-                content
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .ignoresSafeArea(.container, edges: .top)
+        // The header sits in normal content (below the titlebar safe area), so its
+        // controls are reliably clickable — interactive content pulled INTO the
+        // titlebar strip has its clicks swallowed by the window drag region. The
+        // vibrancy fills the whole window (incl. behind the traffic lights) for a
+        // seamless look. (pinned window toolbar)
+        VStack(spacing: 0) {
+            header
+            content
         }
         .frame(minWidth: 260, minHeight: 220)
         .background(VisualEffectBackground().ignoresSafeArea())
         .task { await syncManager.refreshAgenda(force: true) }
     }
 
-    // MARK: Title strip — centered hairline-pill grouping control + refresh
+    // MARK: Header — centered hairline-pill grouping control + refresh
 
-    private var titleBar: some View {
+    private var header: some View {
         ZStack {
             // Centered grouping control.
             Button { showOptions.toggle() } label: {
@@ -179,6 +175,8 @@ struct PinnedTasksView: View {
             }
         }
         .frame(maxWidth: .infinity)
+        .padding(.top, 9)
+        .padding(.bottom, 7)
     }
 
     private func menuTitle(_ g: PinnedTasksOrganizer.Grouping) -> String {

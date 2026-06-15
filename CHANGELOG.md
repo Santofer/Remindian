@@ -4,6 +4,16 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.24.8 (June 2026)
+
+Hotfix: the Pinned Tasks grouping popup is clickable again.
+
+### Bug fixes
+
+- **Clicking "By Date ⌄" did nothing** (and it sat too high) in v5.24.7. Putting the control on the titlebar line meant the window's drag region kept swallowing its clicks. The grouping control + refresh now sit in a clean header just **below** the traffic lights — reliably clickable — keeping the subtle hairline-pill style and the seamless background. The filters + search popover opens as expected.
+
+---
+
 ## v5.24.7 (June 2026)
 
 Pinned Tasks window: clean, minimal titlebar (no heavy toolbar glass).
