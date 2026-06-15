@@ -4,6 +4,23 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.21.2 (June 2026)
+
+A refreshed menu, and the last class of "file changed" completion errors gone.
+
+### Bug fixes
+
+- **"File has changed since last scan. Expected line content doesn't match…" when completing a task.** This was a *second*, distinct cause from the one fixed in v5.21.1. The menu's Today list stores each task's line *number* and text from the last scan. When a sync rewrites lines a moment later (e.g. completing a recurring task inserts its next occurrence and shifts everything below it), that stored line number now points at a *different* task — so checking the task off compared the wrong line and refused with an error. Completion (and all writeback) now **relocate the task by its content** rather than trusting a line index: it finds the task by a stable identity (title + metadata, ignoring checkbox state and the `✅ date`), and:
+  - if the task was already completed by the sync, it's a silent success — no error;
+  - it **never** edits a different task that happens to sit at the stale line, which is now covered by a dedicated safety test;
+  - the same robustness applies to the Generic Markdown source, and the Today list re-scans after each completion so finished tasks drop off immediately.
+
+### Menu bar
+
+- **The menu-bar panel got a proper redesign.** A compact header with a tinted status pill (Synced / Syncing / Conflicts / No access) instead of a bare colored dot; Today rows now show a small priority dot, a circular check that fills on hover, and a tinted due capsule ("Today", "2d late", "Jun 18"); a rounded quick-add field that highlights on focus; last-sync results as compact colored chips; and a subtle rounded hover highlight on every row. Each task is still exactly one line, the panel still auto-sizes (no scroll-collapse), and everything respects light/dark mode.
+
+---
+
 ## v5.21.1 (June 2026)
 
 Hotfix: completing a task from the menu no longer fails with a false "file modified" error.

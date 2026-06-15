@@ -234,6 +234,30 @@ extension SyncTask {
         return (marker, content)
     }
 
+    /// The stable identity of a task *line*, used to relocate the task after the
+    /// file has drifted since the last scan — lines inserted/removed/reordered,
+    /// or the task completed (so its line moved and/or gained a ✅ date) between
+    /// the menu snapshot and the moment the user acts on it.
+    ///
+    /// Strips the list marker + checkbox state and any completion-date suffix
+    /// (`✅ YYYY-MM-DD`, optional FE0F variation selector), so the **open** and
+    /// **completed** forms of the same task — and the same task at a different
+    /// line number — collapse to one identity. Returns "" for non-task lines.
+    ///
+    /// Note: due/scheduled/start dates and the 🔁 recurrence rule are *kept* —
+    /// they're part of the task's identity. This means a recurring task's next
+    /// occurrence (which carries an advanced 📅 date) does NOT collide with the
+    /// just-completed instance, so relocation never confuses the two. (#75-followup)
+    static func taskIdentityBody(of rawLine: String) -> String {
+        let trimmed = rawLine.trimmingCharacters(in: .whitespaces)
+        guard let (_, content) = extractCheckbox(from: trimmed) else { return "" }
+        let withoutDone = content.replacingOccurrences(
+            of: "\\s*\u{2705}\u{FE0F}?\\s*\\d{4}-\\d{2}-\\d{2}",
+            with: "", options: .regularExpression
+        )
+        return withoutDone.trimmingCharacters(in: .whitespaces)
+    }
+
     /// Parse an Obsidian Tasks format line
     /// Format: - [x] Task title 📅 2024-01-15 🛫 2024-01-10 ⏫ #list-name #tag1 🔁 every week
     /// We parse EVERYTHING from Obsidian but may truncate for Reminders display

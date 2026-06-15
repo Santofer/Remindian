@@ -386,6 +386,88 @@ class ObsidianService {
 
     // MARK: - Safe Surgical Edits
 
+    /// Outcome of locating a task line that may have drifted since the last scan.
+    enum LineResolution {
+        /// The task line was found at this 0-based index (open, ready to edit).
+        case found(index: Int)
+        /// The task exists but is already in the desired state (e.g. already
+        /// completed for a complete request) — nothing to do, treat as success.
+        case alreadyInDesiredState(index: Int)
+        /// No line with this task's identity exists in the file at all.
+        case notFound
+    }
+
+    /// Locate a task line robustly, tolerant of line drift since the snapshot
+    /// that produced `storedLineNumber`/`originalLine`.
+    ///
+    /// The menu's Today list (and the engine's writeback queue) hold a task's
+    /// `lineNumber` + `originalLine` captured at scan time. By the time we write,
+    /// a prior sync, an iCloud re-sync, or an edit in Obsidian itself may have
+    /// shifted lines — so the stored index can point at a *different* task. The
+    /// old code trusted the index, compared content, and threw
+    /// `lineContentMismatch` ("File has changed since last scan…"). That surfaced
+    /// as scary errors when completing tasks from the menu.
+    ///
+    /// Instead we relocate by content, in order of confidence:
+    ///   1. Exact line match at the stored index (the fast, overwhelmingly-common path).
+    ///   2. Exact line match anywhere (the line simply moved up/down).
+    ///   3. Identity match (`SyncTask.taskIdentityBody`) — same task text, possibly
+    ///      a different checkbox state or a ✅ completion-date suffix. Prefer an
+    ///      instance in the *wanted* checkbox state; if only the opposite state
+    ///      exists, report it as `.alreadyInDesiredState` so the caller no-ops.
+    ///
+    /// This is strictly *safer* than the old line-index trust: we only ever edit a
+    /// line whose task identity matches what we intend to change.
+    ///
+    /// - Parameter wantCompleted: the checkbox state the caller wants to act on —
+    ///   `true` for markIncomplete (it needs a completed line to revert),
+    ///   `false` for markComplete / updateMetadata (they need an open line).
+    func resolveTaskLine(
+        in lines: [String],
+        storedLineNumber: Int,
+        originalLine: String,
+        wantCompleted: Bool
+    ) -> LineResolution {
+        let expectedTrimmed = originalLine.trimmingCharacters(in: .whitespaces)
+
+        // 1. Exact match at the stored index.
+        let storedIdx = storedLineNumber - 1
+        if storedIdx >= 0, storedIdx < lines.count,
+           lines[storedIdx].trimmingCharacters(in: .whitespaces) == expectedTrimmed {
+            return .found(index: storedIdx)
+        }
+
+        // 2. Exact match anywhere (line moved but content identical).
+        if let idx = lines.firstIndex(where: {
+            $0.trimmingCharacters(in: .whitespaces) == expectedTrimmed
+        }) {
+            return .found(index: idx)
+        }
+
+        // 3. Identity match — same task, different state or completion suffix.
+        let expectedBody = SyncTask.taskIdentityBody(of: originalLine)
+        guard !expectedBody.isEmpty else { return .notFound }
+
+        let identityMatches = lines.indices.filter {
+            SyncTask.taskIdentityBody(of: lines[$0]) == expectedBody
+        }
+        guard !identityMatches.isEmpty else { return .notFound }
+
+        func isCompleted(_ i: Int) -> Bool {
+            let t = lines[i].trimmingCharacters(in: .whitespaces)
+            guard let cb = SyncTask.extractCheckbox(from: t) else { return false }
+            return SyncTask.defaultCompletedMarkers.contains(cb.marker)
+        }
+
+        // Prefer an instance already in the state the caller wants to act on.
+        if let wanted = identityMatches.first(where: { isCompleted($0) == wantCompleted }) {
+            return .found(index: wanted)
+        }
+        // Only the opposite state exists → the task is already where the caller
+        // wants it to end up. No-op success.
+        return .alreadyInDesiredState(index: identityMatches.first!)
+    }
+
     /// Surgically mark a task as complete in its Obsidian source file.
     /// This method NEVER reconstructs the line — it modifies the original in place,
     /// preserving all metadata (recurrence, tags, dates, etc.) verbatim.
@@ -414,20 +496,26 @@ class ObsidianService {
         let content = try String(contentsOf: fileURL, encoding: .utf8)
         var lines = content.components(separatedBy: "\n")
 
-        guard lineNumber > 0 && lineNumber <= lines.count else {
-            throw ObsidianError.lineNumberOutOfRange(lineNumber, lines.count)
+        // Locate the task robustly. The stored line index may be stale (a prior
+        // sync, an iCloud re-sync, or an Obsidian edit shifted lines since the
+        // scan) — relocate by content instead of trusting the index and throwing
+        // a "file has changed" error. (#75-followup)
+        let resolvedIndex: Int
+        switch resolveTaskLine(in: lines, storedLineNumber: lineNumber,
+                               originalLine: originalLine, wantCompleted: false) {
+        case .found(let idx):
+            resolvedIndex = idx
+        case .alreadyInDesiredState:
+            debugLog("[ObsidianService] Task already completed (relocated by content), skipping: \(originalLine.prefix(80))")
+            return 0
+        case .notFound:
+            // The line no longer exists (deleted, or this file no longer holds
+            // it). Nothing to complete — no-op success; the next scan reconciles.
+            debugLog("[ObsidianService] Task line not found for completion, skipping: \(originalLine.prefix(80))")
+            return 0
         }
 
-        let currentLine = lines[lineNumber - 1]
-
-        // Safety check: verify the line still matches what we expect
-        guard currentLine.trimmingCharacters(in: .whitespaces) ==
-              originalLine.trimmingCharacters(in: .whitespaces) else {
-            throw ObsidianError.lineContentMismatch(
-                expected: originalLine.trimmingCharacters(in: .whitespaces),
-                found: currentLine.trimmingCharacters(in: .whitespaces)
-            )
-        }
+        let currentLine = lines[resolvedIndex]
 
         // Safety: skip if task is already completed (prevents double-writes).
         //
@@ -468,7 +556,7 @@ class ObsidianService {
             newLine = trimmedEnd + completionMarker
         }
 
-        lines[lineNumber - 1] = newLine
+        lines[resolvedIndex] = newLine
 
         // Handle recurrence: if the task has a 🔁 rule, insert a new uncompleted
         // task above the completed one (matching Obsidian Tasks plugin behavior).
@@ -536,14 +624,14 @@ class ObsidianService {
                     nextScheduledDate: nextScheduled
                 )
 
-                lines.insert(recurrenceLine, at: lineNumber - 1)
+                lines.insert(recurrenceLine, at: resolvedIndex)
                 linesInserted = 1
 
                 debugLog("[ObsidianService] Inserted recurrence line: \(recurrenceLine)")
                 auditLog.logFileModification(
                     action: "insertRecurrence",
                     filePath: filePath,
-                    lineNumber: lineNumber,
+                    lineNumber: resolvedIndex + 1,
                     beforeLine: "",
                     afterLine: recurrenceLine
                 )
@@ -556,7 +644,7 @@ class ObsidianService {
         auditLog.logFileModification(
             action: "markTaskComplete",
             filePath: filePath,
-            lineNumber: lineNumber,
+            lineNumber: resolvedIndex + linesInserted + 1,
             beforeLine: currentLine,
             afterLine: newLine
         )
@@ -587,20 +675,22 @@ class ObsidianService {
         let content = try String(contentsOf: fileURL, encoding: .utf8)
         var lines = content.components(separatedBy: "\n")
 
-        guard lineNumber > 0 && lineNumber <= lines.count else {
-            throw ObsidianError.lineNumberOutOfRange(lineNumber, lines.count)
+        // Relocate by content (a completed instance), tolerant of line drift.
+        // If only an open instance exists, the task is already incomplete — no-op.
+        let resolvedIndex: Int
+        switch resolveTaskLine(in: lines, storedLineNumber: lineNumber,
+                               originalLine: originalLine, wantCompleted: true) {
+        case .found(let idx):
+            resolvedIndex = idx
+        case .alreadyInDesiredState:
+            debugLog("[ObsidianService] Task already incomplete (relocated by content), skipping: \(originalLine.prefix(80))")
+            return
+        case .notFound:
+            debugLog("[ObsidianService] Task line not found for un-complete, skipping: \(originalLine.prefix(80))")
+            return
         }
 
-        let currentLine = lines[lineNumber - 1]
-
-        // Safety check
-        guard currentLine.trimmingCharacters(in: .whitespaces) ==
-              originalLine.trimmingCharacters(in: .whitespaces) else {
-            throw ObsidianError.lineContentMismatch(
-                expected: originalLine.trimmingCharacters(in: .whitespaces),
-                found: currentLine.trimmingCharacters(in: .whitespaces)
-            )
-        }
+        let currentLine = lines[resolvedIndex]
 
         var newLine = currentLine
 
@@ -618,14 +708,14 @@ class ObsidianService {
             newLine = regex.stringByReplacingMatches(in: newLine, options: [], range: nsRange, withTemplate: "")
         }
 
-        lines[lineNumber - 1] = newLine
+        lines[resolvedIndex] = newLine
         let newContent = lines.joined(separator: "\n")
         try newContent.write(to: fileURL, atomically: true, encoding: .utf8)
 
         auditLog.logFileModification(
             action: "markTaskIncomplete",
             filePath: filePath,
-            lineNumber: lineNumber,
+            lineNumber: resolvedIndex + 1,
             beforeLine: currentLine,
             afterLine: newLine
         )
@@ -673,19 +763,23 @@ class ObsidianService {
         // splits on \r, \n, and \r\n separately, which can corrupt files with CRLF endings)
         var lines = content.components(separatedBy: "\n")
 
-        guard lineNumber > 0 && lineNumber <= lines.count else {
-            throw ObsidianError.lineNumberOutOfRange(lineNumber, lines.count)
+        // Relocate by content (an open instance), tolerant of line drift. If the
+        // task was completed or removed since the scan, there's nothing to update
+        // — no-op; the next sync reconciles from the current file state.
+        let resolvedIndex: Int
+        switch resolveTaskLine(in: lines, storedLineNumber: lineNumber,
+                               originalLine: originalLine, wantCompleted: false) {
+        case .found(let idx):
+            resolvedIndex = idx
+        case .alreadyInDesiredState:
+            debugLog("[ObsidianService] Task no longer open for metadata update, skipping: \(originalLine.prefix(80))")
+            return
+        case .notFound:
+            debugLog("[ObsidianService] Task line not found for metadata update, skipping: \(originalLine.prefix(80))")
+            return
         }
 
-        let currentLine = lines[lineNumber - 1]
-
-        guard currentLine.trimmingCharacters(in: .whitespaces) ==
-              originalLine.trimmingCharacters(in: .whitespaces) else {
-            throw ObsidianError.lineContentMismatch(
-                expected: originalLine.trimmingCharacters(in: .whitespaces),
-                found: currentLine.trimmingCharacters(in: .whitespaces)
-            )
-        }
+        let currentLine = lines[resolvedIndex]
 
         var newLine = currentLine
         let formatter = DateFormatter()
@@ -714,14 +808,14 @@ class ObsidianService {
         // Trim trailing whitespace only (not internal spacing)
         newLine = newLine.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression)
 
-        lines[lineNumber - 1] = newLine
+        lines[resolvedIndex] = newLine
         let newContent = lines.joined(separator: "\n")
         try newContent.write(to: fileURL, atomically: true, encoding: .utf8)
 
         auditLog.logFileModification(
             action: "updateMetadata",
             filePath: filePath,
-            lineNumber: lineNumber,
+            lineNumber: resolvedIndex + 1,
             beforeLine: currentLine,
             afterLine: newLine
         )

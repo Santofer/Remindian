@@ -551,37 +551,37 @@ final class WritebackTests: XCTestCase {
     // MARK: markTaskIncomplete — Safety Guards
 
     func testIncompleteContentMismatch() throws {
+        // The recorded line names a task ("Different line") that does not exist
+        // anywhere in the file. The safe outcome is a no-op — never revert the
+        // wrong task, never throw a scary "file changed" error. (#75-followup)
         let path = try writeFile("t.md", "- [x] Actual line ✅ 2026-01-01")
 
-        XCTAssertThrowsError(
+        XCTAssertNoThrow(
             try service.markTaskIncomplete(
                 filePath: path, lineNumber: 1,
                 originalLine: "- [x] Different line ✅ 2026-01-01",
                 vaultPath: vaultURL.path
             )
-        ) { error in
-            guard case ObsidianError.lineContentMismatch = error else {
-                XCTFail("Expected lineContentMismatch, got \(error)")
-                return
-            }
-        }
+        )
+        XCTAssertEqual(try readLines("t.md")[0], "- [x] Actual line ✅ 2026-01-01",
+                       "A different task must never be touched.")
     }
 
     func testIncompleteLineOutOfRange() throws {
+        // Stale line index past EOF, but the exact task still exists — relocate
+        // by content and un-complete it rather than throwing. (#75-followup)
         let path = try writeFile("t.md", "- [x] Only line ✅ 2026-01-01")
 
-        XCTAssertThrowsError(
+        XCTAssertNoThrow(
             try service.markTaskIncomplete(
                 filePath: path, lineNumber: 3,
                 originalLine: "- [x] Only line ✅ 2026-01-01",
                 vaultPath: vaultURL.path
             )
-        ) { error in
-            guard case ObsidianError.lineNumberOutOfRange = error else {
-                XCTFail("Expected lineNumberOutOfRange, got \(error)")
-                return
-            }
-        }
+        )
+        let line = try readLines("t.md")[0]
+        XCTAssertTrue(line.contains("- [ ]"), "Relocated and reverted to open")
+        XCTAssertFalse(line.contains("✅"), "Completion date removed")
     }
 
     func testIncompleteFileNotFound() throws {
@@ -995,43 +995,41 @@ final class WritebackTests: XCTestCase {
     // MARK: updateTaskMetadata — Safety Guards
 
     func testMetadataContentMismatch() throws {
+        // The recorded line names a task ("Wrong content") absent from the file.
+        // Metadata writeback must no-op — never edit a different task. (#75-followup)
         let path = try writeFile("t.md", "- [ ] Actual content 📅 2026-01-01")
 
         var changes = ObsidianService.MetadataChanges()
         changes.newDueDate = .some(makeDate(2026, 6, 15))
-        XCTAssertThrowsError(
+        XCTAssertNoThrow(
             try service.updateTaskMetadata(
                 filePath: path, lineNumber: 1,
                 originalLine: "- [ ] Wrong content 📅 2026-01-01",
                 changes: changes,
                 vaultPath: vaultURL.path
             )
-        ) { error in
-            guard case ObsidianError.lineContentMismatch = error else {
-                XCTFail("Expected lineContentMismatch, got \(error)")
-                return
-            }
-        }
+        )
+        XCTAssertEqual(try readLines("t.md")[0], "- [ ] Actual content 📅 2026-01-01",
+                       "A different task must never be edited; due date unchanged.")
     }
 
     func testMetadataLineOutOfRange() throws {
+        // Stale line index past EOF, but the exact task still exists — relocate
+        // by content and apply the metadata change rather than throwing. (#75-followup)
         let path = try writeFile("t.md", "- [ ] Only line")
 
         var changes = ObsidianService.MetadataChanges()
         changes.newDueDate = .some(makeDate(2026, 6, 15))
-        XCTAssertThrowsError(
+        XCTAssertNoThrow(
             try service.updateTaskMetadata(
                 filePath: path, lineNumber: 10,
                 originalLine: "- [ ] Only line",
                 changes: changes,
                 vaultPath: vaultURL.path
             )
-        ) { error in
-            guard case ObsidianError.lineNumberOutOfRange = error else {
-                XCTFail("Expected lineNumberOutOfRange, got \(error)")
-                return
-            }
-        }
+        )
+        XCTAssertTrue(try readLines("t.md")[0].contains("📅 2026-06-15"),
+                      "Relocated and applied the due date")
     }
 
     func testMetadataFileNotFound() throws {
@@ -1052,8 +1050,9 @@ final class WritebackTests: XCTestCase {
         }
     }
 
-    // Demonstrates why SyncEngine skips metadata writeback after completion
-    func testMetadataWritebackFailsAfterCompletionOnSameTask() throws {
+    // Metadata writeback for a task that was completed since the scan is a safe
+    // no-op: we never re-edit a completed task's metadata, and never throw.
+    func testMetadataWritebackSkipsCompletedTask() throws {
         let original = "- [ ] Task 📅 2026-01-01"
         let path = try writeFile("t.md", original)
 
@@ -1066,26 +1065,29 @@ final class WritebackTests: XCTestCase {
 
         var changes = ObsidianService.MetadataChanges()
         changes.newDueDate = .some(makeDate(2026, 6, 15))
-        XCTAssertThrowsError(
+        XCTAssertNoThrow(
             try service.updateTaskMetadata(
                 filePath: path, lineNumber: 1,
                 originalLine: original,
                 changes: changes,
                 vaultPath: vaultURL.path
             )
-        ) { error in
-            guard case ObsidianError.lineContentMismatch = error else {
-                XCTFail("Expected lineContentMismatch, got \(error)")
-                return
-            }
-        }
+        )
+        let line = try readLines("t.md")[0]
+        XCTAssertTrue(line.contains("- [x] Task"), "Still completed")
+        XCTAssertTrue(line.contains("📅 2026-01-01"), "Completed task's due date left untouched")
+        XCTAssertFalse(line.contains("2026-06-15"), "Metadata change correctly skipped for a completed task")
     }
 
     // =========================================================================
     // MARK: - Cross-Cutting Safety & Edge Cases
     // =========================================================================
 
-    func testContentMismatchOnStaleLineNumber() throws {
+    // The exact scenario behind the user's menu error: a prior completion shifted
+    // lines (recurrence inserted a new occurrence + marked the old one done), so a
+    // second task's recorded line index now points at a *different*, completed
+    // task. Completion must relocate to the real "Target" line, not error. (#75-followup)
+    func testStaleLineNumberRelocatesToCorrectTask() throws {
         let path = try writeFile("t.md",
             "- [ ] Recurring 🔁 every week 📅 2026-03-20\n- [ ] Target")
 
@@ -1096,64 +1098,53 @@ final class WritebackTests: XCTestCase {
             vaultPath: vaultURL.path
         )
 
-        XCTAssertThrowsError(
+        // Stale line number 2 now points at the completed "Recurring" line, but
+        // relocation finds the real "Target" line and completes it — no error.
+        XCTAssertNoThrow(
             try service.markTaskComplete(
                 filePath: path, lineNumber: 2, // stale
                 originalLine: "- [ ] Target",
                 completionDate: makeDate(2026, 3, 30),
                 vaultPath: vaultURL.path
             )
-        ) { error in
-            guard case ObsidianError.lineContentMismatch = error else {
-                XCTFail("Expected lineContentMismatch, got \(error)")
-                return
-            }
-        }
-
-        // Adjusted line works
-        try service.markTaskComplete(
-            filePath: path, lineNumber: 3,
-            originalLine: "- [ ] Target",
-            completionDate: makeDate(2026, 3, 30),
-            vaultPath: vaultURL.path
         )
-        XCTAssertTrue(try readLines("t.md")[2].contains("- [x] Target"))
+        XCTAssertTrue(try readLines("t.md").contains { $0.contains("- [x] Target") },
+                      "Target relocated and completed despite the stale index")
     }
 
-    func testContentMismatchOnWrongOriginalLine() throws {
+    func testWrongOriginalLineNeverClobbersDifferentTask() throws {
+        // The single most important safety property: asked to complete a task that
+        // does not exist in the file, we must NEVER complete a different task that
+        // happens to sit at the recorded index. No throw, no clobber — a no-op.
         let path = try writeFile("t.md", "- [ ] Actual content")
 
-        XCTAssertThrowsError(
+        XCTAssertNoThrow(
             try service.markTaskComplete(
                 filePath: path, lineNumber: 1,
                 originalLine: "- [ ] Wrong content",
                 completionDate: makeDate(2026, 3, 29),
                 vaultPath: vaultURL.path
             )
-        ) { error in
-            guard case ObsidianError.lineContentMismatch = error else {
-                XCTFail("Expected lineContentMismatch, got \(error)")
-                return
-            }
-        }
+        )
+        XCTAssertEqual(try readLines("t.md")[0], "- [ ] Actual content",
+                       "A different task must never be completed.")
     }
 
-    func testLineNumberOutOfRange() throws {
+    func testStaleLineNumberPastEOFRelocates() throws {
+        // Line index past EOF, but the exact task still exists — relocate and
+        // complete rather than throwing lineNumberOutOfRange. (#75-followup)
         let path = try writeFile("t.md", "- [ ] Only line")
 
-        XCTAssertThrowsError(
+        XCTAssertNoThrow(
             try service.markTaskComplete(
                 filePath: path, lineNumber: 5,
                 originalLine: "- [ ] Only line",
                 completionDate: makeDate(2026, 3, 29),
                 vaultPath: vaultURL.path
             )
-        ) { error in
-            guard case ObsidianError.lineNumberOutOfRange = error else {
-                XCTFail("Expected lineNumberOutOfRange, got \(error)")
-                return
-            }
-        }
+        )
+        XCTAssertTrue(try readLines("t.md")[0].contains("- [x] Only line"),
+                      "Relocated and completed")
     }
 
     func testCompleteFileNotFound() throws {

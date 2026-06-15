@@ -243,7 +243,7 @@ final class GenericMarkdownTests: XCTestCase {
         XCTAssertTrue(reparsed.contains { $0.title == "From reminders" && $0.dueDate == self.date("2025-09-09") && $0.priority == .high })
     }
 
-    func test_source_writebackAbortsOnLineMismatch() throws {
+    func test_source_writebackNoOpsWhenTaskAbsent() throws {
         let vault = FileManager.default.temporaryDirectory.appendingPathComponent("gm-mismatch-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: vault, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: vault) }
@@ -255,10 +255,34 @@ final class GenericMarkdownTests: XCTestCase {
         config.vaultPath = vault.path
         let source = GenericMarkdownSource()
 
-        // A task whose recorded originalLine no longer matches the file (someone
-        // edited it externally). Writeback must throw, not clobber.
+        // A task whose recorded originalLine no longer exists anywhere in the file
+        // (someone edited or removed it externally). Writeback must NOT clobber a
+        // different line — and must not throw a scary "file changed" error either.
+        // The safe outcome is a no-op: the file is left exactly as found.
         let stale = SyncTask(title: "Original", obsidianSource: .init(filePath: "/t.md", lineNumber: 1, originalLine: "- [ ] Something totally different"))
-        XCTAssertThrowsError(try source.markTaskComplete(task: stale, completionDate: self.date("2025-01-01"), config: config))
-        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), "- [ ] Original\n", "File must be untouched on mismatch.")
+        XCTAssertNoThrow(try source.markTaskComplete(task: stale, completionDate: self.date("2025-01-01"), config: config))
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), "- [ ] Original\n", "File must be untouched — never clobber a different line.")
+    }
+
+    func test_source_writebackRelocatesWhenLineMoved() throws {
+        let vault = FileManager.default.temporaryDirectory.appendingPathComponent("gm-reloc-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: vault, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: vault) }
+
+        let file = vault.appendingPathComponent("t.md")
+        // Two lines were inserted above since the scan, so the recorded index (1)
+        // now points at the wrong line — but the task itself is still present.
+        try "- [ ] Inserted A\n- [ ] Inserted B\n- [ ] Target\n".write(to: file, atomically: true, encoding: .utf8)
+
+        let config = SyncConfiguration()
+        config.vaultPath = vault.path
+        let source = GenericMarkdownSource()
+
+        let drifted = SyncTask(title: "Target", obsidianSource: .init(filePath: "/t.md", lineNumber: 1, originalLine: "- [ ] Target"))
+        XCTAssertNoThrow(try source.markTaskComplete(task: drifted, completionDate: self.date("2025-01-01"), config: config))
+        let lines = try String(contentsOf: file, encoding: .utf8).components(separatedBy: "\n")
+        XCTAssertEqual(lines[0], "- [ ] Inserted A", "Line above untouched")
+        XCTAssertEqual(lines[1], "- [ ] Inserted B", "Line above untouched")
+        XCTAssertTrue(lines[2].contains("[x]"), "Target relocated and completed despite the stale index")
     }
 }

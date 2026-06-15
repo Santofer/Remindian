@@ -609,6 +609,11 @@ class SyncManager: ObservableObject {
             return
         }
         await syncActiveProfileOnly()
+        // The sync just rewrote vault lines, so every other Today row now holds a
+        // stale line index. Force a re-scan so the next completion acts on fresh
+        // positions (the content-relocation guard tolerates drift, but this keeps
+        // the list itself accurate — e.g. tasks completed elsewhere disappear).
+        await refreshAgenda(force: true)
     }
 
     // MARK: - Diff preview (forced dry-run)

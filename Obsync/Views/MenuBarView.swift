@@ -1,11 +1,31 @@
 import SwiftUI
 
+// MARK: - MenuBarView
+//
+// Content of a MenuBarExtra rendered with .menuBarExtraStyle(.window) — a real
+// SwiftUI panel, NOT the native NSMenu. The panel auto-sizes to its content via
+// an auto-sizing VStack + .frame(width:). NEVER wrap the body or the Today list
+// in a ScrollView: it is greedy vertically, has no fixed height to fill in a
+// window-style menu, and collapses the panel to zero height (the menu opens
+// blank). Cap the Today list to N rows and offer "+N more…" instead.
+//
+// Each Today task renders on exactly ONE horizontal line (an HStack):
+//   [priority dot] [check] [title, truncated] [spacer] [due capsule]
+//
+// macOS 13+ only. Anything newer must be #available-gated or avoided.
+
 struct MenuBarView: View {
     @EnvironmentObject var syncManager: SyncManager
     @StateObject private var updater = UpdaterService.shared
     @State private var quickAddText = ""
+    @FocusState private var quickAddFocused: Bool
 
-    private let menuFont = Font.system(size: 13)
+    // Typography scale — quiet, considered hierarchy.
+    private let rowFont = Font.system(size: 13)
+    private let labelFont = Font.system(size: 11, weight: .semibold)
+
+    // Consistent insets so every section optically lines up.
+    private let hInset: CGFloat = 12
 
     private func submitQuickAdd() {
         let text = quickAddText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -16,308 +36,396 @@ struct MenuBarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Status section
-            HStack {
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 8, height: 8)
-                    .help(statusTooltip)
-                Text(syncManager.statusMessage)
-                    .font(menuFont)
+            header
 
-                if syncManager.config.dryRunMode {
-                    Text("DRY RUN")
-                        .font(.system(size: 10, weight: .bold))
-                        .padding(.horizontal, 3)
-                        .padding(.vertical, 1)
-                        .background(Color.yellow.opacity(0.3))
-                        .cornerRadius(3)
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 6)
+            sectionDivider
 
-            if let lastSync = syncManager.lastSyncDate {
-                Text("Last sync: \(lastSync, style: .relative)")
-                    .font(menuFont)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 4)
-            }
+            actions
 
-            // Multi-profile indicator: "Sync Now" runs every enabled profile.
-            if syncManager.profileStore.profiles.count > 1 {
-                Text("\(syncManager.profileStore.enabledProfiles.count) of \(syncManager.profileStore.profiles.count) sync profiles enabled")
-                    .font(menuFont)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 4)
-            }
+            sectionDivider
 
-            Divider()
-
-            // Quick actions
-            if syncManager.isSyncing {
-                menuButton("Stop Sync", icon: "stop.fill") {
-                    syncManager.cancelSync()
-                }
-                .foregroundColor(.red)
-            } else {
-                menuButton("Sync Now", icon: "arrow.triangle.2.circlepath") {
-                    Task { await syncManager.performSync() }
-                }
-                .disabled(!syncManager.hasDestinationAccess)
-
-                menuButton("Preview Changes…", icon: "eye") {
-                    syncManager.previewResult = nil
-                    openPreviewWindow()
-                }
-                .disabled(!syncManager.hasDestinationAccess)
-
-                if syncManager.lastSyncUndoCount > 0 {
-                    menuButton("Undo Last Sync (\(syncManager.lastSyncUndoCount) file\(syncManager.lastSyncUndoCount == 1 ? "" : "s"))", icon: "arrow.uturn.backward") {
-                        syncManager.undoLastSyncVaultChanges()
-                    }
-                    .help("Restore the Obsidian files changed by the last sync to their previous content. Reversible — the current content is backed up first.")
-                }
-            }
-
-            if !syncManager.pendingConflicts.isEmpty {
-                menuButton("\(syncManager.pendingConflicts.count) Conflicts", icon: "exclamationmark.triangle.fill") {
-                    openMainWindow()
-                }
-            }
-
-            Divider()
-
-            // Quick add — capture a task into the Obsidian inbox (NL dates/priority/#tags).
-            HStack(spacing: 6) {
-                Image(systemName: "plus.circle")
-                    .foregroundColor(.secondary)
-                TextField("Add task… e.g. Pay rent friday !! #home", text: $quickAddText)
-                    .textFieldStyle(.plain)
-                    .font(menuFont)
-                    .onSubmit { submitQuickAdd() }
-                if !quickAddText.isEmpty {
-                    Button("Add") { submitQuickAdd() }
-                        .font(.system(size: 11))
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 6)
-            .help("Type a task and press Return. Understands dates (\"friday\"), priority (!, !!, !!!) and #tags.")
-
-            Divider()
-
-            // Today — due-today + overdue, check off inline.
-            todaySection
-
-            Divider()
-
-            // Last sync results
-            if let result = syncManager.lastSyncResult {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Last sync results:")
-                        .font(menuFont)
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    HStack(spacing: 12) {
-                        if result.created > 0 {
-                            Label("\(result.created)", systemImage: "plus.circle.fill")
-                                .foregroundColor(.green)
-                                .help("Created in Reminders")
-                        }
-                        if result.updated > 0 {
-                            Label("\(result.updated)", systemImage: "arrow.triangle.2.circlepath")
-                                .foregroundColor(.blue)
-                                .help("Updated in Reminders")
-                        }
-                        if result.deleted > 0 {
-                            Label("\(result.deleted)", systemImage: "minus.circle.fill")
-                                .foregroundColor(.red)
-                                .help("Deleted from Reminders")
-                        }
-                        if result.completionsWrittenBack > 0 {
-                            Label("\(result.completionsWrittenBack)", systemImage: "checkmark.circle.fill")
-                                .foregroundColor(.purple)
-                                .help("Completed in Obsidian (writeback)")
-                        }
-                        if result.metadataWrittenBack > 0 {
-                            Label("\(result.metadataWrittenBack)", systemImage: "pencil.circle.fill")
-                                .foregroundColor(.orange)
-                                .help("Metadata written back to Obsidian")
-                        }
-                        if result.created == 0 && result.updated == 0 && result.deleted == 0 && result.completionsWrittenBack == 0 && result.metadataWrittenBack == 0 {
-                            Text("No changes")
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .font(menuFont)
-                }
-                .padding(.horizontal, 14)
+            quickAddField
+                .padding(.horizontal, hInset)
                 .padding(.vertical, 6)
 
-                Divider()
+            sectionDivider
+
+            todaySection
+                .padding(.bottom, 4)
+
+            if let result = syncManager.lastSyncResult {
+                sectionDivider
+                lastSyncResults(result)
             }
 
-            // Update available banner
             if updater.updateAvailable {
-                menuButton("Update Available: \(updater.latestVersion)", icon: "arrow.up.circle.fill") {
-                    updater.downloadUpdate()
-                }
-                .foregroundColor(.blue)
-
-                Divider()
+                sectionDivider
+                updateBanner
             }
 
-            // Settings & Quit.
-            // Note: "Settings…" used to live next to "Open Main Window" but
-            // since v5.4.0 unified Settings into the main window's TabView,
-            // both items showed the exact same window. Removed the redundant
-            // entry per #62.2 (fnsign).
-            menuButton("Open Main Window", icon: "macwindow") {
-                openMainWindow()
-            }
+            sectionDivider
 
-            menuButton("About Remindian", icon: "info.circle") {
-                openAboutWindow()
-            }
-
-            Divider()
-
-            menuButton("Quit Remindian", icon: "power") {
-                NSApplication.shared.terminate(nil)
-            }
+            footer
         }
-        .padding(.vertical, 4)
-        .frame(width: 330)
+        .padding(.vertical, 6)
+        .frame(width: 320)
         .task { await syncManager.refreshAgenda() }
     }
 
-    // MARK: - Today section (Today list)
+    // MARK: - Header
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            Text("Remindian")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.primary)
+
+            if syncManager.config.dryRunMode {
+                Text("DRY RUN")
+                    .font(.system(size: 9, weight: .bold))
+                    .tracking(0.4)
+                    .foregroundColor(.orange)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule().fill(Color.orange.opacity(0.16))
+                    )
+            }
+
+            Spacer(minLength: 6)
+
+            statusPill
+        }
+        .padding(.horizontal, hInset)
+        .padding(.top, 2)
+        .padding(.bottom, 6)
+    }
+
+    /// Small colored status pill: a quiet tinted capsule with a leading glyph —
+    /// far more expensive-looking than a bare dot, and it carries a word.
+    private var statusPill: some View {
+        let s = status
+        return HStack(spacing: 4) {
+            if syncManager.isSyncing {
+                ProgressView()
+                    .controlSize(.mini)
+                    .scaleEffect(0.7)
+                    .frame(width: 8, height: 8)
+            } else {
+                Circle()
+                    .fill(s.color)
+                    .frame(width: 6, height: 6)
+            }
+            Text(s.label)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(s.color)
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(
+            Capsule().fill(s.color.opacity(0.14))
+        )
+        .help(s.tooltip)
+    }
+
+    // MARK: - Actions
+
+    @ViewBuilder
+    private var actions: some View {
+        if syncManager.isSyncing {
+            RowButton(icon: "stop.fill", title: "Stop Sync", tint: .red) {
+                syncManager.cancelSync()
+            }
+        } else {
+            RowButton(icon: "arrow.triangle.2.circlepath", title: "Sync Now") {
+                Task { await syncManager.performSync() }
+            }
+            .disabled(!syncManager.hasDestinationAccess)
+
+            RowButton(icon: "eye", title: "Preview Changes…") {
+                syncManager.previewResult = nil
+                openPreviewWindow()
+            }
+            .disabled(!syncManager.hasDestinationAccess)
+
+            if syncManager.lastSyncUndoCount > 0 {
+                RowButton(
+                    icon: "arrow.uturn.backward",
+                    title: "Undo Last Sync (\(syncManager.lastSyncUndoCount) file\(syncManager.lastSyncUndoCount == 1 ? "" : "s"))"
+                ) {
+                    syncManager.undoLastSyncVaultChanges()
+                }
+                .help("Restore the Obsidian files changed by the last sync to their previous content. Reversible — the current content is backed up first.")
+            }
+        }
+
+        if !syncManager.pendingConflicts.isEmpty {
+            RowButton(
+                icon: "exclamationmark.triangle.fill",
+                title: "\(syncManager.pendingConflicts.count) Conflict\(syncManager.pendingConflicts.count == 1 ? "" : "s")",
+                tint: .orange
+            ) {
+                openMainWindow()
+            }
+        }
+
+        if let lastSync = syncManager.lastSyncDate {
+            metaLine {
+                Text("Last sync ") + Text(lastSync, style: .relative)
+            }
+        }
+
+        if syncManager.profileStore.profiles.count > 1 {
+            metaLine {
+                Text("\(syncManager.profileStore.enabledProfiles.count) of \(syncManager.profileStore.profiles.count) sync profiles enabled")
+            }
+        }
+    }
+
+    private func metaLine<T: View>(@ViewBuilder _ content: () -> T) -> some View {
+        content()
+            .font(.system(size: 11))
+            .foregroundColor(.secondary)
+            .padding(.horizontal, hInset)
+            .padding(.top, 2)
+            .padding(.bottom, 2)
+    }
+
+    // MARK: - Quick add
+
+    private var quickAddField: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "plus.circle.fill")
+                .font(.system(size: 13))
+                .foregroundColor(quickAddFocused ? .accentColor : .secondary)
+
+            TextField("Add task… e.g. Pay rent friday !! #home", text: $quickAddText)
+                .textFieldStyle(.plain)
+                .font(rowFont)
+                .focused($quickAddFocused)
+                .onSubmit { submitQuickAdd() }
+
+            if !quickAddText.isEmpty {
+                Button(action: submitQuickAdd) {
+                    Text("Add")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.accentColor)
+                }
+                .buttonStyle(.plain)
+                .transition(.opacity)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(nsColor: .textBackgroundColor).opacity(0.55))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(
+                    quickAddFocused ? Color.accentColor.opacity(0.55) : Color.primary.opacity(0.10),
+                    lineWidth: 1
+                )
+        )
+        .animation(.easeInOut(duration: 0.12), value: quickAddFocused)
+        .animation(.easeInOut(duration: 0.12), value: quickAddText.isEmpty)
+        .help("Type a task and press Return. Understands dates (\"friday\"), priority (!, !!, !!!) and #tags.")
+    }
+
+    // MARK: - Today
 
     private static let maxAgendaRows = 6
 
     @ViewBuilder
     private var todaySection: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack {
-                Text("Today")
-                    .font(menuFont).fontWeight(.semibold)
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 6) {
+                Text("TODAY")
+                    .font(labelFont)
+                    .tracking(0.5)
+                    .foregroundColor(.secondary)
+
                 if !syncManager.agenda.isEmpty {
                     Text("\(syncManager.agenda.count)")
-                        .font(.caption2).foregroundColor(.secondary)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(Color.primary.opacity(0.08)))
                 }
+
                 Spacer()
+
                 if syncManager.isLoadingAgenda {
-                    ProgressView().scaleEffect(0.5).frame(height: 10)
+                    ProgressView()
+                        .controlSize(.mini)
+                        .scaleEffect(0.7)
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 2)
+            .padding(.horizontal, hInset)
+            .padding(.bottom, 3)
 
             if syncManager.agenda.isEmpty {
-                Text(syncManager.isLoadingAgenda ? "Loading…" : "Nothing due today 🎉")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 2)
+                HStack(spacing: 6) {
+                    Image(systemName: syncManager.isLoadingAgenda ? "hourglass" : "checkmark.circle")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                    Text(syncManager.isLoadingAgenda ? "Loading…" : "Nothing due today")
+                        .font(rowFont)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal, hInset)
+                .padding(.vertical, 4)
             } else {
                 ForEach(syncManager.agenda.prefix(Self.maxAgendaRows)) { task in
-                    agendaRow(task)
-                }
-                if syncManager.agenda.count > Self.maxAgendaRows {
-                    Button {
-                        openMainWindow()
-                    } label: {
-                        Text("+ \(syncManager.agenda.count - Self.maxAgendaRows) more…")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                    AgendaRow(task: task) {
+                        Task { await syncManager.completeAgendaItem(task) }
                     }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 14)
+                    .padding(.horizontal, 6)
+                }
+
+                if syncManager.agenda.count > Self.maxAgendaRows {
+                    RowButton(
+                        icon: "ellipsis.circle",
+                        title: "\(syncManager.agenda.count - Self.maxAgendaRows) more…",
+                        tint: .secondary
+                    ) {
+                        openMainWindow()
+                    }
                 }
             }
         }
+    }
+
+    // MARK: - Last sync results
+
+    private func lastSyncResults(_ result: SyncEngine.SyncResult) -> some View {
+        let none = result.created == 0 && result.updated == 0 && result.deleted == 0
+            && result.completionsWrittenBack == 0 && result.metadataWrittenBack == 0
+        return VStack(alignment: .leading, spacing: 5) {
+            Text("LAST SYNC")
+                .font(labelFont)
+                .tracking(0.5)
+                .foregroundColor(.secondary)
+
+            if none {
+                Text("No changes")
+                    .font(rowFont)
+                    .foregroundColor(.secondary)
+            } else {
+                HStack(spacing: 8) {
+                    resultChip(result.created, "plus", .green, "Created in Reminders")
+                    resultChip(result.updated, "arrow.triangle.2.circlepath", .blue, "Updated in Reminders")
+                    resultChip(result.deleted, "minus", .red, "Deleted from Reminders")
+                    resultChip(result.completionsWrittenBack, "checkmark", .purple, "Completed in Obsidian (writeback)")
+                    resultChip(result.metadataWrittenBack, "pencil", .orange, "Metadata written back to Obsidian")
+                }
+            }
+        }
+        .padding(.horizontal, hInset)
+        .padding(.vertical, 6)
     }
 
     @ViewBuilder
-    private func agendaRow(_ task: SyncTask) -> some View {
-        let overdue = AgendaBuilder.isOverdue(task, now: Date())
-        HStack(spacing: 6) {
-            Button {
-                Task { await syncManager.completeAgendaItem(task) }
-            } label: {
-                Image(systemName: "circle")
+    private func resultChip(_ count: Int, _ icon: String, _ tint: Color, _ help: String) -> some View {
+        if count > 0 {
+            HStack(spacing: 3) {
+                Image(systemName: icon)
+                    .font(.system(size: 9, weight: .bold))
+                Text("\(count)")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundColor(tint)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(tint.opacity(0.14)))
+            .help(help)
+        }
+    }
+
+    // MARK: - Update banner
+
+    private var updateBanner: some View {
+        Button {
+            updater.downloadUpdate()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.system(size: 14))
+                    .foregroundColor(.accentColor)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Update available")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.primary)
+                    Text("Version \(updater.latestVersion)")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
                     .foregroundColor(.secondary)
             }
-            .buttonStyle(.plain)
-            .help("Mark complete")
-
-            Text(task.title)
-                .font(menuFont)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            Spacer(minLength: 6)
-            if let due = task.dueDate {
-                Text(overdue ? "overdue" : dueLabel(due))
-                    .font(.caption2)
-                    .foregroundColor(overdue ? .red : .secondary)
-                    .fixedSize()
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 3)
-        .contentShape(Rectangle())
-    }
-
-    private func dueLabel(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "MMM d"
-        return f.string(from: date)
-    }
-
-    /// Consistent menu-style button with system font
-    private func menuButton(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .frame(width: 16)
-                Text(title)
-                Spacer()
-            }
-            .font(menuFont)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 5)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.12))
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
     }
 
-    private var statusColor: Color {
-        if syncManager.isSyncing {
-            return .blue
-        } else if !syncManager.hasDestinationAccess {
-            return .red
-        } else if !syncManager.pendingConflicts.isEmpty {
-            return .orange
-        } else {
-            return .green
+    // MARK: - Footer
+
+    private var footer: some View {
+        VStack(spacing: 0) {
+            RowButton(icon: "macwindow", title: "Open Main Window") {
+                openMainWindow()
+            }
+            RowButton(icon: "info.circle", title: "About Remindian") {
+                openAboutWindow()
+            }
+            RowButton(icon: "power", title: "Quit Remindian") {
+                NSApplication.shared.terminate(nil)
+            }
         }
     }
 
-    private var statusTooltip: String {
+    // MARK: - Shared chrome
+
+    private var sectionDivider: some View {
+        Divider()
+            .padding(.horizontal, hInset)
+            .padding(.vertical, 4)
+            .opacity(0.6)
+    }
+
+    // MARK: - Status model
+
+    private struct Status {
+        let label: String
+        let color: Color
+        let tooltip: String
+    }
+
+    private var status: Status {
         if syncManager.isSyncing {
-            return "Blue: Sync in progress"
+            return Status(label: "Syncing", color: .blue, tooltip: "Sync in progress")
         } else if !syncManager.hasDestinationAccess {
-            return "Red: No destination access — check configuration in Settings"
+            return Status(label: "No Access", color: .red, tooltip: "No destination access — check configuration in Settings")
         } else if !syncManager.pendingConflicts.isEmpty {
-            return "Orange: Unresolved conflicts — open main window to resolve"
+            return Status(label: "Conflicts", color: .orange, tooltip: "Unresolved conflicts — open main window to resolve")
         } else {
-            return "Green: Everything is synced and up to date"
+            return Status(label: "Synced", color: .green, tooltip: "Everything is synced and up to date")
         }
     }
+
+    // MARK: - Window helpers (kept as-is from the prior implementation)
 
     private func openMainWindow() {
         // Honor the user's "Hide dock icon" preference (#62.1). Forcing
@@ -381,6 +489,177 @@ struct MenuBarView: View {
 
     private func openSettings() {
         openNativeSettingsWindow()
+    }
+}
+
+// MARK: - RowButton
+//
+// A single full-width menu row with a leading SF Symbol, a title, and a subtle
+// rounded hover highlight. macOS 13-safe: the hover state is tracked manually
+// via .onHover and rendered with a RoundedRectangle behind the content.
+
+private struct RowButton: View {
+    let icon: String
+    let title: String
+    var tint: Color? = nil
+    let action: () -> Void
+
+    @State private var hovering = false
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .medium))
+                    .frame(width: 16)
+                Text(title)
+                    .font(.system(size: 13))
+                Spacer(minLength: 0)
+            }
+            .foregroundColor(tint ?? .primary)
+            .opacity(isEnabled ? 1 : 0.4)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.accentColor.opacity(hovering && isEnabled ? 0.14 : 0))
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 6)
+        .onHover { hovering = $0 }
+    }
+}
+
+// MARK: - AgendaRow
+//
+// One Today task on exactly ONE horizontal line:
+//   [priority dot] [circular check] [title, truncated] [spacer] [due capsule]
+// The check fills with the accent tint on hover; the due capsule is "Today" in
+// accent, "Nd late" in red, otherwise "MMM d" in secondary.
+
+private struct AgendaRow: View {
+    let task: SyncTask
+    let onComplete: () -> Void
+
+    @State private var rowHovering = false
+    @State private var checkHovering = false
+
+    var body: some View {
+        let overdue = AgendaBuilder.isOverdue(task, now: Date())
+
+        HStack(spacing: 8) {
+            priorityDot
+
+            Button(action: onComplete) {
+                ZStack {
+                    Circle()
+                        .strokeBorder(
+                            checkHovering ? Color.accentColor : Color.secondary.opacity(0.6),
+                            lineWidth: 1.5
+                        )
+                        .background(
+                            Circle().fill(
+                                checkHovering ? Color.accentColor.opacity(0.85) : Color.clear
+                            )
+                        )
+                        .frame(width: 15, height: 15)
+                    if checkHovering {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .onHover { checkHovering = $0 }
+            .help("Mark complete")
+
+            Text(task.title)
+                .font(.system(size: 13))
+                .foregroundColor(.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            Spacer(minLength: 6)
+
+            duePill(overdue: overdue)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color.accentColor.opacity(rowHovering ? 0.08 : 0))
+        )
+        .contentShape(Rectangle())
+        .onHover { rowHovering = $0 }
+    }
+
+    // Small leading colored dot encoding priority. `.none` reserves the slot
+    // (clear) so titles still align across rows.
+    @ViewBuilder
+    private var priorityDot: some View {
+        Circle()
+            .fill(priorityColor)
+            .frame(width: 6, height: 6)
+            .help(task.priority == .none ? "" : "\(task.priority.displayName) priority")
+    }
+
+    private var priorityColor: Color {
+        switch task.priority {
+        case .high: return .red
+        case .medium: return .orange
+        case .low: return .blue
+        case .none: return .clear
+        }
+    }
+
+    @ViewBuilder
+    private func duePill(overdue: Bool) -> some View {
+        if let due = task.dueDate {
+            let info = DueInfo.make(for: due, overdue: overdue)
+            Text(info.text)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(info.color)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(info.color.opacity(0.14)))
+                .fixedSize()
+        }
+    }
+}
+
+// MARK: - DueInfo
+
+private struct DueInfo {
+    let text: String
+    let color: Color
+
+    static func make(for due: Date, overdue: Bool) -> DueInfo {
+        let cal = Calendar.current
+        let now = Date()
+
+        if overdue {
+            let days = cal.dateComponents([.day], from: cal.startOfDay(for: due), to: cal.startOfDay(for: now)).day ?? 0
+            if days >= 1 {
+                return DueInfo(text: "\(days)d late", color: .red)
+            }
+            return DueInfo(text: "Overdue", color: .red)
+        }
+
+        if cal.isDateInToday(due) {
+            return DueInfo(text: "Today", color: .accentColor)
+        }
+        if cal.isDateInTomorrow(due) {
+            return DueInfo(text: "Tomorrow", color: .secondary)
+        }
+
+        let f = DateFormatter()
+        f.dateFormat = "MMM d"
+        return DueInfo(text: f.string(from: due), color: .secondary)
     }
 }
 

@@ -131,24 +131,35 @@ class GenericMarkdownSource: TaskSource {
 
     // MARK: - Internals
 
-    /// Read the file, verify the task's line still matches what we parsed, apply
-    /// `transform` to that one line, and write back atomically (with a backup).
-    /// Aborts if the line moved/changed so we never overwrite a concurrent edit.
+    /// Read the file, locate the task's line, apply `transform` to that one line,
+    /// and write back atomically (with a backup).
+    ///
+    /// The stored line index may be stale — a prior sync, an iCloud re-sync, or an
+    /// edit in the editor itself may have shifted lines since the scan that produced
+    /// `source.lineNumber`. So we relocate by content: the exact recorded line at
+    /// the stored index first (the fast path), then the exact recorded line anywhere
+    /// (it simply moved). If the line is gone in its recorded form (e.g. the task was
+    /// completed elsewhere since the scan), this is a safe no-op — we never throw a
+    /// "file changed" error and never edit a line we can't positively identify. (#75-followup)
     private func surgicallyEdit(task: SyncTask, vaultPath: String, transform: (String) -> String) throws {
         guard let source = task.obsidianSource else { throw ObsidianError.noSourceInformation }
         let url = URL(fileURLWithPath: vaultPath + source.filePath)
         let content = try String(contentsOf: url, encoding: .utf8)
         var lines = content.components(separatedBy: "\n")
 
-        let idx = source.lineNumber - 1
-        guard idx >= 0, idx < lines.count else {
-            throw ObsidianError.lineNumberOutOfRange(source.lineNumber, lines.count)
-        }
-        // Verify the line is the one we expect (trimmed compare tolerates only
-        // trailing-whitespace differences). Abort on mismatch — safer to skip
-        // than to edit the wrong line.
-        guard lines[idx].trimmingCharacters(in: .whitespaces) == source.originalLine.trimmingCharacters(in: .whitespaces) else {
-            throw ObsidianError.lineContentMismatch(expected: source.originalLine, found: lines[idx])
+        let expected = source.originalLine.trimmingCharacters(in: .whitespaces)
+        let storedIdx = source.lineNumber - 1
+        let idx: Int
+        if storedIdx >= 0, storedIdx < lines.count,
+           lines[storedIdx].trimmingCharacters(in: .whitespaces) == expected {
+            idx = storedIdx
+        } else if let found = lines.firstIndex(where: {
+            $0.trimmingCharacters(in: .whitespaces) == expected
+        }) {
+            idx = found
+        } else {
+            // Task line not present in its expected form — nothing safe to edit.
+            return
         }
 
         let newLine = transform(lines[idx])
