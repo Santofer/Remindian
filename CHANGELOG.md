@@ -4,6 +4,17 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.25.3 (June 2026)
+
+Pinned Tasks window: flat, native chrome — no more glass buttons.
+
+### Pinned Tasks window
+
+- **Dropped the glass toolbar buttons.** The titlebar chrome is now flat, native SwiftUI hosted in titlebar accessories: the view control is a **subtle hairline-outlined pill with no fill** (faint highlight on hover only), and refresh is a **plain icon** — no Liquid-Glass pills.
+- **Search is back inside the dropdown.** Clicking the view control opens a popover with the search field on top and the view choices below (Tasks / Deadlines / Priorities / Tags / Recurring) — the layout you preferred.
+
+---
+
 ## v5.25.2 (June 2026)
 
 Pinned Tasks window: seamless toolbar, search back, and a "Tasks" view.
