@@ -4,6 +4,17 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.24.4 (June 2026)
+
+Pinned Tasks window: titlebar alignment + cleaner separation.
+
+### Bug fixes
+
+- **The centered title now lines up with the close button, count and refresh.** The title strip is sized to the *measured* titlebar height (via the safe-area inset) and pulled onto the titlebar line, so the "By Date" control sits on exactly the same row as the traffic lights (left) and the refresh + count (right) — instead of a bit lower.
+- **Removed the divider line** between the title and the task list, for a cleaner, seamless look.
+
+---
+
 ## v5.24.3 (June 2026)
 
 Things-style centered title in the Pinned Tasks window.

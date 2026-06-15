@@ -95,14 +95,22 @@ struct PinnedTasksView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            titleBar
-            Divider().opacity(0.4)
-            content
+        GeometryReader { proxy in
+            // The window's top safe-area inset == the titlebar height. Make the
+            // title strip exactly that tall and pull it up over the titlebar, so
+            // the centered control lands on the SAME line as the traffic lights
+            // and the refresh+count accessory — no pixel guessing. (pinned window toolbar)
+            let barHeight = max(proxy.safeAreaInsets.top, 28)
+            VStack(spacing: 0) {
+                titleBar
+                    .frame(height: barHeight)
+                content
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .ignoresSafeArea(.container, edges: .top)
         }
         .frame(minWidth: 260, minHeight: 220)
         .background(VisualEffectBackground().ignoresSafeArea())
-        .ignoresSafeArea(.container, edges: .top)   // let the title row sit in the titlebar strip
         .task { await syncManager.refreshAgenda(force: true) }
     }
 
@@ -141,8 +149,8 @@ struct PinnedTasksView: View {
             .popover(isPresented: $showOptions, arrowEdge: .bottom) { optionsPopover }
             Spacer(minLength: 0)
         }
-        .frame(height: 44)
         .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
     }
 
     private func menuTitle(_ g: PinnedTasksOrganizer.Grouping) -> String {
