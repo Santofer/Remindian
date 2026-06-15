@@ -1,6 +1,6 @@
 cask "remindian" do
-  version "5.22.1"
-  sha256 "6cde8b4229dd52c1fd1c56fdd9045e43fd17681dd615c96c845d54200cfe16bf"
+  version "5.23.0"
+  sha256 "b69f04ee3d52ddc7b700c4cae2b2c2a492677cc972c0c393b5f2612f8ae65794"
 
   url "https://github.com/Santofer/Remindian/releases/download/v#{version}/Remindian-v#{version}.dmg"
   name "Remindian"
