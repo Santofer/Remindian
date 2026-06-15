@@ -199,7 +199,7 @@ struct MenuBarView: View {
                 .font(.system(size: 13))
                 .foregroundColor(quickAddFocused ? .accentColor : .secondary)
 
-            TextField("Add task… e.g. Pay rent friday !! #home", text: $quickAddText)
+            TextField("Add task… e.g. Pay rent friday every month !! #home", text: $quickAddText)
                 .textFieldStyle(.plain)
                 .font(rowFont)
                 .focused($quickAddFocused)
@@ -230,7 +230,7 @@ struct MenuBarView: View {
         )
         .animation(.easeInOut(duration: 0.12), value: quickAddFocused)
         .animation(.easeInOut(duration: 0.12), value: quickAddText.isEmpty)
-        .help("Type a task and press Return. Understands dates (\"friday\"), priority (!, !!, !!!) and #tags.")
+        .help("Type a task and press Return. Understands dates (\"friday\"), recurrence (\"every month\", \"toutes les 2 semaines\"), priority (!, !!, !!!) and #tags.")
     }
 
     // MARK: - Today

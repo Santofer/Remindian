@@ -317,6 +317,13 @@ class ObsidianService {
             parts.append(task.priority.obsidianEmoji)
         }
 
+        // Recurrence (🔁) — written before the dates, matching the Obsidian Tasks
+        // emoji order. Round-trips back on the next scan and becomes a repeating
+        // Apple Reminder via RecurrenceConverter. (Quick-add recurrence)
+        if let rule = task.recurrenceRule, !rule.isEmpty {
+            parts.append("🔁 \(rule)")
+        }
+
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
 

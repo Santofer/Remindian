@@ -72,6 +72,61 @@ final class QuickAddParserTests: XCTestCase {
         XCTAssertFalse(t.title.contains("#admin"))
     }
 
+    // MARK: - Recurrence (Quick-add recurrence)
+
+    func test_recurrence_englishIntervals() {
+        XCTAssertEqual(QuickAddParser.parse("Water plants every day").recurrenceRule, "every day")
+        XCTAssertEqual(QuickAddParser.parse("Standup every 2 weeks").recurrenceRule, "every 2 weeks")
+        XCTAssertEqual(QuickAddParser.parse("Pay rent every month").recurrenceRule, "every month")
+        XCTAssertEqual(QuickAddParser.parse("Renew domain every 1 year").recurrenceRule, "every year")
+        XCTAssertEqual(QuickAddParser.parse("Deep clean every 3 months").recurrenceRule, "every 3 months")
+    }
+
+    func test_recurrence_englishAdverbs() {
+        XCTAssertEqual(QuickAddParser.parse("Backup weekly").recurrenceRule, "every week")
+        XCTAssertEqual(QuickAddParser.parse("Standup daily").recurrenceRule, "every day")
+        XCTAssertEqual(QuickAddParser.parse("Report monthly").recurrenceRule, "every month")
+        XCTAssertEqual(QuickAddParser.parse("Taxes annually").recurrenceRule, "every year")
+    }
+
+    func test_recurrence_french() {
+        XCTAssertEqual(QuickAddParser.parse("Arroser les plantes tous les jours").recurrenceRule, "every day")
+        XCTAssertEqual(QuickAddParser.parse("Réunion chaque semaine").recurrenceRule, "every week")
+        XCTAssertEqual(QuickAddParser.parse("Payer le loyer tous les mois").recurrenceRule, "every month")
+        XCTAssertEqual(QuickAddParser.parse("Bilan tous les ans").recurrenceRule, "every year")
+        XCTAssertEqual(QuickAddParser.parse("Standup toutes les 2 semaines").recurrenceRule, "every 2 weeks")
+        XCTAssertEqual(QuickAddParser.parse("Sauvegarde hebdomadaire").recurrenceRule, "every week")
+        XCTAssertEqual(QuickAddParser.parse("Rapport mensuel").recurrenceRule, "every month")
+    }
+
+    func test_recurrence_strippedFromTitle() {
+        let t = QuickAddParser.parse("Pay rent every month")
+        XCTAssertEqual(t.title, "Pay rent")
+        XCTAssertEqual(t.recurrenceRule, "every month")
+    }
+
+    func test_recurrence_noFalsePositives() {
+        XCTAssertNil(QuickAddParser.parse("Email Sam").recurrenceRule)
+        XCTAssertNil(QuickAddParser.parse("Review everything before launch").recurrenceRule,
+                     "\"everything\" must not trigger recurrence.")
+        XCTAssertNil(QuickAddParser.parse("Plan the yearbook").recurrenceRule,
+                     "\"yearbook\" must not match the \"year\" unit.")
+        XCTAssertNil(QuickAddParser.parse("Each item needs review").recurrenceRule,
+                     "\"each\" without a following time unit is not a recurrence.")
+    }
+
+    func test_recurrence_combinedWithDatePriorityTag() {
+        let t = QuickAddParser.parse("Pay rent friday every month #home !!!")
+        XCTAssertEqual(t.priority, .high)
+        XCTAssertEqual(t.tags, ["#home"])
+        XCTAssertEqual(t.recurrenceRule, "every month")
+        XCTAssertNotNil(t.dueDate, "\"friday\" still resolves to a due date.")
+        XCTAssertTrue(t.title.localizedCaseInsensitiveContains("Pay rent"))
+        XCTAssertFalse(t.title.lowercased().contains("every month"))
+        XCTAssertFalse(t.title.contains("#home"))
+        XCTAssertFalse(t.title.contains("!"))
+    }
+
     func test_emptyAndWhitespace() {
         XCTAssertEqual(QuickAddParser.parse("   ").title, "")
     }

@@ -1245,6 +1245,41 @@ final class WritebackTests: XCTestCase {
         // is that the write succeeded (backup is called before write in the code)
     }
 
+    // MARK: appendTaskToInbox — recurrence (Quick-add recurrence)
+
+    func testAppendWritesRecurrenceTokenAndRoundTrips() throws {
+        let task = SyncTask(
+            title: "Pay rent",
+            priority: .medium,
+            dueDate: makeDate(2026, 7, 1),
+            tags: ["#home"],
+            recurrenceRule: "every month"
+        )
+        let result = try service.appendTaskToInbox(
+            task: task, inboxRelativePath: "/Inbox.md", vaultPath: vaultURL.path
+        )
+        XCTAssertTrue(result.lineContent.contains("🔁 every month"),
+                      "Recurrence token must be written. Got: \(result.lineContent)")
+
+        // The produced line must re-parse with the rule preserved (fromObsidianLine
+        // keeps the 🔁 prefix verbatim) AND that rule must convert to a real
+        // EKRecurrenceRule — i.e. it reaches Reminders as a repeating reminder.
+        let parsed = SyncTask.fromObsidianLine(result.lineContent, filePath: "/Inbox.md", lineNumber: 1)
+        XCTAssertEqual(parsed?.title, "Pay rent", "Recurrence/dates/tags don't bleed into the title.")
+        let rule = parsed?.recurrenceRule ?? ""
+        XCTAssertTrue(rule.contains("every month"), "Rule preserved on round-trip. Got: \(rule)")
+        XCTAssertNotNil(RecurrenceConverter.parse(ruleText: rule),
+                        "Round-tripped rule must convert to a real EKRecurrenceRule.")
+    }
+
+    func testAppendWithoutRecurrenceHasNoToken() throws {
+        let task = SyncTask(title: "One-off task", dueDate: makeDate(2026, 7, 1))
+        let result = try service.appendTaskToInbox(
+            task: task, inboxRelativePath: "/Inbox.md", vaultPath: vaultURL.path
+        )
+        XCTAssertFalse(result.lineContent.contains("🔁"), "No recurrence → no 🔁 token.")
+    }
+
     // MARK: Position-Aware Offset Formula
 
     func testPositionAwareOffsetFormula() {

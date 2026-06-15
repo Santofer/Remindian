@@ -4,6 +4,21 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.22.0 (June 2026)
+
+Quick-add now understands recurrence — in English and French.
+
+### New
+
+- **Recurring tasks from the menu's quick-add.** Type a repeat phrase and the task is created as a proper recurring Obsidian Tasks task (`🔁 every …`) that becomes a **repeating Apple Reminder** on the next sync. Understands both languages:
+  - English: `every day` / `every 2 weeks` / `every month` / `every 3 months` / `every year`, and the adverbs `daily` / `weekly` / `monthly` / `yearly` / `annually`.
+  - French: `tous les jours` / `toutes les 2 semaines` / `tous les mois` / `chaque semaine` / `tous les ans`, and `quotidien` / `hebdomadaire` / `mensuel` / `annuel`.
+  - Combines with everything else: `Payer le loyer vendredi tous les mois #maison !!!` → title "Payer le loyer", due Friday, repeats monthly, tag #maison, high priority.
+
+  Scope note: day/week/month/year intervals are supported end-to-end (they round-trip to a real repeating reminder). Day-of-week rules like "every monday" are not yet parsed from quick-add — a phrase like that is treated as a one-off due date for now. Times of day aren't captured, since the Obsidian Tasks format is day-granularity.
+
+---
+
 ## v5.21.2 (June 2026)
 
 A refreshed menu, and the last class of "file changed" completion errors gone.
