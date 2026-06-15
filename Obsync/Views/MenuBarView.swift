@@ -51,12 +51,6 @@ struct MenuBarView: View {
             todaySection
                 .padding(.bottom, 4)
 
-            sectionDivider
-
-            // Status hub: the sync badge + "x min ago" + this sync's task counts,
-            // all in one place near the bottom (the old top title bar is gone).
-            statusSection
-
             if updater.updateAvailable {
                 sectionDivider
                 updateBanner
@@ -105,14 +99,26 @@ struct MenuBarView: View {
     @ViewBuilder
     private var actions: some View {
         if syncManager.isSyncing {
-            RowButton(icon: "stop.fill", title: "Stop Sync", tint: .red) {
-                syncManager.cancelSync()
+            // Stop Sync carries the live "Syncing" badge on its right.
+            SyncActionRow(title: "Stop Sync", icon: "stop.fill", tint: .red,
+                          lastSync: nil, disabled: false,
+                          action: { syncManager.cancelSync() }) {
+                statusPill
             }
         } else {
-            RowButton(icon: "arrow.triangle.2.circlepath", title: "Sync Now") {
-                Task { await syncManager.performSync() }
+            // Sync Now is the status hub: the badge, the DRY-RUN marker, the
+            // "synced x ago" timing, and this sync's task-count chips all live on
+            // its right — no separate status section. (menu compaction)
+            SyncActionRow(title: "Sync Now", icon: "arrow.triangle.2.circlepath", tint: nil,
+                          lastSync: syncManager.lastSyncDate,
+                          disabled: !syncManager.hasDestinationAccess,
+                          action: { Task { await syncManager.performSync() } }) {
+                HStack(spacing: 5) {
+                    if syncManager.config.dryRunMode { dryRunBadge }
+                    statusPill
+                    inlineResultChips
+                }
             }
-            .disabled(!syncManager.hasDestinationAccess)
 
             RowButton(icon: "eye", title: "Preview Changes…") {
                 syncManager.previewResult = nil
@@ -264,75 +270,46 @@ struct MenuBarView: View {
         }
     }
 
-    // MARK: - Last sync results
+    // MARK: - Inline status badges (right side of the Sync Now row)
 
-    /// Status hub — always shown near the bottom. Carries the sync badge, the
-    /// DRY-RUN marker, the "x min ago" timing (moved out of the actions list),
-    /// and this sync's task counts. This is where the old top title bar's status
-    /// pill now lives.
-    private var statusSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                statusPill
+    /// Compact DRY-RUN marker shown beside the status pill on the Sync Now row.
+    private var dryRunBadge: some View {
+        Text("DRY RUN")
+            .font(.system(size: 8, weight: .bold))
+            .tracking(0.3)
+            .foregroundColor(.orange)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(Color.orange.opacity(0.16)))
+    }
 
-                if syncManager.config.dryRunMode {
-                    Text("DRY RUN")
-                        .font(.system(size: 9, weight: .bold))
-                        .tracking(0.4)
-                        .foregroundColor(.orange)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(Capsule().fill(Color.orange.opacity(0.16)))
-                }
-
-                Spacer(minLength: 6)
-
-                if let lastSync = syncManager.lastSyncDate {
-                    (Text("synced ") + Text(lastSync, style: .relative) + Text(" ago"))
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                } else {
-                    Text("not synced yet")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                }
-            }
-
-            if let result = syncManager.lastSyncResult {
-                let none = result.created == 0 && result.updated == 0 && result.deleted == 0
-                    && result.completionsWrittenBack == 0 && result.metadataWrittenBack == 0
-                if none {
-                    Text("No changes last sync")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                } else {
-                    HStack(spacing: 8) {
-                        resultChip(result.created, "plus", .green, "Created in Reminders")
-                        resultChip(result.updated, "arrow.triangle.2.circlepath", .blue, "Updated in Reminders")
-                        resultChip(result.deleted, "minus", .red, "Deleted from Reminders")
-                        resultChip(result.completionsWrittenBack, "checkmark", .purple, "Completed in Obsidian (writeback)")
-                        resultChip(result.metadataWrittenBack, "pencil", .orange, "Metadata written back to Obsidian")
-                    }
-                }
+    /// This sync's task-count chips, inline on the Sync Now row. Tapping the row
+    /// still triggers a sync; the chips' tooltips explain each count.
+    @ViewBuilder
+    private var inlineResultChips: some View {
+        if let result = syncManager.lastSyncResult {
+            HStack(spacing: 4) {
+                resultChip(result.created, "plus", .green, "Created in Reminders")
+                resultChip(result.updated, "arrow.triangle.2.circlepath", .blue, "Updated in Reminders")
+                resultChip(result.deleted, "minus", .red, "Deleted from Reminders")
+                resultChip(result.completionsWrittenBack, "checkmark", .purple, "Completed in Obsidian (writeback)")
+                resultChip(result.metadataWrittenBack, "pencil", .orange, "Metadata written back to Obsidian")
             }
         }
-        .padding(.horizontal, hInset)
-        .padding(.vertical, 6)
     }
 
     @ViewBuilder
     private func resultChip(_ count: Int, _ icon: String, _ tint: Color, _ help: String) -> some View {
         if count > 0 {
-            HStack(spacing: 3) {
+            HStack(spacing: 2) {
                 Image(systemName: icon)
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: 8, weight: .bold))
                 Text("\(count)")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 10, weight: .semibold))
             }
             .foregroundColor(tint)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
             .background(Capsule().fill(tint.opacity(0.14)))
             .help(help)
         }
@@ -527,6 +504,60 @@ private struct RowButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .padding(.horizontal, 6)
+        .onHover { hovering = $0 }
+    }
+}
+
+// MARK: - SyncActionRow
+//
+// Like RowButton, but with an optional "synced x ago" subtitle and trailing
+// content (the status pill + DRY-RUN marker + result chips). Lets the Sync Now
+// row double as the status hub so no separate status section is needed.
+
+private struct SyncActionRow<Trailing: View>: View {
+    let title: String
+    let icon: String
+    var tint: Color? = nil
+    let lastSync: Date?
+    let disabled: Bool
+    let action: () -> Void
+    @ViewBuilder let trailing: () -> Trailing
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .medium))
+                    .frame(width: 16)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(.system(size: 13))
+                    if let last = lastSync {
+                        (Text("synced ") + Text(last, style: .relative) + Text(" ago"))
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 6)
+                trailing()
+            }
+            .foregroundColor(tint ?? .primary)
+            .opacity(disabled ? 0.4 : 1)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.accentColor.opacity(hovering && !disabled ? 0.14 : 0))
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
         .padding(.horizontal, 6)
         .onHover { hovering = $0 }
     }

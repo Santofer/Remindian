@@ -4,6 +4,16 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.23.1 (June 2026)
+
+Even leaner menu: the status badges now ride on the Sync Now row.
+
+### Menu bar
+
+- **Folded the whole status section into the Sync Now row.** The sync badge (Synced / Syncing / Conflicts / No access), the DRY-RUN marker, the "synced 16 sec ago" timing, and this sync's task-count chips now sit on the **right of the Sync Now row** — the separate status section at the bottom is gone, reclaiming a divider and two rows of height. The timing shows as a small subtitle under "Sync Now".
+
+---
+
 ## v5.23.0 (June 2026)
 
 A floating, always-on-top mini task manager.
