@@ -133,11 +133,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // macOS 26+ (Tahoe): Configure main window for Liquid Glass
+        // macOS 26+ (Tahoe): Configure main window for Liquid Glass.
+        // Exclude the floating Pinned Tasks window — it manages its own titlebar
+        // (a *visible*, centered title + a right toolbar accessory); the blanket
+        // titleVisibility=.hidden here would otherwise wipe its title. (pinned window toolbar)
         if #available(macOS 26, *) {
             safeInit("Liquid Glass window") {
                 DispatchQueue.main.async {
-                    for window in NSApp.windows {
+                    for window in NSApp.windows where window.identifier?.rawValue != "pinned-tasks-window" {
                         window.titlebarAppearsTransparent = true
                         window.titleVisibility = .hidden
                         window.styleMask.insert(.fullSizeContentView)

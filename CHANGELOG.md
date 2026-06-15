@@ -4,6 +4,16 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.24.2 (June 2026)
+
+Hotfix: the "Tasks" title is back in the Pinned Tasks window titlebar.
+
+### Bug fixes
+
+- **The Pinned Tasks window titlebar showed no title.** On macOS Tahoe, a launch-time "Liquid Glass" pass looped over *every* window and forced the title hidden — wiping the Pinned Tasks window's title (most visible when the window reopened on launch). That pass now skips the Pinned Tasks window, so its centered **"Tasks"** title renders again, at the close-button level, with refresh + count on the right — over the same seamless translucent background.
+
+---
+
 ## v5.24.1 (June 2026)
 
 Pinned Tasks window: a proper titlebar.

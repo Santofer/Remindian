@@ -34,12 +34,12 @@ final class PinnedTasksWindowController: NSObject {
 
         let hosting = NSHostingController(rootView: PinnedTasksView().environmentObject(SyncManager.shared))
         let p = NSPanel(contentViewController: hosting)
-        // Standard titlebar: the native title sits centered at the close-button
-        // level, and a right titlebar accessory holds the refresh button + count
-        // on the same toolbar line. Still a non-activating floating panel, just
-        // with a normal-height titlebar so the centered title + accessory render
-        // predictably. (pinned window toolbar)
-        p.styleMask = [.titled, .closable, .resizable, .nonactivatingPanel]
+        // Seamless full-height vibrancy with a real titlebar: the native title
+        // sits centered at the close-button level, a right titlebar accessory
+        // holds refresh + count on the same line, and the content auto-insets
+        // below the titlebar via the safe area (so it doesn't collide with the
+        // title). Non-activating floating panel. (pinned window toolbar)
+        p.styleMask = [.titled, .closable, .resizable, .fullSizeContentView, .nonactivatingPanel]
         p.title = "Tasks"
         p.titlebarAppearsTransparent = true
         p.titleVisibility = .visible
