@@ -36,11 +36,9 @@ struct MenuBarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
-
-            sectionDivider
-
+            // Opens straight on the actions — "Sync Now" is the first thing you see.
             actions
+                .padding(.top, 2)
 
             sectionDivider
 
@@ -53,10 +51,11 @@ struct MenuBarView: View {
             todaySection
                 .padding(.bottom, 4)
 
-            if let result = syncManager.lastSyncResult {
-                sectionDivider
-                lastSyncResults(result)
-            }
+            sectionDivider
+
+            // Status hub: the sync badge + "x min ago" + this sync's task counts,
+            // all in one place near the bottom (the old top title bar is gone).
+            statusSection
 
             if updater.updateAvailable {
                 sectionDivider
@@ -72,34 +71,7 @@ struct MenuBarView: View {
         .task { await syncManager.refreshAgenda() }
     }
 
-    // MARK: - Header
-
-    private var header: some View {
-        HStack(spacing: 8) {
-            Text("Remindian")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.primary)
-
-            if syncManager.config.dryRunMode {
-                Text("DRY RUN")
-                    .font(.system(size: 9, weight: .bold))
-                    .tracking(0.4)
-                    .foregroundColor(.orange)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(
-                        Capsule().fill(Color.orange.opacity(0.16))
-                    )
-            }
-
-            Spacer(minLength: 6)
-
-            statusPill
-        }
-        .padding(.horizontal, hInset)
-        .padding(.top, 2)
-        .padding(.bottom, 6)
-    }
+    // MARK: - Status pill
 
     /// Small colored status pill: a quiet tinted capsule with a leading glyph —
     /// far more expensive-looking than a bare dot, and it carries a word.
@@ -166,12 +138,6 @@ struct MenuBarView: View {
                 tint: .orange
             ) {
                 openMainWindow()
-            }
-        }
-
-        if let lastSync = syncManager.lastSyncDate {
-            metaLine {
-                Text("Last sync ") + Text(lastSync, style: .relative)
             }
         }
 
@@ -300,26 +266,54 @@ struct MenuBarView: View {
 
     // MARK: - Last sync results
 
-    private func lastSyncResults(_ result: SyncEngine.SyncResult) -> some View {
-        let none = result.created == 0 && result.updated == 0 && result.deleted == 0
-            && result.completionsWrittenBack == 0 && result.metadataWrittenBack == 0
-        return VStack(alignment: .leading, spacing: 5) {
-            Text("LAST SYNC")
-                .font(labelFont)
-                .tracking(0.5)
-                .foregroundColor(.secondary)
+    /// Status hub — always shown near the bottom. Carries the sync badge, the
+    /// DRY-RUN marker, the "x min ago" timing (moved out of the actions list),
+    /// and this sync's task counts. This is where the old top title bar's status
+    /// pill now lives.
+    private var statusSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                statusPill
 
-            if none {
-                Text("No changes")
-                    .font(rowFont)
-                    .foregroundColor(.secondary)
-            } else {
-                HStack(spacing: 8) {
-                    resultChip(result.created, "plus", .green, "Created in Reminders")
-                    resultChip(result.updated, "arrow.triangle.2.circlepath", .blue, "Updated in Reminders")
-                    resultChip(result.deleted, "minus", .red, "Deleted from Reminders")
-                    resultChip(result.completionsWrittenBack, "checkmark", .purple, "Completed in Obsidian (writeback)")
-                    resultChip(result.metadataWrittenBack, "pencil", .orange, "Metadata written back to Obsidian")
+                if syncManager.config.dryRunMode {
+                    Text("DRY RUN")
+                        .font(.system(size: 9, weight: .bold))
+                        .tracking(0.4)
+                        .foregroundColor(.orange)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(Color.orange.opacity(0.16)))
+                }
+
+                Spacer(minLength: 6)
+
+                if let lastSync = syncManager.lastSyncDate {
+                    (Text("synced ") + Text(lastSync, style: .relative) + Text(" ago"))
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                } else {
+                    Text("not synced yet")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            if let result = syncManager.lastSyncResult {
+                let none = result.created == 0 && result.updated == 0 && result.deleted == 0
+                    && result.completionsWrittenBack == 0 && result.metadataWrittenBack == 0
+                if none {
+                    Text("No changes last sync")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                } else {
+                    HStack(spacing: 8) {
+                        resultChip(result.created, "plus", .green, "Created in Reminders")
+                        resultChip(result.updated, "arrow.triangle.2.circlepath", .blue, "Updated in Reminders")
+                        resultChip(result.deleted, "minus", .red, "Deleted from Reminders")
+                        resultChip(result.completionsWrittenBack, "checkmark", .purple, "Completed in Obsidian (writeback)")
+                        resultChip(result.metadataWrittenBack, "pencil", .orange, "Metadata written back to Obsidian")
+                    }
                 }
             }
         }
@@ -390,7 +384,7 @@ struct MenuBarView: View {
             RowButton(icon: "info.circle", title: "About Remindian") {
                 openAboutWindow()
             }
-            RowButton(icon: "power", title: "Quit Remindian") {
+            RowButton(icon: "power", title: "Quit") {
                 NSApplication.shared.terminate(nil)
             }
         }

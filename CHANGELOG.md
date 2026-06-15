@@ -4,6 +4,18 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.22.1 (June 2026)
+
+A leaner menu: actions first, status consolidated at the bottom.
+
+### Menu bar
+
+- **Removed the "Remindian" title bar** at the top — the menu now opens straight on **Sync Now**.
+- **Moved the sync status badge** (Synced / Syncing / Conflicts / No access) out of the old title bar and into a single status hub at the bottom, next to the **"synced 11 min ago"** timing and this sync's task-count chips. The standalone "Last sync …" line in the actions list is gone — it lives in the status hub now. The DRY-RUN marker moved there too.
+- **"Quit Remindian" → "Quit."**
+
+---
+
 ## v5.22.0 (June 2026)
 
 Quick-add now understands recurrence — in English and French.
