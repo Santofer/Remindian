@@ -2,17 +2,18 @@ import SwiftUI
 
 // MARK: - Floating pinned-tasks window (always-on-top mini task manager)
 //
-// A non-activating, floating NSPanel. The titlebar chrome is built from custom
-// SwiftUI views hosted in TITLEBAR ACCESSORIES (not NSToolbar items — those get
-// Tahoe's heavy "Liquid Glass" pill). Accessory views are clickable and FLAT, so
-// the grouping control is a subtle hairline-outlined pill (no fill) that opens a
-// popover with search + the view choices, and refresh is a plain icon. The window
-// body is just the task list. (Pinned tasks window — see memory: pinned-window-titlebar)
+// Modelled on the macOS Emoji panel: a BORDERLESS, rounded floating panel with
+// fully custom SwiftUI chrome — no native titlebar, traffic lights, toolbar, or
+// Tahoe glass. A small custom close button (top-left) + refresh (top-right), a
+// full-width search bar below, the task list, and a bottom tab bar of view icons
+// with labels (Tasks / Deadlines / Priorities / Tags / Recurring).
+// (Pinned tasks window — see memory: pinned-window-titlebar)
 
-/// Shared search text, so the popover's search field and the content list stay in sync.
+/// Shared search text + a way for SwiftUI to close the borderless window.
 final class PinnedTasksModel: ObservableObject {
     static let shared = PinnedTasksModel()
     @Published var query = ""
+    var onClose: (() -> Void)?
 }
 
 @MainActor
@@ -39,39 +40,29 @@ final class PinnedTasksWindowController: NSObject {
             return
         }
 
+        PinnedTasksModel.shared.onClose = { [weak self] in
+            self?.panel?.close()
+            UserDefaults.standard.set(false, forKey: "pinnedTasksOpen")
+        }
+
         let hosting = NSHostingController(rootView: PinnedTasksView().environmentObject(SyncManager.shared))
         let p = NSPanel(contentViewController: hosting)
-        // Seamless full-height vibrancy under a transparent titlebar. The chrome is
-        // SwiftUI in titlebar accessories (clickable + flat), so no toolbar glass.
-        p.styleMask = [.titled, .closable, .resizable, .fullSizeContentView, .nonactivatingPanel]
-        p.titleVisibility = .hidden
-        p.titlebarAppearsTransparent = true
+        // Borderless rounded floating panel (Emoji-panel style). No .titled → no
+        // traffic lights; the SwiftUI content draws everything and clips itself to
+        // a rounded rect, so the window reads as a rounded card with a shadow.
+        p.styleMask = [.nonactivatingPanel, .resizable]
+        p.isOpaque = false
+        p.backgroundColor = .clear
+        p.hasShadow = true
         p.isFloatingPanel = true
         p.level = .floating
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         p.hidesOnDeactivate = false
         p.isReleasedWhenClosed = false
-        p.standardWindowButton(.zoomButton)?.isHidden = true
-        p.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        p.isMovableByWindowBackground = true
 
-        // Grouping pull-down (with search) — leading, just after the traffic lights.
-        let titleAccessory = NSTitlebarAccessoryViewController()
-        let titleHost = NSHostingView(rootView: PinnedTitleControl())
-        titleHost.frame = NSRect(x: 0, y: 0, width: 150, height: 30)
-        titleAccessory.view = titleHost
-        titleAccessory.layoutAttribute = .leading
-        p.addTitlebarAccessoryViewController(titleAccessory)
-
-        // Refresh — trailing.
-        let refreshAccessory = NSTitlebarAccessoryViewController()
-        let refreshHost = NSHostingView(rootView: PinnedRefreshControl())
-        refreshHost.frame = NSRect(x: 0, y: 0, width: 34, height: 30)
-        refreshAccessory.view = refreshHost
-        refreshAccessory.layoutAttribute = .trailing
-        p.addTitlebarAccessoryViewController(refreshAccessory)
-
-        p.setContentSize(NSSize(width: 320, height: 460))
-        p.minSize = NSSize(width: 280, height: 240)
+        p.setContentSize(NSSize(width: 320, height: 480))
+        p.minSize = NSSize(width: 280, height: 280)
         p.identifier = NSUserInterfaceItemIdentifier("pinned-tasks-window")
         p.setFrameAutosaveName("pinned-tasks-window")
         if p.frame.origin == .zero { p.center() }
@@ -86,138 +77,16 @@ final class PinnedTasksWindowController: NSObject {
     }
 }
 
-// MARK: - Titlebar controls (flat SwiftUI, hosted in accessories)
-
-/// The grouping pull-down: a flat, hairline-outlined pill (no fill) that opens a
-/// popover with a search field and the view choices.
-private struct PinnedTitleControl: View {
-    @AppStorage("pinnedTasksGrouping") private var groupingRaw = PinnedTasksOrganizer.Grouping.flat.rawValue
-    @ObservedObject private var model = PinnedTasksModel.shared
-    @ObservedObject private var syncManager = SyncManager.shared
-    @State private var showOptions = false
-    @State private var hovering = false
-    @FocusState private var searchFocused: Bool
-
-    private var grouping: PinnedTasksOrganizer.Grouping {
-        PinnedTasksOrganizer.Grouping(rawValue: groupingRaw) ?? .flat
-    }
-
-    var body: some View {
-        Button { showOptions.toggle() } label: {
-            HStack(spacing: 4) {
-                Text(grouping.label)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.primary)
-                if !model.query.trimmingCharacters(in: .whitespaces).isEmpty {
-                    Image(systemName: "line.3.horizontal.decrease.circle.fill")
-                        .font(.system(size: 10)).foregroundColor(.accentColor)
-                }
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .semibold)).foregroundColor(.secondary)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 3)
-            .background(Capsule().fill(Color.primary.opacity(hovering ? 0.06 : 0)))   // no fill, faint hover only
-            .overlay(Capsule().strokeBorder(Color.primary.opacity(0.18), lineWidth: 0.7))  // subtle rounded outline
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-        .help("Choose a view & search")
-        .popover(isPresented: $showOptions, arrowEdge: .bottom) { popover }
-    }
-
-    private var popover: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Tasks").font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
-                Spacer()
-                Text("\(syncManager.allOpenTasks.count) open").font(.system(size: 11)).foregroundColor(.secondary)
-            }
-            .padding(.horizontal, 12).padding(.top, 9).padding(.bottom, 2)
-
-            searchField
-                .padding(.horizontal, 10).padding(.top, 6).padding(.bottom, 9)
-
-            Divider()
-
-            VStack(spacing: 0) {
-                ForEach(PinnedTasksOrganizer.Grouping.allCases) { g in
-                    Button { groupingRaw = g.rawValue } label: {
-                        HStack(spacing: 9) {
-                            Image(systemName: g.systemImage).font(.system(size: 12)).frame(width: 16).foregroundColor(.secondary)
-                            Text(g.label).font(.system(size: 13)).foregroundColor(.primary)
-                            Spacer()
-                            if g == grouping {
-                                Image(systemName: "checkmark").font(.system(size: 11, weight: .semibold)).foregroundColor(.accentColor)
-                            }
-                        }
-                        .padding(.horizontal, 12).padding(.vertical, 7)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.vertical, 5)
-        }
-        .frame(width: 250)
-    }
-
-    private var searchField: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundColor(.secondary)
-            TextField("Search title or #tag", text: $model.query)
-                .textFieldStyle(.plain).font(.system(size: 12)).focused($searchFocused)
-            if !model.query.isEmpty {
-                Button { model.query = "" } label: {
-                    Image(systemName: "xmark.circle.fill").font(.system(size: 11)).foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, 8).padding(.vertical, 5)
-        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color(nsColor: .textBackgroundColor).opacity(0.55)))
-        .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous)
-            .strokeBorder(searchFocused ? Color.accentColor.opacity(0.5) : Color.primary.opacity(0.10), lineWidth: 1))
-    }
-}
-
-/// Flat refresh icon (no fill).
-private struct PinnedRefreshControl: View {
-    @ObservedObject private var syncManager = SyncManager.shared
-    @State private var hovering = false
-
-    var body: some View {
-        Group {
-            if syncManager.isLoadingAgenda {
-                ProgressView().controlSize(.mini).scaleEffect(0.7).frame(width: 18, height: 18)
-            } else {
-                Button {
-                    Task { await syncManager.refreshAgenda(force: true) }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(hovering ? .primary : .secondary)
-                        .padding(4)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .onHover { hovering = $0 }
-                .help("Refresh")
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-// MARK: - PinnedTasksView (the task list — the window body)
+// MARK: - PinnedTasksView (the whole panel)
 
 struct PinnedTasksView: View {
     @EnvironmentObject var syncManager: SyncManager
     @AppStorage("pinnedTasksGrouping") private var groupingRaw = PinnedTasksOrganizer.Grouping.flat.rawValue
     @ObservedObject private var model = PinnedTasksModel.shared
     @State private var collapsed: Set<String> = []
+    @State private var closeHover = false
+    @State private var refreshHover = false
+    @FocusState private var searchFocused: Bool
 
     private var grouping: PinnedTasksOrganizer.Grouping {
         PinnedTasksOrganizer.Grouping(rawValue: groupingRaw) ?? .flat
@@ -227,11 +96,84 @@ struct PinnedTasksView: View {
     }
 
     var body: some View {
-        content
-            .frame(minWidth: 280, minHeight: 240)
-            .background(VisualEffectBackground().ignoresSafeArea())
-            .task { await syncManager.refreshAgenda(force: true) }
+        VStack(spacing: 0) {
+            topBar
+            searchBar
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            Divider().opacity(0.35)
+            content
+            Divider().opacity(0.35)
+            tabBar
+        }
+        .background(VisualEffectBackground())
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5)
+        )
+        .ignoresSafeArea()
+        .task { await syncManager.refreshAgenda(force: true) }
     }
+
+    // MARK: Top bar — custom close (left) + refresh (right)
+
+    private var topBar: some View {
+        HStack {
+            Button { model.onClose?() } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 15))
+                    .foregroundColor(closeHover ? .primary : .secondary)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .onHover { closeHover = $0 }
+            .help("Close")
+
+            Spacer()
+
+            if syncManager.isLoadingAgenda {
+                ProgressView().controlSize(.mini).scaleEffect(0.7).frame(width: 16, height: 16)
+            } else {
+                Button { Task { await syncManager.refreshAgenda(force: true) } } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(refreshHover ? .primary : .secondary)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .onHover { refreshHover = $0 }
+                .help("Refresh")
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+    }
+
+    // MARK: Search bar
+
+    private var searchBar: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundColor(.secondary)
+            TextField("Search", text: $model.query)
+                .textFieldStyle(.plain).font(.system(size: 13)).focused($searchFocused)
+            if !model.query.isEmpty {
+                Button { model.query = "" } label: {
+                    Image(systemName: "xmark.circle.fill").font(.system(size: 12)).foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(Color(nsColor: .textBackgroundColor).opacity(0.5)))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .strokeBorder(searchFocused ? Color.accentColor.opacity(0.5) : Color.primary.opacity(0.12), lineWidth: 1))
+    }
+
+    // MARK: Content (task list)
 
     @ViewBuilder
     private var content: some View {
@@ -288,23 +230,42 @@ struct PinnedTasksView: View {
             HStack(spacing: 7) {
                 Circle().fill(color(for: section.accent)).frame(width: 7, height: 7)
                 Text(section.title)
-                    .font(.system(size: 11, weight: .semibold))
-                    .tracking(0.3)
-                    .foregroundColor(.primary)
-                Text("\(section.tasks.count)")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 11, weight: .semibold)).tracking(0.3).foregroundColor(.primary)
+                Text("\(section.tasks.count)").font(.system(size: 10, weight: .semibold)).foregroundColor(.secondary)
                 Spacer()
                 Image(systemName: collapsed.contains(section.id) ? "chevron.right" : "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 9, weight: .semibold)).foregroundColor(.secondary)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 5)
+            .padding(.horizontal, 12).padding(.vertical, 5)
             .background(VisualEffectBackground())
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: Bottom tab bar — view switcher (icon + label)
+
+    private var tabBar: some View {
+        HStack(spacing: 0) {
+            ForEach(PinnedTasksOrganizer.Grouping.allCases) { g in
+                let selected = g == grouping
+                Button { groupingRaw = g.rawValue } label: {
+                    VStack(spacing: 2) {
+                        Image(systemName: g.systemImage).font(.system(size: 14, weight: .medium))
+                        Text(g.label).font(.system(size: 9)).lineLimit(1)
+                    }
+                    .foregroundColor(selected ? .accentColor : .secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(g.label)
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.bottom, 4)
+        .padding(.top, 2)
     }
 
     private func color(for accent: PinnedTasksOrganizer.SectionAccent) -> Color {
@@ -349,10 +310,7 @@ private struct PinnedTaskRow: View {
             .onHover { checkHovering = $0 }
             .help("Mark complete")
 
-            Text(task.title)
-                .font(.system(size: 13))
-                .lineLimit(1)
-                .truncationMode(.tail)
+            Text(task.title).font(.system(size: 13)).lineLimit(1).truncationMode(.tail)
 
             if task.recurrenceRule?.isEmpty == false {
                 Image(systemName: "repeat").font(.system(size: 9, weight: .semibold)).foregroundColor(.secondary)
@@ -364,15 +322,13 @@ private struct PinnedTaskRow: View {
             if let due = task.dueDate {
                 let info = dueInfo(for: due, overdue: overdue)
                 Text(info.text)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(info.color)
+                    .font(.system(size: 10, weight: .semibold)).foregroundColor(info.color)
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(Capsule().fill(info.color.opacity(0.14)))
                     .fixedSize()
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 8).padding(.vertical, 5)
         .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
             .fill(Color.accentColor.opacity(rowHovering ? 0.08 : 0)))
         .contentShape(Rectangle())

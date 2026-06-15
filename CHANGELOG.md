@@ -4,6 +4,16 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.25.4 (June 2026)
+
+Pinned Tasks window redesigned like the macOS Emoji panel.
+
+### Pinned Tasks window
+
+- **Completely new chrome, modelled on the Emoji panel.** No native titlebar, traffic lights, toolbar, or Tahoe glass — it's now a borderless, rounded floating card with fully custom controls: a small **close button** (top-left), a **refresh** icon (top-right), a **full-width search bar** below, the task list, and a **bottom tab bar** of view icons with labels — **Tasks / Deadlines / Priorities / Tags / Recurring** — to switch how the list is grouped. Tap a tab to switch; the active one is tinted.
+
+---
+
 ## v5.25.3 (June 2026)
 
 Pinned Tasks window: flat, native chrome — no more glass buttons.
