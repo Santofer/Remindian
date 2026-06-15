@@ -4,6 +4,16 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.24.3 (June 2026)
+
+Things-style centered title in the Pinned Tasks window.
+
+### Menu bar / windows
+
+- **The Pinned Tasks window now has a centered, clickable title** (like Things). It names the current grouping ("By Date" / "By Priority" / "By Tag" / "Recurring"), and **clicking it opens a popover** with the **search field + the four grouping choices**. The grouping picker and search are no longer always-on in the window — so the window body shows **only your tasks**, clean. A small filter glyph appears on the title when a search is active.
+
+---
+
 ## v5.24.2 (June 2026)
 
 Hotfix: the "Tasks" title is back in the Pinned Tasks window titlebar.

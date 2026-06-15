@@ -34,15 +34,15 @@ final class PinnedTasksWindowController: NSObject {
 
         let hosting = NSHostingController(rootView: PinnedTasksView().environmentObject(SyncManager.shared))
         let p = NSPanel(contentViewController: hosting)
-        // Seamless full-height vibrancy with a real titlebar: the native title
-        // sits centered at the close-button level, a right titlebar accessory
-        // holds refresh + count on the same line, and the content auto-insets
-        // below the titlebar via the safe area (so it doesn't collide with the
-        // title). Non-activating floating panel. (pinned window toolbar)
+        // Seamless full-height vibrancy. The native title is hidden — a centered
+        // clickable control inside the content names the current grouping and
+        // opens the filters+search popover (Things-style). The right titlebar
+        // accessory holds refresh + count. Non-activating floating panel.
+        // (pinned window toolbar)
         p.styleMask = [.titled, .closable, .resizable, .fullSizeContentView, .nonactivatingPanel]
         p.title = "Tasks"
         p.titlebarAppearsTransparent = true
-        p.titleVisibility = .visible
+        p.titleVisibility = .hidden
         p.isFloatingPanel = true                 // floats above the app's own windows
         p.level = .floating                      // …and above other apps' normal windows
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]  // every Space + over fullscreen
@@ -84,6 +84,7 @@ struct PinnedTasksView: View {
     @AppStorage("pinnedTasksGrouping") private var groupingRaw = PinnedTasksOrganizer.Grouping.date.rawValue
     @State private var collapsed: Set<String> = []
     @State private var query = ""
+    @State private var showOptions = false
     @FocusState private var searchFocused: Bool
 
     private var grouping: PinnedTasksOrganizer.Grouping {
@@ -95,38 +96,104 @@ struct PinnedTasksView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            Divider().opacity(0.5)
+            titleBar
+            Divider().opacity(0.4)
             content
         }
         .frame(minWidth: 260, minHeight: 220)
         .background(VisualEffectBackground().ignoresSafeArea())
+        .ignoresSafeArea(.container, edges: .top)   // let the title row sit in the titlebar strip
         .task { await syncManager.refreshAgenda(force: true) }
     }
 
-    // MARK: Header
+    // MARK: Title bar (Things-style centered popup)
     //
-    // The title ("Tasks") and the refresh button + count live in the native
-    // titlebar now (centered title at the close-button level; refresh on the
-    // right via a titlebar accessory). The in-content header is just the
-    // grouping picker + search.
+    // A centered, clickable control that names the current grouping and opens a
+    // popover with the grouping filters + search. The window body then shows only
+    // the tasks. The control sits in the titlebar strip — between the traffic
+    // lights (left) and the refresh+count accessory (right). (pinned window toolbar)
 
-    private var header: some View {
-        VStack(spacing: 8) {
-            Picker("", selection: $groupingRaw) {
+    private var titleBar: some View {
+        HStack {
+            Spacer(minLength: 0)
+            Button { showOptions.toggle() } label: {
+                HStack(spacing: 5) {
+                    Text(menuTitle(grouping))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.primary)
+                    if !query.trimmingCharacters(in: .whitespaces).isEmpty {
+                        Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(.accentColor)
+                            .help("A search filter is active")
+                    }
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 11)
+                .padding(.vertical, 4)
+                .background(Capsule().fill(Color.primary.opacity(0.07)))
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .help("Choose grouping & search")
+            .popover(isPresented: $showOptions, arrowEdge: .bottom) { optionsPopover }
+            Spacer(minLength: 0)
+        }
+        .frame(height: 44)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func menuTitle(_ g: PinnedTasksOrganizer.Grouping) -> String {
+        switch g {
+        case .date: return "By Date"
+        case .priority: return "By Priority"
+        case .tag: return "By Tag"
+        case .recurrence: return "Recurring"
+        }
+    }
+
+    // The popover opened from the centered title: search at the top, then the
+    // four grouping choices. Both update the list behind it live.
+    private var optionsPopover: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            searchField
+                .padding(.horizontal, 10)
+                .padding(.top, 10)
+                .padding(.bottom, 9)
+
+            Divider()
+
+            VStack(spacing: 0) {
                 ForEach(PinnedTasksOrganizer.Grouping.allCases) { g in
-                    Text(g.label).tag(g.rawValue)
+                    Button { groupingRaw = g.rawValue } label: {
+                        HStack(spacing: 9) {
+                            Image(systemName: g.systemImage)
+                                .font(.system(size: 12))
+                                .frame(width: 16)
+                                .foregroundColor(.secondary)
+                            Text(menuTitle(g))
+                                .font(.system(size: 13))
+                                .foregroundColor(.primary)
+                            Spacer()
+                            if g == grouping {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(.accentColor)
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .controlSize(.small)
-
-            searchField
+            .padding(.vertical, 5)
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 8)
-        .padding(.bottom, 8)
+        .frame(width: 252)
     }
 
     private var searchField: some View {
