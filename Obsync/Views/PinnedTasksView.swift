@@ -2,18 +2,17 @@ import SwiftUI
 
 // MARK: - Floating pinned-tasks window (always-on-top mini task manager)
 //
-// A non-activating, floating NSPanel that stays above other windows and on every
-// Space. A centered, clickable "By Date ⌄" control (subtle hairline pill) sits on
-// the titlebar line and opens a filters+search popover; a refresh button sits at
-// the right. The window body shows only the task list. No NSToolbar — the title
-// lives in the content (pulled onto the titlebar line) and is made clickable with
-// a non-draggable backing, so there's none of Tahoe's heavy toolbar glass.
-// (Pinned tasks window)
+// A non-activating, floating NSPanel with a UNIFIED toolbar so the traffic
+// lights, a centered grouping pull-down ("By Date ⌄"), and a refresh button all
+// sit on ONE line (Things-style). Native toolbar items get the standard, subtle
+// macOS button styling — no heavy custom glass, no separate opaque titlebar band.
+// The window body is just the task list. (Pinned tasks window)
 
 @MainActor
 final class PinnedTasksWindowController: NSObject {
     static let shared = PinnedTasksWindowController()
     private var panel: NSPanel?
+    private let toolbarController = PinnedToolbarController()
 
     var isOpen: Bool { panel?.isVisible == true }
 
@@ -37,21 +36,26 @@ final class PinnedTasksWindowController: NSObject {
 
         let hosting = NSHostingController(rootView: PinnedTasksView().environmentObject(SyncManager.shared))
         let p = NSPanel(contentViewController: hosting)
-        // Compact standard titlebar (NO fullSizeContentView — on Tahoe that
-        // reserved a tall empty band above the content). Traffic lights sit in the
-        // thin titlebar; the grouping control + refresh are the first content row
-        // right below it. Hidden native title; the grouping control names the view.
         p.styleMask = [.titled, .closable, .resizable, .nonactivatingPanel]
-        p.titlebarAppearsTransparent = true
         p.titleVisibility = .hidden
         p.isFloatingPanel = true                 // floats above the app's own windows
         p.level = .floating                      // …and above other apps' normal windows
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]  // every Space + over fullscreen
         p.hidesOnDeactivate = false
         p.isReleasedWhenClosed = false
-        p.isMovableByWindowBackground = true     // drag from empty areas; the title/refresh opt out
         p.standardWindowButton(.zoomButton)?.isHidden = true
         p.standardWindowButton(.miniaturizeButton)?.isHidden = true
+
+        // Unified toolbar: traffic lights + the centered grouping pull-down + the
+        // refresh button share one line. Native items → subtle, no custom glass.
+        let toolbar = NSToolbar(identifier: "pinned-tasks-toolbar")
+        toolbar.delegate = toolbarController
+        toolbar.centeredItemIdentifier = .pinnedGrouping
+        toolbar.displayMode = .iconOnly
+        toolbar.allowsUserCustomization = false
+        p.toolbar = toolbar
+        p.toolbarStyle = .unifiedCompact
+
         p.setContentSize(NSSize(width: 300, height: 440))
         p.minSize = NSSize(width: 260, height: 220)
         p.identifier = NSUserInterfaceItemIdentifier("pinned-tasks-window")
@@ -69,118 +73,23 @@ final class PinnedTasksWindowController: NSObject {
     }
 }
 
-// MARK: - Non-draggable backing
-//
-// A control placed over the (transparent, full-size) titlebar would otherwise have
-// its clicks swallowed by the window's drag region. Backing it with this view —
-// whose `mouseDownCanMoveWindow` is false — lets the click reach the control while
-// the rest of the titlebar strip still drags the window.
+// MARK: - Toolbar (native items)
 
-private struct NonDraggableArea: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView { _NonDraggable() }
-    func updateNSView(_ nsView: NSView, context: Context) {}
-    private final class _NonDraggable: NSView {
-        override var mouseDownCanMoveWindow: Bool { false }
-    }
+extension NSToolbarItem.Identifier {
+    static let pinnedGrouping = NSToolbarItem.Identifier("pinnedGrouping")
+    static let pinnedRefresh = NSToolbarItem.Identifier("pinnedRefresh")
 }
 
-// MARK: - PinnedTasksView
+/// Owns the toolbar's native items: a grouping pull-down (the filters menu) and a
+/// refresh button. Writes the chosen grouping to UserDefaults, which the SwiftUI
+/// list observes via @AppStorage.
+final class PinnedToolbarController: NSObject, NSToolbarDelegate, NSMenuDelegate {
+    private weak var groupingItem: NSMenuToolbarItem?
 
-struct PinnedTasksView: View {
-    @EnvironmentObject var syncManager: SyncManager
-    @AppStorage("pinnedTasksGrouping") private var groupingRaw = PinnedTasksOrganizer.Grouping.date.rawValue
-    @State private var collapsed: Set<String> = []
-    @State private var query = ""
-    @State private var showOptions = false
-    @State private var titleHover = false
-    @State private var refreshHover = false
-    @FocusState private var searchFocused: Bool
-
-    private var grouping: PinnedTasksOrganizer.Grouping {
-        PinnedTasksOrganizer.Grouping(rawValue: groupingRaw) ?? .date
+    private static let groupingKey = "pinnedTasksGrouping"
+    private func currentGrouping() -> PinnedTasksOrganizer.Grouping {
+        PinnedTasksOrganizer.Grouping(rawValue: UserDefaults.standard.string(forKey: Self.groupingKey) ?? "date") ?? .date
     }
-    private var sections: [PinnedTasksOrganizer.Section] {
-        PinnedTasksOrganizer.sections(from: syncManager.allOpenTasks, grouping: grouping, now: Date(), query: query)
-    }
-
-    var body: some View {
-        // The header sits in normal content (below the titlebar safe area), so its
-        // controls are reliably clickable — interactive content pulled INTO the
-        // titlebar strip has its clicks swallowed by the window drag region. The
-        // vibrancy fills the whole window (incl. behind the traffic lights) for a
-        // seamless look. (pinned window toolbar)
-        VStack(spacing: 0) {
-            header
-            content
-        }
-        .frame(minWidth: 260, minHeight: 220)
-        .background(VisualEffectBackground().ignoresSafeArea())
-        .task { await syncManager.refreshAgenda(force: true) }
-    }
-
-    // MARK: Header — centered hairline-pill grouping control + refresh
-
-    private var header: some View {
-        ZStack {
-            // Centered grouping control.
-            Button { showOptions.toggle() } label: {
-                HStack(spacing: 5) {
-                    Text(menuTitle(grouping))
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.primary)
-                    if !query.trimmingCharacters(in: .whitespaces).isEmpty {
-                        Image(systemName: "line.3.horizontal.decrease.circle.fill")
-                            .font(.system(size: 10))
-                            .foregroundColor(.accentColor)
-                            .help("A search filter is active")
-                    }
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundColor(.secondary)
-                }
-                .padding(.horizontal, 11)
-                .padding(.vertical, 3)
-                .background(Capsule().fill(Color.primary.opacity(titleHover ? 0.08 : 0)))
-                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.18), lineWidth: 0.7))
-                .contentShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .onHover { titleHover = $0 }
-            .help("Choose grouping & search")
-            .background(NonDraggableArea())   // clickable on the titlebar line
-            .popover(isPresented: $showOptions, arrowEdge: .bottom) { optionsPopover }
-
-            // Refresh, pinned right.
-            HStack {
-                Spacer()
-                Group {
-                    if syncManager.isLoadingAgenda {
-                        ProgressView().controlSize(.mini).scaleEffect(0.7).frame(width: 16, height: 16)
-                    } else {
-                        Button {
-                            Task { await syncManager.refreshAgenda(force: true) }
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundColor(.secondary)
-                                .padding(5)
-                                .background(Circle().fill(Color.primary.opacity(refreshHover ? 0.08 : 0)))
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .onHover { refreshHover = $0 }
-                        .help("Refresh")
-                        .background(NonDraggableArea())
-                    }
-                }
-                .padding(.trailing, 12)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 9)
-        .padding(.bottom, 7)
-    }
-
     private func menuTitle(_ g: PinnedTasksOrganizer.Grouping) -> String {
         switch g {
         case .date: return "By Date"
@@ -190,101 +99,96 @@ struct PinnedTasksView: View {
         }
     }
 
-    // The popover from the title: open-task count, search, then the four groupings.
-    private var optionsPopover: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Tasks")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.secondary)
-                Spacer()
-                Text("\(syncManager.allOpenTasks.count) open")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
+    func toolbar(_ toolbar: NSToolbar,
+                 itemForItemIdentifier id: NSToolbarItem.Identifier,
+                 willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+        switch id {
+        case .pinnedGrouping:
+            let item = NSMenuToolbarItem(itemIdentifier: id)
+            item.title = menuTitle(currentGrouping())
+            item.showsIndicator = true
+            let menu = NSMenu()
+            menu.delegate = self
+            for g in PinnedTasksOrganizer.Grouping.allCases {
+                let mi = NSMenuItem(title: menuTitle(g), action: #selector(pickGrouping(_:)), keyEquivalent: "")
+                mi.target = self
+                mi.representedObject = g.rawValue
+                menu.addItem(mi)
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 9)
-            .padding(.bottom, 2)
+            item.menu = menu
+            item.label = "Grouping"
+            groupingItem = item
+            return item
 
-            searchField
-                .padding(.horizontal, 10)
-                .padding(.top, 6)
-                .padding(.bottom, 9)
+        case .pinnedRefresh:
+            let item = NSToolbarItem(itemIdentifier: id)
+            item.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Refresh")
+            item.label = "Refresh"
+            item.toolTip = "Refresh"
+            item.isBordered = true
+            item.target = self
+            item.action = #selector(refresh)
+            return item
 
-            Divider()
-
-            VStack(spacing: 0) {
-                ForEach(PinnedTasksOrganizer.Grouping.allCases) { g in
-                    Button { groupingRaw = g.rawValue } label: {
-                        HStack(spacing: 9) {
-                            Image(systemName: g.systemImage)
-                                .font(.system(size: 12))
-                                .frame(width: 16)
-                                .foregroundColor(.secondary)
-                            Text(menuTitle(g))
-                                .font(.system(size: 13))
-                                .foregroundColor(.primary)
-                            Spacer()
-                            if g == grouping {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundColor(.accentColor)
-                            }
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.vertical, 5)
+        default:
+            return nil
         }
-        .frame(width: 252)
     }
 
-    private var searchField: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 11))
-                .foregroundColor(.secondary)
-            TextField("Search title or #tag", text: $query)
-                .textFieldStyle(.plain)
-                .font(.system(size: 12))
-                .focused($searchFocused)
-            if !query.isEmpty {
-                Button { query = "" } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Clear")
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(Color(nsColor: .textBackgroundColor).opacity(0.55))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .strokeBorder(searchFocused ? Color.accentColor.opacity(0.5) : Color.primary.opacity(0.10), lineWidth: 1)
-        )
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [.pinnedGrouping, .flexibleSpace, .pinnedRefresh]
+    }
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [.pinnedGrouping, .pinnedRefresh, .flexibleSpace]
     }
 
-    // MARK: Content
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        let current = currentGrouping().rawValue
+        for mi in menu.items {
+            mi.state = (mi.representedObject as? String == current) ? .on : .off
+        }
+    }
+
+    @objc private func pickGrouping(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let g = PinnedTasksOrganizer.Grouping(rawValue: raw) else { return }
+        UserDefaults.standard.set(raw, forKey: Self.groupingKey)
+        groupingItem?.title = menuTitle(g)
+    }
+
+    @objc private func refresh() {
+        Task { @MainActor in await SyncManager.shared.refreshAgenda(force: true) }
+    }
+}
+
+// MARK: - PinnedTasksView (the task list — the window body)
+
+struct PinnedTasksView: View {
+    @EnvironmentObject var syncManager: SyncManager
+    @AppStorage("pinnedTasksGrouping") private var groupingRaw = PinnedTasksOrganizer.Grouping.date.rawValue
+    @State private var collapsed: Set<String> = []
+
+    private var grouping: PinnedTasksOrganizer.Grouping {
+        PinnedTasksOrganizer.Grouping(rawValue: groupingRaw) ?? .date
+    }
+    private var sections: [PinnedTasksOrganizer.Section] {
+        PinnedTasksOrganizer.sections(from: syncManager.allOpenTasks, grouping: grouping, now: Date())
+    }
+
+    var body: some View {
+        content
+            .frame(minWidth: 260, minHeight: 220)
+            .background(VisualEffectBackground().ignoresSafeArea())
+            .task { await syncManager.refreshAgenda(force: true) }
+    }
 
     @ViewBuilder
     private var content: some View {
         if sections.isEmpty {
-            let searching = !query.trimmingCharacters(in: .whitespaces).isEmpty
             VStack(spacing: 8) {
-                Image(systemName: syncManager.isLoadingAgenda ? "hourglass" : (searching ? "magnifyingglass" : "checkmark.circle"))
+                Image(systemName: syncManager.isLoadingAgenda ? "hourglass" : "checkmark.circle")
                     .font(.system(size: 22)).foregroundColor(.secondary)
-                Text(syncManager.isLoadingAgenda ? "Loading…" : (searching ? "No matches" : "No open tasks"))
+                Text(syncManager.isLoadingAgenda ? "Loading…" : "No open tasks")
                     .font(.system(size: 13)).foregroundColor(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -4,6 +4,16 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.25.1 (June 2026)
+
+Pinned Tasks window: everything on one line, no opaque titlebar.
+
+### Pinned Tasks window
+
+- **The close button, the "By Date ⌄" grouping control, and refresh now share one line** (a unified toolbar), like Things — no more separate opaque titlebar with only the close button above the controls. The grouping control is a **native pull-down** (subtle, no heavy Tahoe glass) whose menu holds the four filters (By Date / Priority / Tag / Recurring). The window body is just the task list. (Search moved out of the window for now while this lands cleanly — say the word and it comes back as a toolbar search field.)
+
+---
+
 ## v5.25.0 (June 2026)
 
 Three reported bugs fixed: Things 3 in non-English languages, TaskNotes tags, and international filenames.
