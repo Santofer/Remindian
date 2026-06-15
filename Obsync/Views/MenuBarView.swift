@@ -378,6 +378,10 @@ struct MenuBarView: View {
 
     private var footer: some View {
         VStack(spacing: 0) {
+            RowButton(icon: "pin", title: "Pinned Tasks Window") {
+                PinnedTasksWindowController.shared.toggle()
+            }
+            .help("A floating, always-on-top window of your open tasks, grouped by date / priority / tag / recurrence.")
             RowButton(icon: "macwindow", title: "Open Main Window") {
                 openMainWindow()
             }

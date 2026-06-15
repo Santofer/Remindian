@@ -54,6 +54,10 @@ class SyncManager: ObservableObject {
     @Published var lastSyncUndoCount: Int = 0
     /// Open tasks due today or earlier, for the menu-bar "Today" glance. (Today list)
     @Published var agenda: [SyncTask] = []
+    /// All open tasks from the active profile's source, for the floating
+    /// pinned-tasks window (grouped by date/priority/tag/recurrence). Populated
+    /// by the same scan that feeds `agenda`. (Pinned tasks window)
+    @Published var allOpenTasks: [SyncTask] = []
     @Published var isLoadingAgenda = false
     @Published var lastSyncResult: SyncEngine.SyncResult?
     @Published var lastSyncDate: Date?
@@ -572,6 +576,7 @@ class SyncManager: ObservableObject {
         guard !config.vaultPath.isEmpty,
               FileManager.default.isReadableFile(atPath: config.vaultPath) else {
             agenda = []
+            allOpenTasks = []
             return
         }
         isLoadingAgenda = true
@@ -587,6 +592,8 @@ class SyncManager: ObservableObject {
             return (try? source.scanTasks(config: cfg)) ?? []
         }.value
         agenda = AgendaBuilder.build(from: scanned, now: Date())
+        // Feed the floating pinned-tasks window from the same scan. (Pinned tasks window)
+        allOpenTasks = scanned.filter { !$0.isCompleted }
         lastAgendaRefresh = Date()
     }
 
@@ -603,7 +610,8 @@ class SyncManager: ObservableObject {
         }.value
         switch result {
         case .success:
-            agenda.removeAll { $0.id == task.id } // optimistic UI on main
+            agenda.removeAll { $0.id == task.id }        // optimistic UI on main
+            allOpenTasks.removeAll { $0.id == task.id }  // pinned window follows too
         case .failure(let error):
             showErrorMessage("Couldn't complete “\(task.title)”: \(error.localizedDescription)")
             return

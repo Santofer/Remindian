@@ -49,6 +49,8 @@
 		040 /* QuickAddParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 142; };
 		041 /* RemindianAppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 143; };
 		042 /* AgendaBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 144; };
+		043 /* PinnedTasksOrganizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 145; };
+		044 /* PinnedTasksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 146; };
 		T01 /* TaskParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T10; };
 		T02 /* DeduplicationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T11; };
 		T03 /* TaskNotesParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T12; };
@@ -76,6 +78,7 @@
 		T0P /* TimeAndAlarmTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1O; };
 		T0Q /* FileModSkipRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1P; };
 		T0R /* LineRelocationRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1Q; };
+		T0S /* PinnedTasksOrganizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1R; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -134,6 +137,8 @@
 		142 /* QuickAddParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickAddParser.swift; sourceTree = "<group>"; };
 		143 /* RemindianAppIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemindianAppIntents.swift; sourceTree = "<group>"; };
 		144 /* AgendaBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgendaBuilder.swift; sourceTree = "<group>"; };
+		145 /* PinnedTasksOrganizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinnedTasksOrganizer.swift; sourceTree = "<group>"; };
+		146 /* PinnedTasksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinnedTasksView.swift; sourceTree = "<group>"; };
 		T00 /* RemindianTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RemindianTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		T10 /* TaskParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskParserTests.swift; sourceTree = "<group>"; };
 		T11 /* DeduplicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeduplicationTests.swift; sourceTree = "<group>"; };
@@ -162,6 +167,7 @@
 		T1O /* TimeAndAlarmTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeAndAlarmTests.swift; sourceTree = "<group>"; };
 		T1P /* FileModSkipRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileModSkipRegressionTests.swift; sourceTree = "<group>"; };
 		T1Q /* LineRelocationRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LineRelocationRegressionTests.swift; sourceTree = "<group>"; };
+		T1R /* PinnedTasksOrganizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinnedTasksOrganizerTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -221,6 +227,7 @@
 				102 /* ContentView.swift */,
 				103 /* SettingsView.swift */,
 				104 /* MenuBarView.swift */,
+				146 /* PinnedTasksView.swift */,
 				119 /* SyncHistoryView.swift */,
 				141 /* PreviewChangesView.swift */,
 				122 /* OnboardingView.swift */,
@@ -252,6 +259,7 @@
 				142 /* QuickAddParser.swift */,
 				143 /* RemindianAppIntents.swift */,
 				144 /* AgendaBuilder.swift */,
+				145 /* PinnedTasksOrganizer.swift */,
 				115 /* NotificationService.swift */,
 				116 /* HotKeyService.swift */,
 				117 /* AuditLog.swift */,
@@ -329,6 +337,7 @@
 				T1O /* TimeAndAlarmTests.swift */,
 				T1P /* FileModSkipRegressionTests.swift */,
 				T1Q /* LineRelocationRegressionTests.swift */,
+				T1R /* PinnedTasksOrganizerTests.swift */,
 			);
 			path = RemindianTests;
 			sourceTree = "<group>";
@@ -465,6 +474,8 @@
 				040 /* QuickAddParser.swift in Sources */,
 				041 /* RemindianAppIntents.swift in Sources */,
 				042 /* AgendaBuilder.swift in Sources */,
+				043 /* PinnedTasksOrganizer.swift in Sources */,
+				044 /* PinnedTasksView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -499,6 +510,7 @@
 				T0P /* TimeAndAlarmTests.swift in Sources */,
 				T0Q /* FileModSkipRegressionTests.swift in Sources */,
 				T0R /* LineRelocationRegressionTests.swift in Sources */,
+				T0S /* PinnedTasksOrganizerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -652,7 +664,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 5.22.1;
+				MARKETING_VERSION = 5.23.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -680,7 +692,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 5.22.1;
+				MARKETING_VERSION = 5.23.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

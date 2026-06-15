@@ -4,6 +4,20 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.23.0 (June 2026)
+
+A floating, always-on-top mini task manager.
+
+### New
+
+- **Pinned Tasks window.** From the menu → **Pinned Tasks Window**, open a floating panel that stays **above other windows and on every Space** (and over fullscreen apps) — a minimalist, native mini task manager for all your open tasks, not just today's. It:
+  - **Groups** by **Date** (Overdue / Today / This week / Later / No date), **Priority** (High / Medium / Low), **Tag**, or **Recurring** — switch with the segmented control; your choice is remembered.
+  - Shows one clean line per task with a priority dot, a circular check that fills on hover (check off inline), a 🔁 marker for recurring tasks, and a tinted due capsule.
+  - Collapsible sections, vibrancy background, light/dark aware, remembers its position and size, and **reopens on launch** if it was open when you quit.
+  - Doesn't steal focus when it appears (non-activating panel), so it sits quietly on top while you work.
+
+---
+
 ## v5.22.1 (June 2026)
 
 A leaner menu: actions first, status consolidated at the bottom.

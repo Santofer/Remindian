@@ -72,6 +72,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             await SyncManager.shared.performLaunchSyncIfReady()
         }
 
+        // Reopen the floating pinned-tasks window if it was open at last quit.
+        safeInit("Pinned tasks window") {
+            DispatchQueue.main.async {
+                PinnedTasksWindowController.shared.restoreIfPreviouslyOpen()
+            }
+        }
+
         // Keep the main SwiftUI window alive when closed (hide instead of release)
         // so we can reshow it from the menu bar without losing the Liquid Glass layout.
         // Tag it with an identifier so openMainWindow() can find it reliably
