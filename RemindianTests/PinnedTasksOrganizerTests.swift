@@ -70,6 +70,31 @@ final class PinnedTasksOrganizerTests: XCTestCase {
         XCTAssertEqual(payRent.count, 2, "One per distinct due day, de-duplicated across copies.")
     }
 
+    func test_search_filtersByTitleCaseInsensitive() {
+        let tasks = [task("Pay RENT", due: 0), task("Buy milk", due: 0), task("Call rental agency", due: 0)]
+        let s = PinnedTasksOrganizer.sections(from: tasks, grouping: .date, now: now, query: "rent")
+        let titles = s.flatMap { $0.tasks }.map { $0.title }.sorted()
+        XCTAssertEqual(titles, ["Call rental agency", "Pay RENT"])
+    }
+
+    func test_search_filtersByTag() {
+        let tasks = [task("a", due: 0, tags: ["#home"]), task("b", due: 0, tags: ["#work"]),
+                     task("c", due: 0, tags: ["#homework"])]
+        let s = PinnedTasksOrganizer.sections(from: tasks, grouping: .date, now: now, query: "home")
+        XCTAssertEqual(Set(s.flatMap { $0.tasks }.map { $0.title }), ["a", "c"])
+    }
+
+    func test_search_emptyQueryReturnsAll() {
+        let tasks = [task("a", due: 0), task("b", due: 0)]
+        XCTAssertEqual(PinnedTasksOrganizer.sections(from: tasks, grouping: .date, now: now, query: "   ")
+                        .flatMap { $0.tasks }.count, 2)
+    }
+
+    func test_search_noMatchYieldsNoSections() {
+        let tasks = [task("a", due: 0), task("b", due: 0)]
+        XCTAssertTrue(PinnedTasksOrganizer.sections(from: tasks, grouping: .date, now: now, query: "zzz").isEmpty)
+    }
+
     func test_emptyInput() {
         XCTAssertTrue(PinnedTasksOrganizer.sections(from: [], grouping: .date, now: now).isEmpty)
     }

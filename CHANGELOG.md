@@ -4,6 +4,20 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.24.0 (June 2026)
+
+Search in the Pinned Tasks window.
+
+### New
+
+- **Search/filter in the floating Pinned Tasks window.** A search field at the top filters your tasks live by **title or #tag** (case-insensitive) within whatever grouping you've picked. Clear it with the ✕ button; "No matches" shows when nothing fits.
+
+### Notes
+
+- The native macOS (WidgetKit) widget is **deferred**: a widget runs in its own sandbox and can only read the app's data through an **App Group**, which — like notarization — requires a paid Apple Developer membership to set up properly with signed builds. The floating **Pinned Tasks window** covers the always-visible use case without that dependency.
+
+---
+
 ## v5.23.2 (June 2026)
 
 A task count on the menu-bar icon, so you can glance without opening.

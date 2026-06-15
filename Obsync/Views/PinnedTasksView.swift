@@ -69,12 +69,14 @@ struct PinnedTasksView: View {
     @EnvironmentObject var syncManager: SyncManager
     @AppStorage("pinnedTasksGrouping") private var groupingRaw = PinnedTasksOrganizer.Grouping.date.rawValue
     @State private var collapsed: Set<String> = []
+    @State private var query = ""
+    @FocusState private var searchFocused: Bool
 
     private var grouping: PinnedTasksOrganizer.Grouping {
         PinnedTasksOrganizer.Grouping(rawValue: groupingRaw) ?? .date
     }
     private var sections: [PinnedTasksOrganizer.Section] {
-        PinnedTasksOrganizer.sections(from: syncManager.allOpenTasks, grouping: grouping, now: Date())
+        PinnedTasksOrganizer.sections(from: syncManager.allOpenTasks, grouping: grouping, now: Date(), query: query)
     }
     private var totalCount: Int { sections.reduce(0) { $0 + $1.tasks.count } }
 
@@ -124,10 +126,43 @@ struct PinnedTasksView: View {
             .labelsHidden()
             .pickerStyle(.segmented)
             .controlSize(.small)
+
+            searchField
         }
         .padding(.horizontal, 12)
         .padding(.top, 10)
         .padding(.bottom, 8)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+            TextField("Search title or #tag", text: $query)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .focused($searchFocused)
+            if !query.isEmpty {
+                Button { query = "" } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Clear")
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(Color(nsColor: .textBackgroundColor).opacity(0.55))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .strokeBorder(searchFocused ? Color.accentColor.opacity(0.5) : Color.primary.opacity(0.10), lineWidth: 1)
+        )
     }
 
     // MARK: Content
@@ -135,10 +170,11 @@ struct PinnedTasksView: View {
     @ViewBuilder
     private var content: some View {
         if sections.isEmpty {
+            let searching = !query.trimmingCharacters(in: .whitespaces).isEmpty
             VStack(spacing: 8) {
-                Image(systemName: syncManager.isLoadingAgenda ? "hourglass" : "checkmark.circle")
+                Image(systemName: syncManager.isLoadingAgenda ? "hourglass" : (searching ? "magnifyingglass" : "checkmark.circle"))
                     .font(.system(size: 22)).foregroundColor(.secondary)
-                Text(syncManager.isLoadingAgenda ? "Loading…" : "No open tasks")
+                Text(syncManager.isLoadingAgenda ? "Loading…" : (searching ? "No matches" : "No open tasks"))
                     .font(.system(size: 13)).foregroundColor(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

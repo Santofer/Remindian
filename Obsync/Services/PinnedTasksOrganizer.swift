@@ -50,14 +50,30 @@ struct PinnedTasksOrganizer {
         from tasks: [SyncTask],
         grouping: Grouping,
         now: Date,
+        query: String = "",
         calendar: Calendar = .current
     ) -> [Section] {
-        let open = dedup(tasks.filter { !$0.isCompleted }, calendar: calendar)
+        let searched = tasks.filter { matches($0, query: query) }
+        let open = dedup(searched.filter { !$0.isCompleted }, calendar: calendar)
         switch grouping {
         case .date:       return byDate(open, now: now, calendar: calendar)
         case .priority:   return byPriority(open, now: now, calendar: calendar)
         case .tag:        return byTag(open, now: now, calendar: calendar)
         case .recurrence: return byRecurrence(open, now: now, calendar: calendar)
+        }
+    }
+
+    // MARK: - Search
+
+    /// Case-insensitive match on the task title or any of its tags (the leading
+    /// `#` is ignored). An empty/whitespace query matches everything.
+    private static func matches(_ task: SyncTask, query: String) -> Bool {
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !q.isEmpty else { return true }
+        if task.title.lowercased().contains(q) { return true }
+        return task.tags.contains { tag in
+            let t = (tag.hasPrefix("#") ? String(tag.dropFirst()) : tag).lowercased()
+            return t.contains(q)
         }
     }
 
