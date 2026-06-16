@@ -155,6 +155,20 @@ struct PinnedTasksView: View {
 
     // MARK: Content (task list)
 
+    /// Soft vertical fade at the top/bottom edges so rows dissolve gradually as
+    /// they scroll under the frosted bars (Emoji-panel feel), instead of a hard cut.
+    private var edgeFade: LinearGradient {
+        LinearGradient(
+            stops: [
+                .init(color: .clear, location: 0.0),
+                .init(color: .black, location: 0.085),
+                .init(color: .black, location: 0.915),
+                .init(color: .clear, location: 1.0),
+            ],
+            startPoint: .top, endPoint: .bottom
+        )
+    }
+
     @ViewBuilder
     private var content: some View {
         if sections.isEmpty {
@@ -179,6 +193,7 @@ struct PinnedTasksView: View {
                 }
                 .padding(.vertical, 6)
             }
+            .mask(edgeFade)
         } else {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2, pinnedViews: [.sectionHeaders]) {
@@ -199,6 +214,7 @@ struct PinnedTasksView: View {
                 }
                 .padding(.vertical, 6)
             }
+            .mask(edgeFade)
         }
     }
 

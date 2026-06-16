@@ -4,6 +4,16 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.25.6 (June 2026)
+
+Pinned Tasks window: the scroll fade is now gradual.
+
+### Pinned Tasks window
+
+- **Rows now dissolve smoothly as they scroll under the top and bottom bars** (a soft gradient fade at the edges), instead of cutting off abruptly — matching the Emoji panel.
+
+---
+
 ## v5.25.5 (June 2026)
 
 Pinned Tasks window: Emoji-panel polish.
