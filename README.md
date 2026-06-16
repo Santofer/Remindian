@@ -95,7 +95,7 @@ brew install --cask Santofer/tap/remindian
 </tr>
 </table>
 
-**Also includes:** Due times + alarms for Apple Reminders · Today list in the menu bar (due-today/overdue glance + inline complete) · Shortcuts/Spotlight actions (Sync Now · Add Task) · Menu-bar quick-add with natural-language dates · Preview changes before applying (dry-run diff) · Undo last sync (restore vault files) · Multiple sync profiles (run several source→destination pipelines at once) · Auto-updater · Onboarding wizard · Global hotkey · GoodTask tag writeback · New task writeback to Obsidian inbox · Automatic file backups · Launch at login · macOS native (SwiftUI, no dependencies)
+**Also includes:** **Pinned Tasks window** — a floating, always-on-top mini task manager that shows your open tasks grouped by date / priority / tag / recurrence, with live search and inline complete · **Natural-language quick-add** — type `Pay rent friday every month !! #home` and it parses the date, **recurrence (English & French)**, priority and tags · Due times + alarms for Apple Reminders · Today list in the menu bar (due-today/overdue glance + inline complete) · Shortcuts/Spotlight actions (Sync Now · Add Task) · Preview changes before applying (dry-run diff) · Undo last sync (restore vault files) · Multiple sync profiles (run several source→destination pipelines at once) · Auto-updater · Onboarding wizard · Global hotkey · GoodTask tag writeback · New task writeback to Obsidian inbox · Automatic file backups · Launch at login · macOS native (SwiftUI, no dependencies)
 
 ## Quick Start
 
