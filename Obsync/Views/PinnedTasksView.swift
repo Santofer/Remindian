@@ -16,6 +16,13 @@ final class PinnedTasksModel: ObservableObject {
     var onClose: (() -> Void)?
 }
 
+/// A borderless panel that can still become key — otherwise the search field
+/// never gets the keyboard and typing does nothing. (#pinned search)
+final class KeyablePanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
+
 @MainActor
 final class PinnedTasksWindowController: NSObject {
     static let shared = PinnedTasksWindowController()
@@ -46,7 +53,7 @@ final class PinnedTasksWindowController: NSObject {
         }
 
         let hosting = NSHostingController(rootView: PinnedTasksView().environmentObject(SyncManager.shared))
-        let p = NSPanel(contentViewController: hosting)
+        let p = KeyablePanel(contentViewController: hosting)
         // Borderless rounded floating panel (Emoji-panel style). No .titled → no
         // traffic lights; the SwiftUI content draws everything and clips itself to
         // a rounded rect, so the window reads as a rounded card with a shadow.
@@ -259,18 +266,18 @@ struct PinnedTasksView: View {
         }
         .padding(.horizontal, 4)
         .padding(.bottom, 5)
-        .padding(.top, 34)   // tall fade zone — rows are fully frosted before the labels
+        .padding(.top, 26)   // fade zone above the icons
         .background(
-            // Gradient frost: transparent at the top edge → fully frosted well above
-            // the labels, so rows dissolve into the bar before reaching them and the
-            // labels stay readable. A slightly thicker material hides content better.
+            // The lighter gradient frost: transparent at the top edge → frosted by
+            // the icons. (Back to the .ultraThinMaterial look, with a slightly taller
+            // fade zone so the labels stay readable.)
             Rectangle()
-                .fill(.regularMaterial)
+                .fill(.ultraThinMaterial)
                 .mask(
                     LinearGradient(
                         stops: [
                             .init(color: .clear, location: 0.0),
-                            .init(color: .black, location: 0.45),
+                            .init(color: .black, location: 0.55),
                         ],
                         startPoint: .top, endPoint: .bottom
                     )

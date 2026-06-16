@@ -4,6 +4,17 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.25.10 (June 2026)
+
+Pinned Tasks window: search works again + the lighter bottom frost is back.
+
+### Bug fixes
+
+- **The search field works now.** The borderless floating panel couldn't become the key window, so the search field never received keystrokes. The panel can now become key (without activating the app), so typing filters the list as expected.
+- **Restored the lighter bottom-bar frost** (`.ultraThinMaterial`) you preferred, keeping a slightly taller fade zone so the filter labels stay readable.
+
+---
+
 ## v5.25.9 (June 2026)
 
 Pinned Tasks window: steadier scrolling + readable filter labels.
