@@ -4,6 +4,16 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.25.7 (June 2026)
+
+Pinned Tasks window: the bottom filter bar's frost now fades in.
+
+### Pinned Tasks window
+
+- **The bottom filter bar (Tasks / Deadlines / …) now has a gradient frost** — fully transparent at its top edge fading to fully frosted by the icons — so rows dissolve smoothly into the bar as they scroll under it, exactly like the Emoji panel's category bar. (The previous version faded the list itself, which was wrong.) The top bar stays a plain native blur.
+
+---
+
 ## v5.25.6 (June 2026)
 
 Pinned Tasks window: the scroll fade is now gradual.
