@@ -4,6 +4,17 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.25.9 (June 2026)
+
+Pinned Tasks window: steadier scrolling + readable filter labels.
+
+### Bug fixes
+
+- **Section headers no longer jitter when scrolling.** The grouped views (Deadlines / Priorities / …) used sticky headers, which ghosted/offset slightly mid-scroll. Headers now scroll with the list (like the Emoji panel), so it's smooth.
+- **The bottom filter bar's frost starts higher and is more opaque**, so rows are fully faded before they reach the **Tasks / Deadlines / Priorities / …** labels — keeping the labels readable.
+
+---
+
 ## v5.25.8 (June 2026)
 
 Pinned Tasks window: top matches the body + fades below the search.

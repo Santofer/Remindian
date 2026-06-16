@@ -196,7 +196,7 @@ struct PinnedTasksView: View {
             }
         } else {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 2, pinnedViews: [.sectionHeaders]) {
+                LazyVStack(alignment: .leading, spacing: 2) {
                     ForEach(sections) { section in
                         Section {
                             if !collapsed.contains(section.id) {
@@ -232,7 +232,6 @@ struct PinnedTasksView: View {
                     .font(.system(size: 9, weight: .semibold)).foregroundColor(.secondary)
             }
             .padding(.horizontal, 12).padding(.vertical, 5)
-            .background(VisualEffectBackground())
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -260,17 +259,18 @@ struct PinnedTasksView: View {
         }
         .padding(.horizontal, 4)
         .padding(.bottom, 5)
-        .padding(.top, 20)   // the top of the bar is a fade zone above the icons
+        .padding(.top, 34)   // tall fade zone — rows are fully frosted before the labels
         .background(
-            // Gradient frost: transparent at the top edge → fully frosted by the
-            // icons, so rows dissolve smoothly into the bar as they scroll under it.
+            // Gradient frost: transparent at the top edge → fully frosted well above
+            // the labels, so rows dissolve into the bar before reaching them and the
+            // labels stay readable. A slightly thicker material hides content better.
             Rectangle()
-                .fill(.ultraThinMaterial)
+                .fill(.regularMaterial)
                 .mask(
                     LinearGradient(
                         stops: [
                             .init(color: .clear, location: 0.0),
-                            .init(color: .black, location: 0.6),
+                            .init(color: .black, location: 0.45),
                         ],
                         startPoint: .top, endPoint: .bottom
                     )
