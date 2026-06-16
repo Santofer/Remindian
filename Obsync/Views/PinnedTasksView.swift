@@ -149,8 +149,23 @@ struct PinnedTasksView: View {
         }
         .padding(.horizontal, 12)
         .padding(.top, 10)
-        .padding(.bottom, 8)
-        .background(.ultraThinMaterial)   // frosted blur; the list scrolls behind it
+        .padding(.bottom, 18)   // room for the fade strip below the search bar
+        .background(
+            // Same vibrancy material as the window body — so the top of the window
+            // is the SAME colour as the rest — masked to fade out below the search
+            // bar, so rows dissolve in there too (like the bottom filter bar).
+            VisualEffectBackground()
+                .mask(
+                    LinearGradient(
+                        stops: [
+                            .init(color: .black, location: 0.0),
+                            .init(color: .black, location: 0.6),
+                            .init(color: .clear, location: 1.0),
+                        ],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                )
+        )
     }
 
     // MARK: Content (task list)

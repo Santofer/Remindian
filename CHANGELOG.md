@@ -4,6 +4,17 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.25.8 (June 2026)
+
+Pinned Tasks window: top matches the body + fades below the search.
+
+### Pinned Tasks window
+
+- **The top of the window is now the same colour as the rest** — the top bar uses the body's vibrancy material instead of a lighter frost, so there's no contrasting strip.
+- **The area below the search bar now fades too** — rows dissolve into a gentle frost just under the search field, the same way they do at the bottom filter bar.
+
+---
+
 ## v5.25.7 (June 2026)
 
 Pinned Tasks window: the bottom filter bar's frost now fades in.
