@@ -86,7 +86,6 @@ struct PinnedTasksView: View {
     @State private var collapsed: Set<String> = []
     @State private var closeHover = false
     @State private var refreshHover = false
-    @FocusState private var searchFocused: Bool
 
     private var grouping: PinnedTasksOrganizer.Grouping {
         PinnedTasksOrganizer.Grouping(rawValue: groupingRaw) ?? .flat
@@ -96,81 +95,62 @@ struct PinnedTasksView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            topBar
-            searchBar
-                .padding(.horizontal, 12)
-                .padding(.bottom, 8)
-            Divider().opacity(0.35)
-            content
-            Divider().opacity(0.35)
-            tabBar
-        }
-        .background(VisualEffectBackground())
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5)
-        )
-        .ignoresSafeArea()
-        .task { await syncManager.refreshAgenda(force: true) }
+        // Emoji-panel layout: the list fills the whole card; the top bar (close +
+        // refresh + search) and the bottom tab bar are translucent overlays via
+        // safeAreaInset, so the list scrolls BEHIND them with a frosted blur. No
+        // dividers — the material edge is the separation.
+        content
+            .safeAreaInset(edge: .top, spacing: 0) { topOverlay }
+            .safeAreaInset(edge: .bottom, spacing: 0) { tabBar }
+            .background(VisualEffectBackground())
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5)
+            )
+            .ignoresSafeArea()
+            .task { await syncManager.refreshAgenda(force: true) }
     }
 
-    // MARK: Top bar — custom close (left) + refresh (right)
+    // MARK: Top overlay — close (left) + refresh (right), then the native search bar
 
-    private var topBar: some View {
-        HStack {
-            Button { model.onClose?() } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 15))
-                    .foregroundColor(closeHover ? .primary : .secondary)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .onHover { closeHover = $0 }
-            .help("Close")
-
-            Spacer()
-
-            if syncManager.isLoadingAgenda {
-                ProgressView().controlSize(.mini).scaleEffect(0.7).frame(width: 16, height: 16)
-            } else {
-                Button { Task { await syncManager.refreshAgenda(force: true) } } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(refreshHover ? .primary : .secondary)
+    private var topOverlay: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Button { model.onClose?() } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 15))
+                        .foregroundColor(closeHover ? .primary : .secondary)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .onHover { refreshHover = $0 }
-                .help("Refresh")
+                .onHover { closeHover = $0 }
+                .help("Close")
+
+                Spacer()
+
+                if syncManager.isLoadingAgenda {
+                    ProgressView().controlSize(.mini).scaleEffect(0.7).frame(width: 16, height: 16)
+                } else {
+                    Button { Task { await syncManager.refreshAgenda(force: true) } } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(refreshHover ? .primary : .secondary)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { refreshHover = $0 }
+                    .help("Refresh")
+                }
             }
+
+            NativeSearchField(text: $model.query)
+                .frame(height: 24)
         }
         .padding(.horizontal, 12)
         .padding(.top, 10)
         .padding(.bottom, 8)
-    }
-
-    // MARK: Search bar
-
-    private var searchBar: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundColor(.secondary)
-            TextField("Search", text: $model.query)
-                .textFieldStyle(.plain).font(.system(size: 13)).focused($searchFocused)
-            if !model.query.isEmpty {
-                Button { model.query = "" } label: {
-                    Image(systemName: "xmark.circle.fill").font(.system(size: 12)).foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 6)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(Color(nsColor: .textBackgroundColor).opacity(0.5)))
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .strokeBorder(searchFocused ? Color.accentColor.opacity(0.5) : Color.primary.opacity(0.12), lineWidth: 1))
+        .background(.ultraThinMaterial)   // frosted blur; the list scrolls behind it
     }
 
     // MARK: Content (task list)
@@ -265,7 +245,8 @@ struct PinnedTasksView: View {
         }
         .padding(.horizontal, 4)
         .padding(.bottom, 4)
-        .padding(.top, 2)
+        .padding(.top, 4)
+        .background(.ultraThinMaterial)   // frosted blur; the list scrolls behind it
     }
 
     private func color(for accent: PinnedTasksOrganizer.SectionAccent) -> Color {
@@ -355,6 +336,39 @@ private struct PinnedTaskRow: View {
         if cal.isDateInTomorrow(due) { return ("Tomorrow", .secondary) }
         let f = DateFormatter(); f.dateFormat = "MMM d"
         return (f.string(from: due), .secondary)
+    }
+}
+
+// MARK: - Native search field (same as the macOS Emoji panel)
+
+private struct NativeSearchField: NSViewRepresentable {
+    @Binding var text: String
+
+    func makeNSView(context: Context) -> NSSearchField {
+        let f = NSSearchField()
+        f.delegate = context.coordinator
+        f.placeholderString = "Search"
+        f.bezelStyle = .roundedBezel
+        f.focusRingType = .none
+        f.font = .systemFont(ofSize: 13)
+        f.sendsWholeSearchString = false   // live filtering
+        f.sendsSearchStringImmediately = true
+        return f
+    }
+
+    func updateNSView(_ nsView: NSSearchField, context: Context) {
+        if nsView.stringValue != text { nsView.stringValue = text }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject, NSSearchFieldDelegate {
+        var parent: NativeSearchField
+        init(_ parent: NativeSearchField) { self.parent = parent }
+        func controlTextDidChange(_ obj: Notification) {
+            guard let f = obj.object as? NSSearchField else { return }
+            parent.text = f.stringValue
+        }
     }
 }
 

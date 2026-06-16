@@ -4,6 +4,19 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.25.5 (June 2026)
+
+Pinned Tasks window: Emoji-panel polish.
+
+### Pinned Tasks window
+
+- **Native search field** — the same control as the macOS Emoji panel's search bar.
+- **Frosted top & bottom bars** — the task list now scrolls *behind* the translucent top bar (close / refresh / search) and the bottom tab bar, with a blur, exactly like the Emoji panel.
+- **No dividers** anywhere (incl. between the search bar and the list).
+- **Tag headers drop the `#`** — the Tags view shows `family`, `Netspace`… instead of `#family`, `#Netspace`.
+
+---
+
 ## v5.25.4 (June 2026)
 
 Pinned Tasks window redesigned like the macOS Emoji panel.

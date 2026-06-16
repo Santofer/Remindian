@@ -48,7 +48,7 @@ final class PinnedTasksOrganizerTests: XCTestCase {
             task("z"), task("w", tags: ["#admin"]),
         ]
         let s = PinnedTasksOrganizer.sections(from: tasks, grouping: .tag, now: now)
-        XCTAssertEqual(s.map { $0.title }, ["#admin", "#work", "No tag"])
+        XCTAssertEqual(s.map { $0.title }, ["admin", "work", "No tag"])   // no leading #
         XCTAssertEqual(s.first?.tasks.count, 2, "Both #admin tasks grouped.")
         XCTAssertEqual(s.last?.accent, .gray)
     }

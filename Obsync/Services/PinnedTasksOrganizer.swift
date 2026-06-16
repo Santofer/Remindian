@@ -179,7 +179,7 @@ struct PinnedTasksOrganizer {
             }
         }
         var sections = buckets.keys.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-            .compactMap { tag in nonEmpty("tag-\(tag)", "#\(tag)", .accent, buckets[tag] ?? []) }
+            .compactMap { tag in nonEmpty("tag-\(tag)", tag, .accent, buckets[tag] ?? []) }   // no leading # in the header
         if let last = nonEmpty("notag", "No tag", .gray, noTag) { sections.append(last) }
         return sections
     }
