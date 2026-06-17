@@ -36,6 +36,13 @@ struct MenuBarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // After a startup crash, the most important thing is explaining why
+            // automatic sync is paused — so the Safe Mode banner leads. (#80)
+            if syncManager.isInSafeMode {
+                safeModeBanner
+                sectionDivider
+            }
+
             // Opens straight on the actions — "Sync Now" is the first thing you see.
             actions
                 .padding(.top, 2)
@@ -316,6 +323,49 @@ struct MenuBarView: View {
     }
 
     // MARK: - Update banner
+
+    /// Shown at the top of the menu when the app recovered from a startup crash.
+    /// Explains that automatic sync is paused and offers an explicit Resume. The
+    /// manual "Sync Now" row still works for users who want to push or test. (#80)
+    private var safeModeBanner: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.shield.fill")
+                    .font(.system(size: 14))
+                    .foregroundColor(.orange)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Safe Mode")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.primary)
+                    Text("Remindian recovered from a crash. Automatic sync is paused so the app can open.")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Button {
+                syncManager.resumeFromSafeMode()
+            } label: {
+                Text("Resume automatic sync")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 5)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.orange)
+                    )
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.orange.opacity(0.12))
+        )
+        .padding(.horizontal, 6)
+        .padding(.top, 2)
+    }
 
     private var updateBanner: some View {
         Button {

@@ -69,6 +69,12 @@ class SyncManager: ObservableObject {
     @Published var errorMessage: String = ""
     @Published var syncLog: SyncLog
 
+    /// Mirrors `SafeMode.isActive` for SwiftUI. Set explicitly from the app
+    /// delegate after `SafeMode.registerLaunchAttempt()` so the menu reflects it
+    /// regardless of when this singleton was first created, and flipped to false
+    /// by `resumeFromSafeMode()`. (#80)
+    @Published var isInSafeMode: Bool = SafeMode.isActive
+
     // MARK: - Private
 
     private var syncEngine: SyncEngine
@@ -373,6 +379,12 @@ class SyncManager: ObservableObject {
     /// triggers a sync. Called once from `AppDelegate.applicationDidFinishLaunching`.
     /// (#62.5)
     func performLaunchSyncIfReady() async {
+        // Safe Mode (after a startup crash) suppresses the launch sync so the app
+        // can always open. The user resumes from the menu bar. (#80)
+        guard !SafeMode.isActive else {
+            debugLog("[SyncManager] Sync on launch skipped: Safe Mode active after a previous crash")
+            return
+        }
         await requestDestinationAccess()
 
         guard hasDestinationAccess else { return }
@@ -419,6 +431,13 @@ class SyncManager: ObservableObject {
     /// preview) pass true; unattended triggers (auto-sync timer, file watcher,
     /// hotkey, Shortcuts) pass false so they never steal focus with a dialog. (audit #14)
     func performSync(interactive: Bool = true) async {
+        // Suppress *automatic* syncs (timer / file watcher / hotkey) in Safe Mode.
+        // A user-initiated "Sync Now" (interactive) is always allowed so they can
+        // push pending work or test a fix. (#80)
+        if !interactive && SafeMode.isActive {
+            debugLog("[SyncManager] Automatic sync suppressed: Safe Mode")
+            return
+        }
         guard !isSyncing else {
             debugLog("[SyncManager] Skipped: already syncing")
             return
@@ -576,6 +595,14 @@ class SyncManager: ObservableObject {
     /// vaults. Re-entrancy-guarded and throttled so the menu's `.task` can fire
     /// freely without ever stacking scans.
     func refreshAgenda(force: Bool = false) async {
+        // The launch-time agenda scan runs on the same background queue as the
+        // crashing sync; if we're in Safe Mode after a startup crash, skip the
+        // scan entirely (the menu shows a Safe Mode banner instead). (#80)
+        guard !SafeMode.isActive else {
+            agenda = []
+            allOpenTasks = []
+            return
+        }
         guard !isLoadingAgenda else { return }
         if !force, let last = lastAgendaRefresh, Date().timeIntervalSince(last) < 10 { return }
         guard !config.vaultPath.isEmpty,
@@ -832,6 +859,8 @@ class SyncManager: ObservableObject {
         syncTimer = nil
 
         guard config.enableAutoSync else { return }
+        // Don't arm the interval timer in Safe Mode. (#80)
+        guard !SafeMode.isActive else { return }
 
         // Clamp to a sane minimum so a corrupt persisted config (e.g. 0 or negative)
         // can't schedule a timer that fires continuously and burns CPU (#58-adjacent).
@@ -842,6 +871,18 @@ class SyncManager: ObservableObject {
                 await self?.performSync(interactive: false)
             }
         }
+    }
+
+    /// Leave Safe Mode at the user's request: clear the sticky flag, re-arm the
+    /// automatic triggers, and refresh the agenda. Does NOT auto-sync — the user
+    /// can hit "Sync Now" when ready. (#80)
+    func resumeFromSafeMode() {
+        SafeMode.resume()
+        isInSafeMode = false
+        statusMessage = "Sync resumed"
+        setupAutoSync()
+        updateFileWatcher()
+        Task { await refreshAgenda(force: true) }
     }
 
     // MARK: - Global Hotkey
@@ -864,7 +905,9 @@ class SyncManager: ObservableObject {
     // MARK: - File Watcher
 
     func updateFileWatcher() {
-        if config.enableFileWatcher && !config.vaultPath.isEmpty {
+        // The file watcher triggers automatic syncs on every vault change — the
+        // exact loop that bricked the app. Keep it off in Safe Mode. (#80)
+        if config.enableFileWatcher && !config.vaultPath.isEmpty && !SafeMode.isActive {
             FileWatcherService.shared.startWatching(path: config.vaultPath) { [weak self] in
                 Task { @MainActor in
                     debugLog("[SyncManager] File watcher triggered sync")

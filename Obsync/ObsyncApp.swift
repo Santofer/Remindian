@@ -82,10 +82,34 @@ struct RemindianApp: App {
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        guard NSClassFromString("XCTestCase") == nil else { return }
+        // Crash-loop breaker: record this launch attempt before ANY automatic
+        // work is scheduled. If the previous launch crashed during startup, this
+        // latches Safe Mode on so the launch sync / watcher / scan are skipped and
+        // the app can open. Runs in willFinishLaunching so `SafeMode.isActive` is
+        // correct by the time `SyncManager` first reads it. (#80)
+        SafeMode.registerLaunchAttempt()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Skip all app initialization when running under a test host.
         // Tests should not trigger permission prompts, syncs, or side effects.
         guard NSClassFromString("XCTestCase") == nil else { return }
+
+        // Mirror Safe Mode onto the (now-created) SyncManager so the menu reflects
+        // it, independent of when the singleton was first instantiated. (#80)
+        SyncManager.shared.isInSafeMode = SafeMode.isActive
+        if SafeMode.isActive {
+            debugLog("[AppDelegate] Launched in Safe Mode after a previous startup crash — automatic sync suppressed")
+        }
+        // The app reached the run loop and is wiring up subsystems; if it survives
+        // the next several seconds it didn't crash during startup. Clear the
+        // pending flag as a backstop (clean termination clears it too). 12s gives
+        // comfortable margin over the ~5s window the reported crash struck in.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 12) {
+            SafeMode.markHealthy()
+        }
 
         // Each step is isolated so one failure doesn't crash the whole app.
         // Subsystem failures are logged but non-fatal.
@@ -111,9 +135,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             await SyncManager.shared.refreshAgenda()
         }
 
-        // Reopen the floating pinned-tasks window if it was open at last quit.
+        // Reopen the floating pinned-tasks window if it was open at last quit —
+        // but not in Safe Mode (its .task triggers an agenda scan, and we're
+        // minimizing startup surface after a crash). (#80)
         safeInit("Pinned tasks window") {
             DispatchQueue.main.async {
+                guard !SafeMode.isActive else { return }
                 PinnedTasksWindowController.shared.restoreIfPreviouslyOpen()
             }
         }
@@ -160,6 +187,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false // Keep running in menu bar
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // A clean quit (Cmd-Q, menu Quit, auto-updater relaunch) is not a crash —
+        // clear the pending flag so the next launch isn't mistaken for a crash
+        // recovery. Only an actual crash/kill leaves the flag set. (#80)
+        SafeMode.markHealthy()
     }
 
     func updateDockIconVisibility() {

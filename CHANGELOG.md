@@ -4,6 +4,18 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.25.11 (June 2026)
+
+Crash recovery: the app can no longer get stuck crashing on launch.
+
+### Bug fixes
+
+- **Safe Mode crash-loop breaker (#80).** If a sync crashes the app during startup, the *next* launch now opens in **Safe Mode** instead of crashing again: automatic sync (launch sync, interval timer, file watcher, and the launch-time agenda scan) is paused so the app always opens. A banner in the menu explains what happened and offers **Resume automatic sync** when you're ready. A clean quit is never mistaken for a crash, and Safe Mode persists across launches until you resume — so a repeating crash can never brick the app again.
+
+> Note: this release makes the app *recoverable* from the #80 crash; the underlying trap is still being pinpointed from the full crash report. Safe Mode keeps the app open (and the auto-updater running) so the eventual fix can be installed without a manual reinstall.
+
+---
+
 ## v5.25.10 (June 2026)
 
 Pinned Tasks window: search works again + the lighter bottom frost is back.
