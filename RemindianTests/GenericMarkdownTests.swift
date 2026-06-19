@@ -285,4 +285,30 @@ final class GenericMarkdownTests: XCTestCase {
         XCTAssertEqual(lines[1], "- [ ] Inserted B", "Line above untouched")
         XCTAssertTrue(lines[2].contains("[x]"), "Target relocated and completed despite the stale index")
     }
+
+    // MARK: - #81: folder whitelist must scope a folderless vault
+
+    func test_81_genericWhitelistScopesToFolderAndExcludesRoot() throws {
+        let vault = FileManager.default.temporaryDirectory.appendingPathComponent("gm-folder-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: vault.appendingPathComponent("Reminders"), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: vault) }
+        try "- [ ] RootTask\n".write(to: vault.appendingPathComponent("RootNote.md"), atomically: true, encoding: .utf8)
+        try "- [ ] InboxTask\n".write(to: vault.appendingPathComponent("Inbox.md"), atomically: true, encoding: .utf8)
+        try "- [ ] FolderTask\n".write(to: vault.appendingPathComponent("Reminders/r.md"), atomically: true, encoding: .utf8)
+
+        let config = SyncConfiguration()
+        config.vaultPath = vault.path
+        config.inboxFilePath = "Inbox.md"
+        config.includedFolders = ["Reminders"]
+
+        let titles = Set(try GenericMarkdownSource().scanTasks(config: config).map { $0.title })
+        XCTAssertTrue(titles.contains("FolderTask"), "Whitelisted folder must be scanned")
+        XCTAssertTrue(titles.contains("InboxTask"), "Inbox must always be included")
+        XCTAssertFalse(titles.contains("RootTask"), "Other root notes must NOT be scanned (#81)")
+
+        // "/" sentinel opts the root notes back in.
+        config.includedFolders = ["Reminders", "/"]
+        let withRoot = Set(try GenericMarkdownSource().scanTasks(config: config).map { $0.title })
+        XCTAssertTrue(withRoot.contains("RootTask"), "\"/\" sentinel must opt root notes back in")
+    }
 }

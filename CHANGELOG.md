@@ -4,6 +4,18 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.25.13 (June 2026)
+
+Folder filtering ("Only scan") now actually restricts the scan.
+
+### Bug fixes
+
+- **Folder whitelist no longer leaks the vault root (#81).** When you set **Only scan** to one or more folders, Remindian was *still* scanning every Markdown file at the top level of the vault on top of them. For a folderless vault (e.g. notes organised by Virtfolder, where everything lives at the root) this meant the whitelist did nothing — *"every sync synced everything."* Now a whitelist scans **only** the folders you list. Your configured **inbox file is always included** (so new tasks pulled in from Reminders still round-trip and don't get removed). If you *do* want top-level notes scanned too, add **`/`** to the "Only scan" list. The same fix applies to the generic Markdown source.
+
+> If you previously relied on root notes being scanned while a whitelist was set, add `/` to "Only scan" to keep them. Tip: use **Preview Changes** before your next sync to see exactly what scoping to a folder will add or remove.
+
+---
+
 ## v5.25.12 (June 2026)
 
 Root-cause fix for the #80 launch crash.

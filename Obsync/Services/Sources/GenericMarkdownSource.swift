@@ -28,7 +28,8 @@ class GenericMarkdownSource: TaskSource {
         }
 
         let files = try findFiles(in: vaultURL, extensions: exts,
-                                  excluding: config.excludedFolders, including: config.includedFolders)
+                                  excluding: config.excludedFolders, including: config.includedFolders,
+                                  inboxRelativePath: config.inboxFilePath)
         var tasks: [SyncTask] = []
         for fileURL in files {
             guard let content = try? String(contentsOf: fileURL, encoding: .utf8) else { continue }
@@ -173,10 +174,21 @@ class GenericMarkdownSource: TaskSource {
 
     /// Enumerate files with the configured extensions, honoring include/exclude
     /// folders. Mirrors the Obsidian scanner's filtering semantics.
-    private func findFiles(in directory: URL, extensions: Set<String>, excluding excludedFolders: [String], including includedFolders: [String]) throws -> [URL] {
+    private func findFiles(in directory: URL, extensions: Set<String>, excluding excludedFolders: [String], including includedFolders: [String], inboxRelativePath: String = "") throws -> [URL] {
         let vaultPath = directory.path
         let whitelist = includedFolders.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         let useWhitelist = !whitelist.isEmpty
+
+        // Root-level files are in scope only when the user explicitly lists "/", "."
+        // or "./" — otherwise a folderless vault (everything at the root) could never
+        // be scoped to one subfolder (#81). The configured inbox file is always kept so
+        // new tasks written there by the Reminders→source direction aren't seen as
+        // deleted on the next scan (which would remove their reminders).
+        let includeRoot = whitelist.contains { entry in
+            let t = entry.trimmingCharacters(in: .whitespaces)
+            return t == "/" || t == "." || t == "./"
+        }
+        let inboxRel = inboxRelativePath.trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
 
         let resourceKeys: [URLResourceKey] = [.isDirectoryKey, .nameKey]
         guard let enumerator = fileManager.enumerator(at: directory, includingPropertiesForKeys: resourceKeys, options: [.skipsHiddenFiles]) else {
@@ -202,10 +214,14 @@ class GenericMarkdownSource: TaskSource {
             if useWhitelist {
                 let relativePath = String(fileURL.path.dropFirst(vaultPath.count))
                     .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-                let inWhitelist = whitelist.contains { folder in
-                    let trimmed = folder.trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
-                    return !relativePath.contains("/") || relativePath.hasPrefix(trimmed + "/")
-                }
+                let isRoot = !relativePath.contains("/")
+                let inWhitelist = (!inboxRel.isEmpty && relativePath == inboxRel)
+                    || (isRoot && includeRoot)
+                    || (!isRoot && whitelist.contains { folder in
+                        let trimmed = folder.trimmingCharacters(in: CharacterSet(charactersIn: "/ ."))
+                        guard !trimmed.isEmpty else { return false }
+                        return relativePath == trimmed || relativePath.hasPrefix(trimmed + "/")
+                    })
                 guard inWhitelist else { continue }
             }
             files.append(fileURL)

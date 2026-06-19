@@ -20,6 +20,7 @@ class ObsidianTasksSource: TaskSource {
             at: config.vaultPath,
             excludedFolders: config.excludedFolders,
             includedFolders: config.includedFolders,
+            inboxRelativePath: config.inboxFilePath,
             openMarkers: openMarkers.isEmpty ? SyncTask.defaultOpenMarkers : openMarkers,
             completedMarkers: completedMarkers.isEmpty ? SyncTask.defaultCompletedMarkers : completedMarkers,
             ignoredMarkers: ignoredMarkers

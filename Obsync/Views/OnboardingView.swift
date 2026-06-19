@@ -357,7 +357,7 @@ struct OnboardingView: View {
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 12))
 
-                        Text("Leave empty to scan the entire vault. Root .md files (like Inbox.md) are always included.")
+                        Text("Leave empty to scan the entire vault. Only the listed folders are scanned (the inbox file is always included); add \"/\" to also scan notes at the vault root.")
                             .font(.caption2).foregroundColor(.secondary)
 
                         Divider()

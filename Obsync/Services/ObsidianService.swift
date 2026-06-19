@@ -62,6 +62,7 @@ class ObsidianService {
         at path: String,
         excludedFolders: [String],
         includedFolders: [String] = [],
+        inboxRelativePath: String = "",
         openMarkers: Set<Character> = SyncTask.defaultOpenMarkers,
         completedMarkers: Set<Character> = SyncTask.defaultCompletedMarkers,
         ignoredMarkers: Set<Character> = []
@@ -78,7 +79,7 @@ class ObsidianService {
         debugLog("[ObsidianService] Directory readable: \(isReadable)")
 
         var tasks: [SyncTask] = []
-        let markdownFiles = try findMarkdownFiles(in: vaultURL, excluding: excludedFolders, including: includedFolders)
+        let markdownFiles = try findMarkdownFiles(in: vaultURL, excluding: excludedFolders, including: includedFolders, inboxRelativePath: inboxRelativePath)
         debugLog("[ObsidianService] Found \(markdownFiles.count) markdown files")
 
         // Incremental scan: reuse the previous parse for any file whose mtime,
@@ -1302,17 +1303,24 @@ class ObsidianService {
 
     // MARK: - File Discovery
 
-    private func findMarkdownFiles(in directory: URL, excluding excludedFolders: [String], including includedFolders: [String] = []) throws -> [URL] {
+    private func findMarkdownFiles(in directory: URL, excluding excludedFolders: [String], including includedFolders: [String] = [], inboxRelativePath: String = "") throws -> [URL] {
         let vaultPath = directory.path
         let useWhitelist = !includedFolders.filter({ !$0.trimmingCharacters(in: .whitespaces).isEmpty }).isEmpty
 
-        // If whitelist mode, scan only the specified folders (+ root-level .md files)
+        // If whitelist mode, scan only the specified folders (+ opt-in root + the inbox)
         if useWhitelist {
             debugLog("[ObsidianService] Whitelist mode: scanning only \(includedFolders)")
             var files: [URL] = []
 
-            // Scan root-level .md files (e.g., Inbox.md)
-            if let rootContents = try? fileManager.contentsOfDirectory(
+            // Root-level .md files are scanned ONLY when the user explicitly asks for
+            // them by listing "/", "." or "./". Previously every top-level note was
+            // always pulled in, which made a whitelist useless for a folderless vault
+            // (everything lives at the root) — the user couldn't scope to one subfolder (#81).
+            let includeRoot = includedFolders.contains { entry in
+                let t = entry.trimmingCharacters(in: .whitespaces)
+                return t == "/" || t == "." || t == "./"
+            }
+            if includeRoot, let rootContents = try? fileManager.contentsOfDirectory(
                 at: directory, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]
             ) {
                 for item in rootContents {
@@ -1323,10 +1331,10 @@ class ObsidianService {
                 }
             }
 
-            // Scan each whitelisted folder
+            // Scan each whitelisted folder recursively.
             for folder in includedFolders {
-                let trimmed = folder.trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
-                guard !trimmed.isEmpty else { continue }
+                let trimmed = folder.trimmingCharacters(in: CharacterSet(charactersIn: "/ ."))
+                guard !trimmed.isEmpty else { continue }  // root sentinels handled above
                 let folderURL = directory.appendingPathComponent(trimmed)
                 guard fileManager.fileExists(atPath: folderURL.path) else {
                     debugLog("[ObsidianService] Whitelist folder not found: \(trimmed)")
@@ -1336,7 +1344,24 @@ class ObsidianService {
                 let subFiles = try findMarkdownFilesRecursive(in: folderURL, excluding: excludedFolders, vaultPath: vaultPath)
                 files.append(contentsOf: subFiles)
             }
-            return files
+
+            // Always include the configured inbox file, even if it lives at the vault
+            // root and root isn't whitelisted. The Reminders→Obsidian direction writes
+            // new tasks here; if the inbox were filtered out, the next scan would see
+            // those tasks as deleted and remove the reminders that created them (#81 safety).
+            let inboxRel = inboxRelativePath.trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
+            if !inboxRel.isEmpty {
+                let inboxURL = directory.appendingPathComponent(inboxRel)
+                var isDir: ObjCBool = false
+                if fileManager.fileExists(atPath: inboxURL.path, isDirectory: &isDir),
+                   !isDir.boolValue, inboxURL.pathExtension.lowercased() == "md" {
+                    files.append(inboxURL)
+                }
+            }
+
+            // De-duplicate — the inbox or a root sentinel file may also be reached via a folder.
+            var seen = Set<String>()
+            return files.filter { seen.insert($0.standardizedFileURL.path).inserted }
         }
 
         // Default mode: scan everything, excluding specified folders

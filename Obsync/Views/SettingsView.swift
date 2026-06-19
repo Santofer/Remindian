@@ -1189,7 +1189,7 @@ struct AdvancedSettingsView: View {
                     Text("Only scan")
                 }
 
-                Text("Comma-separated. If set, ONLY these folders will be scanned. Leave empty to scan the entire vault.")
+                Text("Comma-separated. If set, ONLY these folders are scanned (the inbox file is always included). Leave empty to scan the entire vault. Add \"/\" to also scan notes at the vault root.")
                     .font(.caption)
                     .foregroundColor(.secondary)
 
