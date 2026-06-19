@@ -51,7 +51,11 @@ class CalendarFeedDestination: TaskDestination {
 
         let content = try String(contentsOfFile: outputPath, encoding: .utf8)
         let parsed = parseICS(content)
-        tasks = Dictionary(uniqueKeysWithValues: parsed.map { ($0.uid, $0) })
+        // The .ics file is externally writable (HTTP/cloud-sync folder), so a
+        // cloud-sync merge, copy-paste, or interrupted write can leave two VTODOs
+        // sharing a UID. `Dictionary(uniqueKeysWithValues:)` would trap on the
+        // duplicate key (EXC_BREAKPOINT, the #80 crash class) — merge instead.
+        tasks = Dictionary(parsed.map { ($0.uid, $0) }, uniquingKeysWith: { _, latest in latest })
         return parsed.map { $0.toSyncTask() }
     }
 

@@ -862,9 +862,10 @@ class SyncManager: ObservableObject {
         // Don't arm the interval timer in Safe Mode. (#80)
         guard !SafeMode.isActive else { return }
 
-        // Clamp to a sane minimum so a corrupt persisted config (e.g. 0 or negative)
-        // can't schedule a timer that fires continuously and burns CPU (#58-adjacent).
-        let minutes = max(1, config.syncIntervalMinutes)
+        // Clamp to a sane range so a corrupt persisted config can't schedule a timer
+        // that fires continuously (0/negative → low clamp) or overflow `minutes * 60`
+        // when the value is absurdly large (corrupt profiles.json → trap, #80 class).
+        let minutes = min(max(1, config.syncIntervalMinutes), 24 * 60)
         let interval = TimeInterval(minutes * 60)
         syncTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in

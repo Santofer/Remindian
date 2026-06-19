@@ -81,6 +81,7 @@
 		T0R /* LineRelocationRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1Q; };
 		T0S /* PinnedTasksOrganizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1R; };
 		SMT /* SafeModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SMU; };
+		CFT /* CalendarFeedDestinationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFU; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -172,6 +173,7 @@
 		T1Q /* LineRelocationRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LineRelocationRegressionTests.swift; sourceTree = "<group>"; };
 		T1R /* PinnedTasksOrganizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinnedTasksOrganizerTests.swift; sourceTree = "<group>"; };
 		SMU /* SafeModeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeModeTests.swift; sourceTree = "<group>"; };
+		CFU /* CalendarFeedDestinationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarFeedDestinationTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -344,6 +346,7 @@
 				T1Q /* LineRelocationRegressionTests.swift */,
 				T1R /* PinnedTasksOrganizerTests.swift */,
 				SMU /* SafeModeTests.swift */,
+				CFU /* CalendarFeedDestinationTests.swift */,
 			);
 			path = RemindianTests;
 			sourceTree = "<group>";
@@ -519,6 +522,7 @@
 				T0R /* LineRelocationRegressionTests.swift in Sources */,
 				T0S /* PinnedTasksOrganizerTests.swift in Sources */,
 				SMT /* SafeModeTests.swift in Sources */,
+				CFT /* CalendarFeedDestinationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -660,7 +664,7 @@
 				CODE_SIGN_ENTITLEMENTS = Obsync/Remindian.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 17;
+				CURRENT_PROJECT_VERSION = 18;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -672,7 +676,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 5.25.11;
+				MARKETING_VERSION = 5.25.12;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -688,7 +692,7 @@
 				CODE_SIGN_ENTITLEMENTS = Obsync/Remindian.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 17;
+				CURRENT_PROJECT_VERSION = 18;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -700,7 +704,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 5.25.11;
+				MARKETING_VERSION = 5.25.12;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -713,7 +717,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 17;
+				CURRENT_PROJECT_VERSION = 18;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.tests;
@@ -729,7 +733,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 17;
+				CURRENT_PROJECT_VERSION = 18;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.tests;

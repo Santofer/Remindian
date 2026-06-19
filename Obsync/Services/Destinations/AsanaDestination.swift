@@ -48,7 +48,9 @@ class AsanaDestination: TaskDestination {
         }
 
         let projects = try await fetchProjects(workspaceGid: workspaceGid)
-        let projectMap = Dictionary(uniqueKeysWithValues: projects.map { ($0.gid, $0.name) })
+        // API gids are unique today, but never trap on a duplicate from a malformed
+        // response — merge instead of `uniqueKeysWithValues:` (#80 crash class).
+        let projectMap = Dictionary(projects.map { ($0.gid, $0.name) }, uniquingKeysWith: { _, latest in latest })
 
         var allTasks: [SyncTask] = []
         var offset: String? = nil

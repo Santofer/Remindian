@@ -750,6 +750,7 @@ class TaskNotesSource: TaskSource {
         isoFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
 
         let fm = fieldMapping
+        let fieldLookup = fm.fieldLookup  // compute once; was rebuilt for every frontmatter line
         var inFrontmatter = false
         var frontmatterEnded = false
         var lastArrayKey: String?  // Track which key a YAML array item belongs to

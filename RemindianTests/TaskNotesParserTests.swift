@@ -169,4 +169,74 @@ final class TaskNotesParserTests: XCTestCase {
         let content = try newNoteContent(makeFileSource(defaultTag: ""), SyncTask(title: "Buy milk"))
         XCTAssertFalse(content.contains("tags:"), "No default tag + no task tags → no tags block. Got:\n\(content)")
     }
+
+    // MARK: - #80: fieldLookup must never trap on blank / duplicate field names
+    // The original code built `fieldLookup` as a dictionary *literal* of
+    // user-entered names. Two blanked fields (both "") or two identical names
+    // collide → `Dictionary.init(dictionaryLiteral:)` fatal-errors (EXC_BREAKPOINT),
+    // crashing every launch sync and bricking the app.
+
+    func test_80_fieldLookupDoesNotTrapOnBlankNames() {
+        // bengt's config: fields he doesn't use are blanked → multiple "" keys.
+        var m = TaskNotesFieldMapping()
+        m.project = ""
+        m.context = ""
+        m.completedDate = ""
+        let lookup = m.fieldLookup   // must not trap
+        XCTAssertNil(lookup[""], "Blank names must be dropped, not stored under an empty key")
+        XCTAssertEqual(lookup["title"], "title")
+        XCTAssertEqual(lookup["due"], "due")
+        XCTAssertEqual(lookup["tags"], "tags")
+    }
+
+    func test_80_fieldLookupDoesNotTrapOnDuplicateNames() {
+        // Two fields mapped to the same custom name (case-insensitively).
+        var m = TaskNotesFieldMapping()
+        m.due = "when"
+        m.scheduled = "WHEN"
+        let lookup = m.fieldLookup   // must not trap
+        // Declaration order wins: `due` precedes `scheduled`.
+        XCTAssertEqual(lookup["when"], "due")
+        XCTAssertEqual(lookup.values.filter { $0 == "due" || $0 == "scheduled" }.count, 1)
+    }
+
+    func test_80_fieldLookupDefaultMappingIntact() {
+        let lookup = TaskNotesFieldMapping().fieldLookup
+        XCTAssertEqual(lookup.count, 9, "All nine distinct defaults must be present")
+        XCTAssertEqual(lookup["status"], "status")
+        XCTAssertEqual(lookup["completeddate"], "completedDate")
+        XCTAssertEqual(lookup["context"], "context")
+    }
+
+    func test_80_scanDoesNotCrashWithBlankedMapping() throws {
+        // End-to-end reproduction of the #80 backtrace:
+        // scanTasks → scanTasksFromFiles → parseTaskNotesFile → fieldLookup.
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let tasksDir = tempDir.appendingPathComponent("tasks")
+        try FileManager.default.createDirectory(at: tasksDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        let taskFile = tasksDir.appendingPathComponent("uppgift.md")   // Swedish, like bengt
+        try """
+        ---
+        status: todo
+        due: 2026-06-19
+        ---
+        # Uppgift
+        """.write(to: taskFile, atomically: true, encoding: .utf8)
+
+        let source = TaskNotesSource()
+        source.integrationMode = .fileBased
+        var blanked = TaskNotesFieldMapping()
+        blanked.project = ""
+        blanked.context = ""
+        blanked.completedDate = ""
+        source.fieldMapping = blanked
+
+        let config = SyncConfiguration()
+        config.vaultPath = tempDir.path
+        config.taskNotesFolder = "tasks"
+
+        let tasks = try source.scanTasks(config: config)   // must not trap
+        XCTAssertEqual(tasks.count, 1, "The blanked-mapping vault must scan without crashing")
+    }
 }

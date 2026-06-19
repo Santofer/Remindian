@@ -64,7 +64,9 @@ class TodoistDestination: TaskDestination {
         } while cursor != nil
 
         let projects = try await fetchProjects()
-        let projectMap = Dictionary(uniqueKeysWithValues: projects.map { ($0.id, $0.name) })
+        // API ids are unique today, but never trap on a duplicate from a malformed
+        // response — merge instead of `uniqueKeysWithValues:` (#80 crash class).
+        let projectMap = Dictionary(projects.map { ($0.id, $0.name) }, uniquingKeysWith: { _, latest in latest })
 
         debugLog("[Todoist] Fetched \(allTasks.count) tasks across \(projectMap.count) projects")
         return allTasks.map { task in

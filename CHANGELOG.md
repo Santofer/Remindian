@@ -4,6 +4,18 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.25.12 (June 2026)
+
+Root-cause fix for the #80 launch crash.
+
+### Bug fixes
+
+- **Fixed the #80 crash at its source (TaskNotes field mapping).** The frontmatter field-name mapping built its lookup table as a dictionary *literal* of your custom field names. If two of those names were the same — most often because two unused fields were **left blank** (two empty names), but also if two were typed identically — Swift fatal-errors on the duplicate keys (`EXC_BREAKPOINT`). This ran on every launch sync, so it crashed the app on startup and kept crashing (the bug behind Safe Mode in v5.25.11). The lookup is now built defensively: blank field names are ignored and duplicates keep the first mapping instead of crashing. The table is also computed once per file instead of once per frontmatter line.
+
+> If v5.25.11 dropped you into Safe Mode because of this, updating to v5.25.12 fixes the cause — click **Resume automatic sync** (or just relaunch) and normal syncing returns.
+
+---
+
 ## v5.25.11 (June 2026)
 
 Crash recovery: the app can no longer get stuck crashing on launch.

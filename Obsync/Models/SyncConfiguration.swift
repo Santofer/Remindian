@@ -15,18 +15,34 @@ struct TaskNotesFieldMapping: Codable, Equatable {
     var context: String = "context"
 
     /// Returns all custom field names as a lookup dictionary (lowercased key → property name).
+    ///
+    /// Built defensively rather than as a dictionary literal: blank names are
+    /// ignored, and if two fields are mapped to the same (case-insensitive) name
+    /// the first one wins. A dictionary *literal* with colliding keys is a fatal
+    /// runtime error (`EXC_BREAKPOINT`) — and the field names are free-text user
+    /// input, so two blanked-out fields (both "") or two identical entries used to
+    /// crash every launch sync and brick the app (#80). Never build this from a
+    /// literal of user-entered keys.
     var fieldLookup: [String: String] {
-        return [
-            title.lowercased(): "title",
-            status.lowercased(): "status",
-            priority.lowercased(): "priority",
-            due.lowercased(): "due",
-            scheduled.lowercased(): "scheduled",
-            completedDate.lowercased(): "completedDate",
-            tags.lowercased(): "tags",
-            project.lowercased(): "project",
-            context.lowercased(): "context",
+        let entries: [(String, String)] = [
+            (title, "title"),
+            (status, "status"),
+            (priority, "priority"),
+            (due, "due"),
+            (scheduled, "scheduled"),
+            (completedDate, "completedDate"),
+            (tags, "tags"),
+            (project, "project"),
+            (context, "context"),
         ]
+        var lookup: [String: String] = [:]
+        lookup.reserveCapacity(entries.count)
+        for (rawName, property) in entries {
+            let key = rawName.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !key.isEmpty, lookup[key] == nil else { continue }
+            lookup[key] = property
+        }
+        return lookup
     }
 }
 
@@ -483,7 +499,10 @@ class SyncConfiguration: ObservableObject, Codable {
     required init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         vaultPath = try container.decode(String.self, forKey: .vaultPath)
-        syncIntervalMinutes = try container.decode(Int.self, forKey: .syncIntervalMinutes)
+        // Clamp on decode so a corrupt/hand-edited profiles.json can't carry an
+        // absurd value that later overflows `minutes * 60` (#80 crash class). The UI
+        // only offers 1–60, so a 1-minute floor / 1-day ceiling is invisible in practice.
+        syncIntervalMinutes = min(max(1, try container.decode(Int.self, forKey: .syncIntervalMinutes)), 24 * 60)
         enableAutoSync = try container.decode(Bool.self, forKey: .enableAutoSync)
         syncOnLaunch = try container.decode(Bool.self, forKey: .syncOnLaunch)
         listMappings = try container.decode([ListMapping].self, forKey: .listMappings)

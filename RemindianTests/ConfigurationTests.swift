@@ -115,6 +115,40 @@ final class ConfigurationTests: XCTestCase {
         XCTAssertTrue(config.includedFolders.isEmpty)
     }
 
+    // MARK: - #80-class: syncIntervalMinutes must be clamped on decode
+
+    func test_80_syncIntervalClampedHighOnDecodePreventsOverflow() throws {
+        // A corrupt / hand-edited profiles.json can carry a value that is a valid
+        // Int64 (so decode succeeds and try? does not catch it) but overflows
+        // `minutes * 60` when arming the auto-sync timer → EXC_BREAKPOINT on launch.
+        let config = SyncConfiguration()
+        config.syncIntervalMinutes = 200_000_000_000_000_000  // 2e17
+        let data = try JSONEncoder().encode(config)
+        let decoded = try JSONDecoder().decode(SyncConfiguration.self, from: data)
+
+        XCTAssertLessThanOrEqual(decoded.syncIntervalMinutes, 24 * 60)
+        XCTAssertGreaterThanOrEqual(decoded.syncIntervalMinutes, 1)
+        // The clamped value must be safe to multiply by 60 (the timer arithmetic).
+        let (_, overflow) = decoded.syncIntervalMinutes.multipliedReportingOverflow(by: 60)
+        XCTAssertFalse(overflow, "Clamped interval must never overflow minutes * 60")
+    }
+
+    func test_80_syncIntervalClampedLowOnDecode() throws {
+        let config = SyncConfiguration()
+        config.syncIntervalMinutes = 0   // would schedule a continuously-firing timer
+        let data = try JSONEncoder().encode(config)
+        let decoded = try JSONDecoder().decode(SyncConfiguration.self, from: data)
+        XCTAssertEqual(decoded.syncIntervalMinutes, 1)
+    }
+
+    func test_80_syncIntervalNormalValuePreserved() throws {
+        let config = SyncConfiguration()
+        config.syncIntervalMinutes = 30   // a normal UI value must pass through unchanged
+        let data = try JSONEncoder().encode(config)
+        let decoded = try JSONDecoder().decode(SyncConfiguration.self, from: data)
+        XCTAssertEqual(decoded.syncIntervalMinutes, 30)
+    }
+
     // MARK: - List Mapping
 
     func testRemindersListForTag() {
