@@ -9,7 +9,7 @@
 #   scripts/update-casks.sh <version> <path-to-dmg>
 #
 # Example:
-#   scripts/update-casks.sh 5.12.0 dist/Remindian-v5.12.0.dmg
+#   scripts/update-casks.sh 5.12.0 dist/Remindian-5.12.0.dmg
 #
 # Idempotent and safe to re-run. Requires: shasum, git, gh (authenticated).
 set -euo pipefail
