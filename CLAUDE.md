@@ -20,6 +20,29 @@ explicitly. Note that the API does not expose advisory *comments*, so a reporter
 pinging you there is invisible — when an advisory is open, reply through it in the
 web UI, and say so in the public thread if the reporter is waiting.
 
+### Never discuss unfixed vulnerabilities in public
+
+This is a hard rule, and it has already been broken once. When a reporter has a
+private advisory open *and* a public issue, the tooling can only write to the
+public one — which creates real pressure to answer everything there. Do not.
+
+In a public thread you may:
+
+- acknowledge the report and apologise for delays,
+- describe vulnerabilities that are **already fixed and released** (release notes
+  and CHANGELOG entries for shipped fixes are normal and expected),
+- say that remaining work is tracked in the advisory.
+
+You must **not**, in public:
+
+- enumerate unfixed findings, even as a to-do list,
+- pair a severity with a component for anything unpatched (that alone is enough
+  to point an attacker at the weak spot),
+- explain why a fix is blocked in a way that describes the live weakness.
+
+If answering properly needs those details, that answer belongs in the advisory —
+ask the maintainer to post it there rather than writing it in the issue.
+
 ## Releasing
 
 `scripts/update-casks.sh <version> <dmg>` is the only supported way to publish the
