@@ -12,7 +12,7 @@ Your settings and logs are no longer readable by other accounts on the machine.
 
 - **Credential and log files were world-readable (GHSA-3q2g-hmqg-qj5r, H2 — partial).** `config.json` and `profiles.json` hold API tokens and OAuth refresh tokens, and were written with only `.atomic` — so they landed at the default umask (`0644`), readable by *every* user account on the machine. The same applied to `debug.log`, `sync_log.json`, `sync_state.json` and the vault `backups/` folder. All of these are now written owner-only (`0600`, directories `0700`), permissions are re-applied on every atomic write, and **files created by earlier versions are corrected automatically on the next launch** — no action needed.
 
-> **This is hardening, not the complete fix for H2.** Moving tokens into the macOS Keychain — which is what actually protects them from another process running as you — requires a stable code-signing identity. Remindian is currently ad-hoc signed, so its signature changes with every build, and Keychain items would prompt for authorisation (or break) on every auto-update. That work is blocked on the same prerequisite as notarization (#38) and is tracked there rather than shipped half-done.
+> **This is a hardening step, not a complete solution for credential storage.** It removes exposure to other accounts on the machine and to backup/sync tooling running as another user. Storing credentials in the macOS Keychain — the proper fix — needs a stable code-signing identity: Remindian is ad-hoc signed today, so its signature changes with every build and Keychain entries would prompt for authorisation or break on every auto-update. That work is blocked behind the same prerequisite as notarization (#38) and is tracked there.
 
 ---
 
@@ -32,7 +32,7 @@ Fixes from a third-party security review (GHSA-3q2g-hmqg-qj5r) — thanks to **@
 - **Command injection via task content in the Things 3 destination (High).** Values interpolated into AppleScript escaped `"` but not `\`, so a task whose title, notes, tag, or project name ended in a backslash could break out of the string literal and have the rest executed as AppleScript — reachable by anyone able to put a line of text in your vault. All interpolated values now go through a single escaper that escapes the backslash first.
 - **OAuth authorization code written to the debug log (Medium).** The full callback URL — including the `code` — was logged in cleartext before the scheme check, into a file people routinely paste into bug reports. Callback URLs are now redacted and only logged after the scheme guard.
 
-> Remaining findings from that review (Keychain storage for API tokens, OAuth `state`/PKCE, update integrity) are tracked and being worked through in order of severity.
+> Remaining items from that review are tracked privately in the advisory and are being worked through in order of severity.
 
 ---
 
