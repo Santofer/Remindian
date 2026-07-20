@@ -29,6 +29,63 @@ class TaskNotesSource: TaskSource {
     private let backupService = FileBackupService.shared
     private let auditLog = AuditLog.shared
 
+    // MARK: - Frontmatter dates (#82)
+
+    /// Formats accepted in TaskNotes frontmatter date fields, most specific first.
+    /// `DateFormatter` does not prefix-match, so a date-only format returns `nil`
+    /// for "2026-07-20T14:30" — which is why a task with a time-of-day used to sync
+    /// with *no* due date at all (#82). Ordering matters: the date-only format must
+    /// come last so a datetime keeps its time instead of being truncated.
+    private static let frontmatterDateFormatters: [DateFormatter] = [
+        "yyyy-MM-dd'T'HH:mm:ssXXXXX",   // 2026-07-20T14:30:00+02:00 / ...Z
+        "yyyy-MM-dd'T'HH:mm:ss",        // 2026-07-20T14:30:00
+        "yyyy-MM-dd'T'HH:mmXXXXX",      // 2026-07-20T14:30+02:00
+        "yyyy-MM-dd'T'HH:mm",           // 2026-07-20T14:30  ← TaskNotes' usual datetime
+        "yyyy-MM-dd HH:mm:ss",          // space-separated variants
+        "yyyy-MM-dd HH:mm",
+        "yyyy-MM-dd",                   // 2026-07-20 (all-day)
+    ].map { format in
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = format
+        return f
+    }
+
+    /// Parse a TaskNotes frontmatter date, with or without a time-of-day (#82).
+    static func parseFrontmatterDate(_ value: String) -> Date? {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        for formatter in frontmatterDateFormatters {
+            if let date = formatter.date(from: trimmed) { return date }
+        }
+        return nil
+    }
+
+    private static let frontmatterDayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    private static let frontmatterDateTimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd'T'HH:mm"
+        return f
+    }()
+
+    /// Render a date back into frontmatter, keeping the time-of-day when there is
+    /// one. Midnight is written as a plain date so all-day tasks keep their existing
+    /// `yyyy-MM-dd` form and files don't churn (#82).
+    static func formatFrontmatterDate(_ date: Date) -> String {
+        let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
+        if (parts.hour ?? 0) == 0 && (parts.minute ?? 0) == 0 {
+            return frontmatterDayFormatter.string(from: date)
+        }
+        return frontmatterDateTimeFormatter.string(from: date)
+    }
+
     /// Produce a filesystem-safe, human-readable slug from a task title.
     ///
     /// Unicode-aware: keeps letters, marks and numbers from ANY script, so
@@ -437,12 +494,11 @@ class TaskNotesSource: TaskSource {
         try backupService.backupFile(at: fileURL)
 
         var content = try String(contentsOf: fileURL, encoding: .utf8)
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
 
         if let dueDateChange = changes.newDueDate {
             if let date = dueDateChange {
-                content = updateFrontmatterField(in: content, field: fieldMapping.due, value: dateFormatter.string(from: date))
+                // Keeps the time-of-day when the reminder has one (#82).
+                content = updateFrontmatterField(in: content, field: fieldMapping.due, value: TaskNotesSource.formatFrontmatterDate(date))
             } else {
                 content = removeFrontmatterField(in: content, field: fieldMapping.due)
             }
@@ -450,7 +506,7 @@ class TaskNotesSource: TaskSource {
 
         if let startDateChange = changes.newStartDate {
             if let date = startDateChange {
-                content = updateFrontmatterField(in: content, field: fieldMapping.scheduled, value: dateFormatter.string(from: date))
+                content = updateFrontmatterField(in: content, field: fieldMapping.scheduled, value: TaskNotesSource.formatFrontmatterDate(date))
             } else {
                 content = removeFrontmatterField(in: content, field: fieldMapping.scheduled)
             }
@@ -602,11 +658,12 @@ class TaskNotesSource: TaskSource {
         frontmatter += "\(fm.priority): \(priorityStr)\n"
 
         if let dueDate = task.dueDate {
-            frontmatter += "\(fm.due): \(dateFormatter.string(from: dueDate))\n"
+            // Keeps the time-of-day when the reminder has one (#82).
+            frontmatter += "\(fm.due): \(TaskNotesSource.formatFrontmatterDate(dueDate))\n"
         }
 
         if let startDate = task.startDate {
-            frontmatter += "\(fm.scheduled): \(dateFormatter.string(from: startDate))\n"
+            frontmatter += "\(fm.scheduled): \(TaskNotesSource.formatFrontmatterDate(startDate))\n"
         }
 
         var tagNames = task.tags.map { $0.hasPrefix("#") ? String($0.dropFirst()) : $0 }
@@ -744,11 +801,6 @@ class TaskNotesSource: TaskSource {
         var contextValue: String?
         var customFieldValues: [String: String] = [:]  // For custom list field lookup
 
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        let isoFormatter = DateFormatter()
-        isoFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-
         let fm = fieldMapping
         let fieldLookup = fm.fieldLookup  // compute once; was rebuilt for every frontmatter line
         var inFrontmatter = false
@@ -805,13 +857,13 @@ class TaskNotesSource: TaskSource {
                         }
                         lastArrayKey = nil
                     case "due":
-                        dueDate = dateFormatter.date(from: value)
+                        dueDate = TaskNotesSource.parseFrontmatterDate(value)
                         lastArrayKey = nil
                     case "scheduled":
-                        startDate = dateFormatter.date(from: value)
+                        startDate = TaskNotesSource.parseFrontmatterDate(value)
                         lastArrayKey = nil
                     case "completedDate":
-                        completedDate = isoFormatter.date(from: value) ?? dateFormatter.date(from: value)
+                        completedDate = TaskNotesSource.parseFrontmatterDate(value)
                         lastArrayKey = nil
                     case "tags":
                         // Parse YAML inline array: [tag1, tag2]
@@ -832,9 +884,9 @@ class TaskNotesSource: TaskSource {
                         // Also check for legacy field names that aren't in the mapping
                         switch keyLower {
                         case "start":
-                            startDate = dateFormatter.date(from: value)
+                            startDate = TaskNotesSource.parseFrontmatterDate(value)
                         case "completed":
-                            completedDate = isoFormatter.date(from: value) ?? dateFormatter.date(from: value)
+                            completedDate = TaskNotesSource.parseFrontmatterDate(value)
                         default:
                             break
                         }

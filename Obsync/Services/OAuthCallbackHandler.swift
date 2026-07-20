@@ -9,11 +9,32 @@ class OAuthCallbackHandler: ObservableObject {
 
     private init() {}
 
+    /// Redact secret-bearing query items so a callback URL can be logged safely.
+    ///
+    /// `debug.log` is plaintext, sits in Application Support, and users routinely
+    /// paste it into bug reports — logging `url.absoluteString` put the OAuth
+    /// authorization code straight into it. Never log a raw callback URL.
+    static func redactedForLogging(_ url: URL) -> String {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return "\(url.scheme ?? "?")://\(url.host ?? "?")"
+        }
+        let secretKeys: Set<String> = ["code", "token", "access_token", "refresh_token", "id_token", "state", "client_secret"]
+        // Plain letters on purpose: URLComponents percent-encodes punctuation, so
+        // "<redacted>" would render as "%3Credacted%3E" in the log.
+        components.queryItems = components.queryItems?.map { item in
+            secretKeys.contains(item.name.lowercased())
+                ? URLQueryItem(name: item.name, value: "REDACTED")
+                : item
+        }
+        return components.string ?? "\(url.scheme ?? "?")://\(url.host ?? "?")"
+    }
+
     /// Route an incoming URL to the appropriate handler.
     func handle(url: URL) {
-        debugLog("[OAuth] Received callback: \(url.absoluteString)")
-
+        // Guard first, and never log the raw URL — it carries the auth code.
         guard url.scheme == "remindian" else { return }
+
+        debugLog("[OAuth] Received callback: \(OAuthCallbackHandler.redactedForLogging(url))")
 
         switch url.host {
         case "oauth":

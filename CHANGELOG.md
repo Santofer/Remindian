@@ -4,6 +4,26 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.25.14 (July 2026)
+
+Homebrew installs work again, TaskNotes due times sync, and two security fixes.
+
+### Bug fixes
+
+- **Homebrew install/upgrade was broken since v5.24.0 (#84).** The cask asked for `Remindian-v<version>.dmg` while releases actually publish `Remindian-<version>.dmg`, so every `brew install`/`brew upgrade` failed with a 404. The cask now points at the real asset, and the release script **verifies the download URL resolves (and matches the built DMG) before publishing**, so this can't drift silently again. The legacy `santofer/remindian` tap — which was pinned at 5.5.0 and actively *downgraded* people — is now kept in sync with the canonical `santofer/tap`.
+- **TaskNotes due dates with a time of day synced with no due date at all (#82).** A value like `due: 2026-07-20T14:30` was parsed with a date-only format, which returns nothing rather than falling back — so the task reached Reminders with its due date silently dropped. Dates with a time now parse correctly (with or without seconds, and with a timezone), and the time is **preserved when writing back** instead of being flattened to midnight. Turn on **Settings → Include due time** to carry the time through to Reminders. All-day tasks are still written as plain dates, so existing files don't churn.
+
+### Security
+
+Fixes from a third-party security review (GHSA-3q2g-hmqg-qj5r) — thanks to **@blightbow** for the detailed, high-quality report.
+
+- **Command injection via task content in the Things 3 destination (High).** Values interpolated into AppleScript escaped `"` but not `\`, so a task whose title, notes, tag, or project name ended in a backslash could break out of the string literal and have the rest executed as AppleScript — reachable by anyone able to put a line of text in your vault. All interpolated values now go through a single escaper that escapes the backslash first.
+- **OAuth authorization code written to the debug log (Medium).** The full callback URL — including the `code` — was logged in cleartext before the scheme check, into a file people routinely paste into bug reports. Callback URLs are now redacted and only logged after the scheme guard.
+
+> Remaining findings from that review (Keychain storage for API tokens, OAuth `state`/PKCE, update integrity) are tracked and being worked through in order of severity.
+
+---
+
 ## v5.25.13 (June 2026)
 
 Folder filtering ("Only scan") now actually restricts the scan.
