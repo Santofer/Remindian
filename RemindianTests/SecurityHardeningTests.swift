@@ -71,4 +71,61 @@ final class SecurityHardeningTests: XCTestCase {
         let url = try XCTUnwrap(URL(string: "remindian://oauth/ticktick"))
         XCTAssertFalse(OAuthCallbackHandler.redactedForLogging(url).isEmpty)
     }
+
+    // MARK: - H2 (partial): credential files must not be world-readable
+    //
+    // Full H2 (Keychain) needs a stable code-signing identity the app doesn't have
+    // yet — see the notes in SecureFile. Until then the files at least stop being
+    // readable by every other account on the machine.
+
+    private func mode(of url: URL) throws -> Int {
+        let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
+        return (attrs[.posixPermissions] as? NSNumber)?.intValue ?? -1
+    }
+
+    func test_H2_secureWriteIsOwnerOnly() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("config.json")
+
+        try SecureFile.write(Data(#"{"token":"x"}"#.utf8), to: file)
+        XCTAssertEqual(try mode(of: file), 0o600, "A credential file must be rw------- , not the 0644 umask default")
+    }
+
+    func test_H2_permissionsSurviveRepeatedAtomicWrites() throws {
+        // An atomic write replaces the inode, so the mode is re-derived from the
+        // umask every time — the hardening has to be re-applied on each write.
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("profiles.json")
+
+        for i in 0..<3 {
+            try SecureFile.write(Data("{\"n\":\(i)}".utf8), to: file)
+            XCTAssertEqual(try mode(of: file), 0o600, "Write \(i) must stay owner-only")
+        }
+    }
+
+    func test_H2_existingWorldReadableFileIsHardened() throws {
+        // Simulates an upgrading user whose config.json is already at 0644.
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("config.json")
+        try Data(#"{"token":"legacy"}"#.utf8).write(to: file)
+        try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o644)], ofItemAtPath: file.path)
+        XCTAssertEqual(try mode(of: file), 0o644, "precondition")
+
+        SecureFile.hardenExistingFiles(in: dir, names: ["config.json"])
+        XCTAssertEqual(try mode(of: file), 0o600, "Pre-existing files must be fixed, not left exposed")
+        XCTAssertEqual(try mode(of: dir), 0o700, "The containing directory is tightened too")
+    }
+
+    func test_H2_hardeningMissingFileIsHarmless() {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        // Directory doesn't exist at all — must not throw or crash.
+        SecureFile.hardenExistingFiles(in: dir, names: ["config.json"])
+        XCTAssertFalse(SecureFile.restrictToOwner(at: dir.appendingPathComponent("nope.json")))
+    }
 }

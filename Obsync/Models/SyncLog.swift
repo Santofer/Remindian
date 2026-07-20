@@ -70,7 +70,7 @@ class SyncLog: Codable {
         guard let url = Self.logURL else { return }
         do {
             let data = try JSONEncoder().encode(self)
-            try data.write(to: url, options: .atomic)
+            try SecureFile.write(data, to: url)
         } catch {
             print("Failed to save sync log: \(error)")
         }

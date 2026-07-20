@@ -115,7 +115,7 @@ struct ProfileStore: Codable {
         guard let url = Self.storeURL else { return }
         do {
             let data = try JSONEncoder().encode(self)
-            try data.write(to: url, options: .atomic)
+            try SecureFile.write(data, to: url)
         } catch {
             print("Failed to save profile store: \(error)")
         }

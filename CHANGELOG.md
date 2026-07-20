@@ -4,6 +4,18 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.25.15 (July 2026)
+
+Your settings and logs are no longer readable by other accounts on the machine.
+
+### Security
+
+- **Credential and log files were world-readable (GHSA-3q2g-hmqg-qj5r, H2 — partial).** `config.json` and `profiles.json` hold API tokens and OAuth refresh tokens, and were written with only `.atomic` — so they landed at the default umask (`0644`), readable by *every* user account on the machine. The same applied to `debug.log`, `sync_log.json`, `sync_state.json` and the vault `backups/` folder. All of these are now written owner-only (`0600`, directories `0700`), permissions are re-applied on every atomic write, and **files created by earlier versions are corrected automatically on the next launch** — no action needed.
+
+> **This is hardening, not the complete fix for H2.** Moving tokens into the macOS Keychain — which is what actually protects them from another process running as you — requires a stable code-signing identity. Remindian is currently ad-hoc signed, so its signature changes with every build, and Keychain items would prompt for authorisation (or break) on every auto-update. That work is blocked on the same prerequisite as notarization (#38) and is tracked there rather than shipped half-done.
+
+---
+
 ## v5.25.14 (July 2026)
 
 Homebrew installs work again, TaskNotes due times sync, and two security fixes.

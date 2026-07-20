@@ -43,6 +43,7 @@
 		034 /* LinearDestination.swift in Sources */ = {isa = PBXBuildFile; fileRef = 136; };
 		035 /* RecurrenceConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 137; };
 		SM0 /* SafeMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = SM1; };
+		SF0 /* SecureFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = SF1; };
 		036 /* GenericMarkdownParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 138; };
 		037 /* GenericMarkdownSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 139; };
 		038 /* ProfileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 140; };
@@ -136,6 +137,7 @@
 		136 /* LinearDestination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinearDestination.swift; sourceTree = "<group>"; };
 		137 /* RecurrenceConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurrenceConverter.swift; sourceTree = "<group>"; };
 		SM1 /* SafeMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeMode.swift; sourceTree = "<group>"; };
+		SF1 /* SecureFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureFile.swift; sourceTree = "<group>"; };
 		138 /* GenericMarkdownParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenericMarkdownParser.swift; sourceTree = "<group>"; };
 		139 /* GenericMarkdownSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenericMarkdownSource.swift; sourceTree = "<group>"; };
 		140 /* ProfileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileStore.swift; sourceTree = "<group>"; };
@@ -278,6 +280,7 @@
 				133 /* OAuthCallbackHandler.swift */,
 				137 /* RecurrenceConverter.swift */,
 				SM1 /* SafeMode.swift */,
+				SF1 /* SecureFile.swift */,
 				307 /* Sources */,
 				308 /* Destinations */,
 			);
@@ -483,6 +486,7 @@
 				034 /* LinearDestination.swift in Sources */,
 				035 /* RecurrenceConverter.swift in Sources */,
 				SM0 /* SafeMode.swift in Sources */,
+				SF0 /* SecureFile.swift in Sources */,
 				036 /* GenericMarkdownParser.swift in Sources */,
 				037 /* GenericMarkdownSource.swift in Sources */,
 				038 /* ProfileStore.swift in Sources */,
@@ -672,7 +676,7 @@
 				CODE_SIGN_ENTITLEMENTS = Obsync/Remindian.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -684,7 +688,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 5.25.14;
+				MARKETING_VERSION = 5.25.15;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -700,7 +704,7 @@
 				CODE_SIGN_ENTITLEMENTS = Obsync/Remindian.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -712,7 +716,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 5.25.14;
+				MARKETING_VERSION = 5.25.15;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -725,7 +729,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.tests;
@@ -741,7 +745,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.tests;
