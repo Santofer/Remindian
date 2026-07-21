@@ -25,7 +25,7 @@ final class TickTickOAuthServerTests: XCTestCase {
     /// to TCP-connect to 127.0.0.1:port without retrying or sleeping. If this
     /// test ever flakes, the race condition is back.
     func testPortIsListeningImmediatelyAfterStart() throws {
-        let server = TickTickOAuthServer(port: testPort) { _ in
+        let server = TickTickOAuthServer(port: testPort) { _, _ in
             XCTFail("Code callback should not fire — we never deliver one")
         }
         defer { server.stop() }
@@ -49,7 +49,7 @@ final class TickTickOAuthServerTests: XCTestCase {
             throw XCTSkip("Could not occupy test port — environment-specific, skipping")
         }
 
-        let server = TickTickOAuthServer(port: testPort) { _ in
+        let server = TickTickOAuthServer(port: testPort) { _, _ in
             XCTFail("Code callback should not fire when bind fails")
         }
 

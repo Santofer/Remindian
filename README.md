@@ -37,8 +37,20 @@ Your vault is the **source of truth**. Remindian syncs tasks from Obsidian into 
 ### Homebrew (recommended)
 
 ```sh
-brew install --cask Santofer/tap/remindian
+brew install --cask santofer/tap/remindian
 ```
+
+To upgrade:
+
+```sh
+brew update && brew upgrade --cask santofer/tap/remindian
+```
+
+> **Which tap?** `santofer/tap` is the canonical one — use it. An older
+> `santofer/remindian` tap also exists and is kept in sync, but having both
+> tapped makes Homebrew ask for a fully-qualified name (`Cask remindian exists
+> in multiple taps`). If you hit that, untap the legacy one:
+> `brew untap santofer/remindian`.
 
 ### Direct download
 

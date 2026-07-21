@@ -662,7 +662,7 @@ class SyncConfiguration: ObservableObject, Codable {
         guard let url = Self.configURL else { return }
         do {
             let data = try JSONEncoder().encode(self)
-            try data.write(to: url, options: .atomic)
+            try SecureFile.write(data, to: url)
         } catch {
             print("Failed to save configuration: \(error)")
         }

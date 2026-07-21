@@ -152,7 +152,7 @@ class SyncState: Codable {
         guard let url = url else { return }
         do {
             let data = try JSONEncoder().encode(self)
-            try data.write(to: url, options: .atomic)
+            try SecureFile.write(data, to: url)
         } catch {
             print("Failed to save sync state: \(error)")
         }

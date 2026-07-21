@@ -170,6 +170,73 @@ final class TaskNotesParserTests: XCTestCase {
         XCTAssertFalse(content.contains("tags:"), "No default tag + no task tags → no tags block. Got:\n\(content)")
     }
 
+    // MARK: - #82: due dates with a time-of-day must sync (not vanish)
+    // `DateFormatter` does not prefix-match, so parsing "2026-07-20T14:30" with a
+    // date-only format returned nil — a TaskNotes task with a time synced with NO
+    // due date at all.
+
+    func test_82_parsesDateOnly() throws {
+        let d = try XCTUnwrap(TaskNotesSource.parseFrontmatterDate("2026-07-20"))
+        let c = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: d)
+        XCTAssertEqual([c.year, c.month, c.day, c.hour, c.minute], [2026, 7, 20, 0, 0])
+    }
+
+    func test_82_parsesDateTimeWithoutSeconds() throws {
+        // TaskNotes' usual datetime form — this is the exact case that produced no due date.
+        let d = try XCTUnwrap(TaskNotesSource.parseFrontmatterDate("2026-07-20T14:30"),
+                              "A due value with a time must parse, not return nil")
+        let c = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: d)
+        XCTAssertEqual([c.year, c.month, c.day, c.hour, c.minute], [2026, 7, 20, 14, 30])
+    }
+
+    func test_82_parsesDateTimeWithSeconds() throws {
+        let d = try XCTUnwrap(TaskNotesSource.parseFrontmatterDate("2026-07-20T14:30:45"))
+        let c = Calendar.current.dateComponents([.hour, .minute], from: d)
+        XCTAssertEqual([c.hour, c.minute], [14, 30])
+    }
+
+    func test_82_parsesBlankAndGarbageAsNil() {
+        XCTAssertNil(TaskNotesSource.parseFrontmatterDate(""))
+        XCTAssertNil(TaskNotesSource.parseFrontmatterDate("   "))
+        XCTAssertNil(TaskNotesSource.parseFrontmatterDate("not a date"))
+    }
+
+    func test_82_formatRoundTripsPreservingTime() throws {
+        // Round-trip: a datetime keeps its time, an all-day date stays date-only
+        // so existing files don't churn.
+        let withTime = try XCTUnwrap(TaskNotesSource.parseFrontmatterDate("2026-07-20T14:30"))
+        XCTAssertEqual(TaskNotesSource.formatFrontmatterDate(withTime), "2026-07-20T14:30")
+
+        let allDay = try XCTUnwrap(TaskNotesSource.parseFrontmatterDate("2026-07-20"))
+        XCTAssertEqual(TaskNotesSource.formatFrontmatterDate(allDay), "2026-07-20")
+    }
+
+    func test_82_scannedTaskCarriesTimeOfDay() throws {
+        // End-to-end: a TaskNotes file with a date+time must produce a due date.
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let tasksDir = tempDir.appendingPathComponent("tasks")
+        try FileManager.default.createDirectory(at: tasksDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        try """
+        ---
+        status: todo
+        due: 2026-07-20T14:30
+        ---
+        # Meeting
+        """.write(to: tasksDir.appendingPathComponent("meeting.md"), atomically: true, encoding: .utf8)
+
+        let source = TaskNotesSource()
+        source.integrationMode = .fileBased
+        let config = SyncConfiguration()
+        config.vaultPath = tempDir.path
+        config.taskNotesFolder = "tasks"
+
+        let tasks = try source.scanTasks(config: config)
+        let due = try XCTUnwrap(tasks.first?.dueDate, "A task with a date+time must have a due date (#82)")
+        let c = Calendar.current.dateComponents([.hour, .minute], from: due)
+        XCTAssertEqual([c.hour, c.minute], [14, 30], "The time-of-day must survive the scan")
+    }
+
     // MARK: - #80: fieldLookup must never trap on blank / duplicate field names
     // The original code built `fieldLookup` as a dictionary *literal* of
     // user-entered names. Two blanked fields (both "") or two identical names

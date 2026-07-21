@@ -27,9 +27,23 @@ class TickTickDestination: TaskDestination {
     private let baseURL = "https://api.ticktick.com/open/v1"
     private let session = URLSession.shared
 
-    // TickTick OAuth credentials — registered at developer.ticktick.com
+    // TickTick OAuth credentials — registered at developer.ticktick.com.
+    //
+    // TickTick's token endpoint is a *confidential-client* flow: it requires
+    // Basic auth with this secret and offers no public-client / PKCE-without-secret
+    // path (verified against TickTick's API and the reference clients). An
+    // open-source native app therefore has no way to talk to TickTick without
+    // embedding the secret, so it is recoverable from the binary by design and is
+    // treated as public, not secret (RFC 8252 §8.5). This is acceptable because
+    // the secret alone grants nothing — an attacker still needs the user to
+    // complete consent — and the CSRF/account-injection vector that made that
+    // dangerous is closed by the `state` check added in v5.25.16 (GHSA-3q2g H3/L1).
+    // The previous value was rotated after it appeared in a public advisory; if it
+    // leaks again, rotate at developer.ticktick.com and ship the new value here.
+    // (Users who want zero shared-secret exposure can be offered a "bring your own
+    // TickTick app" option in future — TickTick supports per-app credentials.)
     static let clientId = "cVieUxm74J0zDt5RVt"
-    static let clientSecret = "ypcLQCk6Zh2TtBK83UvNs1hXwnuS4Mqs"
+    static let clientSecret = "2v30ajfHpU3NkFo1EreHBE79rIrbJ4Yk"
     static let redirectURI = "http://127.0.0.1:23847/oauth/ticktick"
     static let callbackPort: UInt16 = 23847
 
@@ -198,8 +212,22 @@ class TickTickDestination: TaskDestination {
         // MUST NOT open the browser until it returns successfully, otherwise
         // the OAuth redirect can race past the unbound port and the user
         // sees ERR_CONNECTION_REFUSED.
-        callbackServer = TickTickOAuthServer(port: Self.callbackPort) { [weak self] code in
+        // Bind this authorization request to a random state so a callback from a
+        // different (attacker-initiated) flow can't be accepted (H3/L1).
+        let oauthState = OAuthCallbackHandler.shared.beginTickTickFlow()
+
+        callbackServer = TickTickOAuthServer(port: Self.callbackPort) { [weak self] code, state in
             guard let self = self else { return }
+            guard OAuthCallbackHandler.shared.consumeTickTickState(state) else {
+                debugLog("[TickTick] OAuth callback rejected: state mismatch")
+                self.callbackServer = nil
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("TickTickOAuthServerStartFailed"),
+                    object: nil,
+                    userInfo: ["message": "Sign-in could not be verified (state mismatch). Please try connecting again."]
+                )
+                return
+            }
             debugLog("[TickTick] OAuth code received via localhost callback")
             DispatchQueue.main.async {
                 OAuthCallbackHandler.shared.tickTickAuthCode = code
@@ -222,7 +250,8 @@ class TickTickDestination: TaskDestination {
         }
 
         let encodedRedirect = Self.redirectURI.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? Self.redirectURI
-        let authURL = "https://ticktick.com/oauth/authorize?client_id=\(Self.clientId)&redirect_uri=\(encodedRedirect)&response_type=code&scope=tasks:read%20tasks:write"
+        let encodedState = oauthState.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? oauthState
+        let authURL = "https://ticktick.com/oauth/authorize?client_id=\(Self.clientId)&redirect_uri=\(encodedRedirect)&response_type=code&scope=tasks:read%20tasks:write&state=\(encodedState)"
         if let url = URL(string: authURL) {
             NSWorkspace.shared.open(url)
         }
@@ -463,12 +492,13 @@ enum TickTickOAuthServerError: LocalizedError {
 class TickTickOAuthServer {
     private var serverSocket: Int32 = -1
     private let port: UInt16
-    private let onCode: (String) -> Void
+    /// Called with the received `code` and `state` once a valid callback arrives.
+    private let onCallback: (_ code: String, _ state: String?) -> Void
     private var listening = false
 
-    init(port: UInt16, onCode: @escaping (String) -> Void) {
+    init(port: UInt16, onCallback: @escaping (_ code: String, _ state: String?) -> Void) {
         self.port = port
-        self.onCode = onCode
+        self.onCallback = onCallback
     }
 
     /// Bind + listen synchronously (so the caller knows the port is ready
@@ -542,11 +572,15 @@ class TickTickOAuthServer {
 
             let request = String(bytes: buffer[0..<bytesRead], encoding: .utf8) ?? ""
 
-            // Extract the path from "GET /oauth/ticktick?code=xxx HTTP/1.1"
+            // Extract the path from "GET /oauth/ticktick?code=xxx&state=yyy HTTP/1.1"
             if let firstLine = request.components(separatedBy: "\r\n").first,
                let pathPart = firstLine.components(separatedBy: " ").dropFirst().first,
                let components = URLComponents(string: pathPart),
+               // Only accept the exact callback path — the previous code accepted
+               // any path carrying `?code=` (GHSA-3q2g-hmqg-qj5r, H3).
+               components.path == "/oauth/ticktick",
                let code = components.queryItems?.first(where: { $0.name == "code" })?.value {
+                let state = components.queryItems?.first(where: { $0.name == "state" })?.value
 
                 // Send success response
                 let html = """
@@ -558,7 +592,7 @@ class TickTickOAuthServer {
                 _ = response.withCString { send(clientSocket, $0, Int(strlen($0)), 0) }
                 close(clientSocket)
 
-                onCode(code)
+                onCallback(code, state)
                 stop()
                 return
             } else {

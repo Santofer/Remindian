@@ -61,7 +61,7 @@ class Things3Destination: TaskDestination {
         let tagNames = cleanTagsForThings(tags)
         guard !tagNames.isEmpty else { return "" }
         let tagString = tagNames
-            .map { $0.replacingOccurrences(of: "\"", with: "\\\"") }
+            .map { Things3Destination.appleScriptEscape($0) }
             .joined(separator: ", ")
         return "tag names:\"\(tagString)\""
     }
@@ -267,6 +267,23 @@ class Things3Destination: TaskDestination {
         return lists
     }
 
+    // MARK: - AppleScript escaping
+
+    /// Escape a value for embedding inside an AppleScript string literal.
+    ///
+    /// The backslash MUST be escaped **before** the quote. The previous code
+    /// escaped only `"`, so a value ending in `\` (or containing `\"`) closed the
+    /// literal early and the remainder was compiled as AppleScript — and task
+    /// titles/notes are attacker-influenced (anything that lands as a line in the
+    /// vault). `NSAppleScript` then ran it inside the Things `tell` block, where
+    /// `do shell script` executes **outside** the app sandbox. Every value
+    /// interpolated into a script literal must go through this.
+    static func appleScriptEscape(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+    }
+
     // MARK: - CRUD
 
     func createTask(from task: SyncTask, inList listName: String, config: SyncConfiguration) async throws -> String {
@@ -275,9 +292,9 @@ class Things3Destination: TaskDestination {
             .replacingOccurrences(of: "\u{1F4C1} ", with: "")
             .replacingOccurrences(of: "\u{1F4C2} ", with: "")
 
-        let escapedTitle = task.title.replacingOccurrences(of: "\"", with: "\\\"")
+        let escapedTitle = Things3Destination.appleScriptEscape(task.title)
         let fullNotes = notesWithObsidianLink(task: task, config: config)
-        let escapedNotes = fullNotes.replacingOccurrences(of: "\"", with: "\\\"")
+        let escapedNotes = Things3Destination.appleScriptEscape(fullNotes)
             .replacingOccurrences(of: "\n", with: "\\n")
 
         // Build properties — due date is set via AppleScript date component construction
@@ -317,7 +334,7 @@ class Things3Destination: TaskDestination {
         var scriptSource: String
         if listName.hasPrefix("\u{1F4C1} ") {
             // Create in a project
-            let escapedProject = cleanList.replacingOccurrences(of: "\"", with: "\\\"")
+            let escapedProject = Things3Destination.appleScriptEscape(cleanList)
             scriptSource = """
                 tell application id "com.culturedcode.ThingsMac"
                     set newTodo to make new to do with properties {\(properties)}
@@ -360,9 +377,9 @@ class Things3Destination: TaskDestination {
         ]
 
         for (task, listName) in tasks {
-            let escapedTitle = task.title.replacingOccurrences(of: "\"", with: "\\\"")
+            let escapedTitle = Things3Destination.appleScriptEscape(task.title)
             let fullNotes = notesWithObsidianLink(task: task, config: config)
-            let escapedNotes = fullNotes.replacingOccurrences(of: "\"", with: "\\\"")
+            let escapedNotes = Things3Destination.appleScriptEscape(fullNotes)
                 .replacingOccurrences(of: "\n", with: "\\n")
 
             var properties = "name:\"\(escapedTitle)\""
@@ -387,7 +404,7 @@ class Things3Destination: TaskDestination {
                 .replacingOccurrences(of: "\u{1F4C1} ", with: "")
                 .replacingOccurrences(of: "\u{1F4C2} ", with: "")
             if listName.hasPrefix("\u{1F4C1} ") {
-                let escapedProject = cleanList.replacingOccurrences(of: "\"", with: "\\\"")
+                let escapedProject = Things3Destination.appleScriptEscape(cleanList)
                 scriptLines.append("    move newTodo to project \"\(escapedProject)\"")
             }
 
@@ -725,7 +742,7 @@ class Things3Destination: TaskDestination {
         // `list "Name"` is localized by Things (Today/Hoy/Aujourd'hui…). Used for
         // the per-list pass; the locale-independent fallback below uses a status
         // query instead. (#77)
-        try await fetchTasks(collection: "to dos of list \"\(listName)\"", defaultList: listName)
+        try await fetchTasks(collection: "to dos of list \"\(Things3Destination.appleScriptEscape(listName))\"", defaultList: listName)
     }
 
     /// Locale-independent open-task fetch — doesn't reference any (localized)

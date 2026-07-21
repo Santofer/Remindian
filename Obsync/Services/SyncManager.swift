@@ -9,6 +9,10 @@ func remindianAppSupportDir() -> URL? {
     guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return nil }
     let dir = appSupport.appendingPathComponent("Remindian", isDirectory: true)
     try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    // Files written by earlier versions are sitting at the umask default (0644),
+    // i.e. readable by every account on the machine — including the ones holding
+    // API tokens. Fix them once per launch rather than waiting for a save (H2).
+    SecureFile.hardenLegacyFilesOnce(in: dir)
     return dir
 }
 
@@ -26,7 +30,10 @@ func debugLog(_ message: String) {
                 handle.closeFile()
             }
         } else {
+            // Owner-only from creation: the log records sync diagnostics and sits
+            // beside the config, and users paste it into bug reports (H2).
             try? data.write(to: logFile)
+            SecureFile.restrictToOwner(at: logFile)
         }
     }
 }

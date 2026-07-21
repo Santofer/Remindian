@@ -4,6 +4,60 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.25.17 (July 2026)
+
+Restores TickTick sign-in after a credential rotation.
+
+### Bug fixes
+
+- **TickTick reconnect/refresh could fail (rotated OAuth credential).** The app's TickTick integration credential was rotated after the previous one had been exposed, which invalidated the value shipped in earlier builds — so token refresh and new connections to TickTick would fail until the new credential was published. This release ships it. If your TickTick connection dropped, open Settings and click **Connect** once to re-link. (Combined with the verified sign-in flow from v5.25.16, this closes out the OAuth items from the security review.)
+
+---
+
+## v5.25.16 (July 2026)
+
+Hardens the TickTick sign-in flow.
+
+### Security
+
+- **TickTick OAuth sign-in now verifies the callback (GHSA-3q2g-hmqg-qj5r, H3 + L1).** The sign-in flow didn't send an OAuth `state` value, and the local callback (both the loopback port and the `remindian://` link) accepted any authorization code it was handed, without checking it belonged to a sign-in *this* app had started, or even that the callback path was the expected one. That meant another local program or web page could complete the flow with its own code and quietly connect your Remindian to the wrong account. Each sign-in now carries a fresh cryptographically random `state`; a callback is accepted only when its `state` matches the flow in progress (single-use), the path is exact, and the value can't be replayed.
+
+> If you use TickTick: nothing changes in normal use — just click **Connect** as before. If a reconnect ever reports "sign-in could not be verified," simply start it again from Settings.
+
+---
+
+## v5.25.15 (July 2026)
+
+Your settings and logs are no longer readable by other accounts on the machine.
+
+### Security
+
+- **Credential and log files were world-readable (GHSA-3q2g-hmqg-qj5r, H2 — partial).** `config.json` and `profiles.json` hold API tokens and OAuth refresh tokens, and were written with only `.atomic` — so they landed at the default umask (`0644`), readable by *every* user account on the machine. The same applied to `debug.log`, `sync_log.json`, `sync_state.json` and the vault `backups/` folder. All of these are now written owner-only (`0600`, directories `0700`), permissions are re-applied on every atomic write, and **files created by earlier versions are corrected automatically on the next launch** — no action needed.
+
+> **This is a hardening step, not a complete solution for credential storage.** It removes exposure to other accounts on the machine and to backup/sync tooling running as another user. Storing credentials in the macOS Keychain — the proper fix — needs a stable code-signing identity: Remindian is ad-hoc signed today, so its signature changes with every build and Keychain entries would prompt for authorisation or break on every auto-update. That work is blocked behind the same prerequisite as notarization (#38) and is tracked there.
+
+---
+
+## v5.25.14 (July 2026)
+
+Homebrew installs work again, TaskNotes due times sync, and two security fixes.
+
+### Bug fixes
+
+- **Homebrew install/upgrade was broken since v5.24.0 (#84).** The cask asked for `Remindian-v<version>.dmg` while releases actually publish `Remindian-<version>.dmg`, so every `brew install`/`brew upgrade` failed with a 404. The cask now points at the real asset, and the release script **verifies the download URL resolves (and matches the built DMG) before publishing**, so this can't drift silently again. The legacy `santofer/remindian` tap — which was pinned at 5.5.0 and actively *downgraded* people — is now kept in sync with the canonical `santofer/tap`.
+- **TaskNotes due dates with a time of day synced with no due date at all (#82).** A value like `due: 2026-07-20T14:30` was parsed with a date-only format, which returns nothing rather than falling back — so the task reached Reminders with its due date silently dropped. Dates with a time now parse correctly (with or without seconds, and with a timezone), and the time is **preserved when writing back** instead of being flattened to midnight. Turn on **Settings → Include due time** to carry the time through to Reminders. All-day tasks are still written as plain dates, so existing files don't churn.
+
+### Security
+
+Fixes from a third-party security review (GHSA-3q2g-hmqg-qj5r) — thanks to **@blightbow** for the detailed, high-quality report.
+
+- **Command injection via task content in the Things 3 destination (High).** Values interpolated into AppleScript escaped `"` but not `\`, so a task whose title, notes, tag, or project name ended in a backslash could break out of the string literal and have the rest executed as AppleScript — reachable by anyone able to put a line of text in your vault. All interpolated values now go through a single escaper that escapes the backslash first.
+- **OAuth authorization code written to the debug log (Medium).** The full callback URL — including the `code` — was logged in cleartext before the scheme check, into a file people routinely paste into bug reports. Callback URLs are now redacted and only logged after the scheme guard.
+
+> Remaining items from that review are tracked privately in the advisory and are being worked through in order of severity.
+
+---
+
 ## v5.25.13 (June 2026)
 
 Folder filtering ("Only scan") now actually restricts the scan.
