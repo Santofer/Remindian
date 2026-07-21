@@ -27,9 +27,23 @@ class TickTickDestination: TaskDestination {
     private let baseURL = "https://api.ticktick.com/open/v1"
     private let session = URLSession.shared
 
-    // TickTick OAuth credentials — registered at developer.ticktick.com
+    // TickTick OAuth credentials — registered at developer.ticktick.com.
+    //
+    // TickTick's token endpoint is a *confidential-client* flow: it requires
+    // Basic auth with this secret and offers no public-client / PKCE-without-secret
+    // path (verified against TickTick's API and the reference clients). An
+    // open-source native app therefore has no way to talk to TickTick without
+    // embedding the secret, so it is recoverable from the binary by design and is
+    // treated as public, not secret (RFC 8252 §8.5). This is acceptable because
+    // the secret alone grants nothing — an attacker still needs the user to
+    // complete consent — and the CSRF/account-injection vector that made that
+    // dangerous is closed by the `state` check added in v5.25.16 (GHSA-3q2g H3/L1).
+    // The previous value was rotated after it appeared in a public advisory; if it
+    // leaks again, rotate at developer.ticktick.com and ship the new value here.
+    // (Users who want zero shared-secret exposure can be offered a "bring your own
+    // TickTick app" option in future — TickTick supports per-app credentials.)
     static let clientId = "cVieUxm74J0zDt5RVt"
-    static let clientSecret = "ypcLQCk6Zh2TtBK83UvNs1hXwnuS4Mqs"
+    static let clientSecret = "2v30ajfHpU3NkFo1EreHBE79rIrbJ4Yk"
     static let redirectURI = "http://127.0.0.1:23847/oauth/ticktick"
     static let callbackPort: UInt16 = 23847
 

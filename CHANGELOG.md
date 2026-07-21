@@ -4,6 +4,16 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.25.17 (July 2026)
+
+Restores TickTick sign-in after a credential rotation.
+
+### Bug fixes
+
+- **TickTick reconnect/refresh could fail (rotated OAuth credential).** The app's TickTick integration credential was rotated after the previous one had been exposed, which invalidated the value shipped in earlier builds — so token refresh and new connections to TickTick would fail until the new credential was published. This release ships it. If your TickTick connection dropped, open Settings and click **Connect** once to re-link. (Combined with the verified sign-in flow from v5.25.16, this closes out the OAuth items from the security review.)
+
+---
+
 ## v5.25.16 (July 2026)
 
 Hardens the TickTick sign-in flow.
