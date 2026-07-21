@@ -198,8 +198,22 @@ class TickTickDestination: TaskDestination {
         // MUST NOT open the browser until it returns successfully, otherwise
         // the OAuth redirect can race past the unbound port and the user
         // sees ERR_CONNECTION_REFUSED.
-        callbackServer = TickTickOAuthServer(port: Self.callbackPort) { [weak self] code in
+        // Bind this authorization request to a random state so a callback from a
+        // different (attacker-initiated) flow can't be accepted (H3/L1).
+        let oauthState = OAuthCallbackHandler.shared.beginTickTickFlow()
+
+        callbackServer = TickTickOAuthServer(port: Self.callbackPort) { [weak self] code, state in
             guard let self = self else { return }
+            guard OAuthCallbackHandler.shared.consumeTickTickState(state) else {
+                debugLog("[TickTick] OAuth callback rejected: state mismatch")
+                self.callbackServer = nil
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("TickTickOAuthServerStartFailed"),
+                    object: nil,
+                    userInfo: ["message": "Sign-in could not be verified (state mismatch). Please try connecting again."]
+                )
+                return
+            }
             debugLog("[TickTick] OAuth code received via localhost callback")
             DispatchQueue.main.async {
                 OAuthCallbackHandler.shared.tickTickAuthCode = code
@@ -222,7 +236,8 @@ class TickTickDestination: TaskDestination {
         }
 
         let encodedRedirect = Self.redirectURI.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? Self.redirectURI
-        let authURL = "https://ticktick.com/oauth/authorize?client_id=\(Self.clientId)&redirect_uri=\(encodedRedirect)&response_type=code&scope=tasks:read%20tasks:write"
+        let encodedState = oauthState.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? oauthState
+        let authURL = "https://ticktick.com/oauth/authorize?client_id=\(Self.clientId)&redirect_uri=\(encodedRedirect)&response_type=code&scope=tasks:read%20tasks:write&state=\(encodedState)"
         if let url = URL(string: authURL) {
             NSWorkspace.shared.open(url)
         }
@@ -463,12 +478,13 @@ enum TickTickOAuthServerError: LocalizedError {
 class TickTickOAuthServer {
     private var serverSocket: Int32 = -1
     private let port: UInt16
-    private let onCode: (String) -> Void
+    /// Called with the received `code` and `state` once a valid callback arrives.
+    private let onCallback: (_ code: String, _ state: String?) -> Void
     private var listening = false
 
-    init(port: UInt16, onCode: @escaping (String) -> Void) {
+    init(port: UInt16, onCallback: @escaping (_ code: String, _ state: String?) -> Void) {
         self.port = port
-        self.onCode = onCode
+        self.onCallback = onCallback
     }
 
     /// Bind + listen synchronously (so the caller knows the port is ready
@@ -542,11 +558,15 @@ class TickTickOAuthServer {
 
             let request = String(bytes: buffer[0..<bytesRead], encoding: .utf8) ?? ""
 
-            // Extract the path from "GET /oauth/ticktick?code=xxx HTTP/1.1"
+            // Extract the path from "GET /oauth/ticktick?code=xxx&state=yyy HTTP/1.1"
             if let firstLine = request.components(separatedBy: "\r\n").first,
                let pathPart = firstLine.components(separatedBy: " ").dropFirst().first,
                let components = URLComponents(string: pathPart),
+               // Only accept the exact callback path — the previous code accepted
+               // any path carrying `?code=` (GHSA-3q2g-hmqg-qj5r, H3).
+               components.path == "/oauth/ticktick",
                let code = components.queryItems?.first(where: { $0.name == "code" })?.value {
+                let state = components.queryItems?.first(where: { $0.name == "state" })?.value
 
                 // Send success response
                 let html = """
@@ -558,7 +578,7 @@ class TickTickOAuthServer {
                 _ = response.withCString { send(clientSocket, $0, Int(strlen($0)), 0) }
                 close(clientSocket)
 
-                onCode(code)
+                onCallback(code, state)
                 stop()
                 return
             } else {

@@ -4,6 +4,18 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.25.16 (July 2026)
+
+Hardens the TickTick sign-in flow.
+
+### Security
+
+- **TickTick OAuth sign-in now verifies the callback (GHSA-3q2g-hmqg-qj5r, H3 + L1).** The sign-in flow didn't send an OAuth `state` value, and the local callback (both the loopback port and the `remindian://` link) accepted any authorization code it was handed, without checking it belonged to a sign-in *this* app had started, or even that the callback path was the expected one. That meant another local program or web page could complete the flow with its own code and quietly connect your Remindian to the wrong account. Each sign-in now carries a fresh cryptographically random `state`; a callback is accepted only when its `state` matches the flow in progress (single-use), the path is exact, and the value can't be replayed.
+
+> If you use TickTick: nothing changes in normal use — just click **Connect** as before. If a reconnect ever reports "sign-in could not be verified," simply start it again from Settings.
+
+---
+
 ## v5.25.15 (July 2026)
 
 Your settings and logs are no longer readable by other accounts on the machine.

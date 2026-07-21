@@ -128,4 +128,55 @@ final class SecurityHardeningTests: XCTestCase {
         SecureFile.hardenExistingFiles(in: dir, names: ["config.json"])
         XCTAssertFalse(SecureFile.restrictToOwner(at: dir.appendingPathComponent("nope.json")))
     }
+
+    // MARK: - H3 / L1: OAuth callback must be bound to a state we issued
+    //
+    // Without a `state`, any local process or web page can hit the loopback port
+    // (or the remindian:// scheme) with an attacker's code and bind the user's
+    // app to the attacker's account. The callback must only be accepted when its
+    // state matches the flow this app started.
+
+    func test_H3_stateIsRandomAndUrlSafe() {
+        let a = OAuthCallbackHandler.randomState()
+        let b = OAuthCallbackHandler.randomState()
+        XCTAssertNotEqual(a, b, "Each flow must get a fresh state")
+        XCTAssertGreaterThanOrEqual(a.count, 32, "State must have real entropy")
+        // URL-safe base64 — no characters that would need escaping or split a query.
+        XCTAssertNil(a.rangeOfCharacter(from: CharacterSet(charactersIn: "+/=&? ")),
+                     "State must be URL-safe. Got: \(a)")
+    }
+
+    func test_H3_callbackRejectedWithoutMatchingState() {
+        let handler = OAuthCallbackHandler.shared
+        let issued = handler.beginTickTickFlow()
+
+        // An attacker's callback carrying the wrong state (or none) is refused.
+        XCTAssertFalse(handler.consumeTickTickState("not-the-state"), "Wrong state must be rejected")
+        XCTAssertFalse(handler.consumeTickTickState(nil), "Missing state must be rejected")
+
+        // The genuine callback matches.
+        XCTAssertTrue(handler.consumeTickTickState(issued), "The state we issued must validate")
+    }
+
+    func test_H3_stateIsSingleUse() {
+        let handler = OAuthCallbackHandler.shared
+        let issued = handler.beginTickTickFlow()
+        XCTAssertTrue(handler.consumeTickTickState(issued), "First use validates")
+        XCTAssertFalse(handler.consumeTickTickState(issued), "A replayed state must not validate a second time")
+    }
+
+    func test_H3_noFlowInProgressRejectsEverything() {
+        let handler = OAuthCallbackHandler.shared
+        _ = handler.beginTickTickFlow()
+        _ = handler.consumeTickTickState(nil)   // clear any pending flow
+        // With nothing pending, an unsolicited callback (the CSRF case) is refused.
+        XCTAssertFalse(handler.consumeTickTickState("anything"),
+                       "A callback with no flow in progress must be rejected")
+    }
+
+    func test_H3_constantTimeEquals() {
+        XCTAssertTrue(OAuthCallbackHandler.constantTimeEquals("abc123", "abc123"))
+        XCTAssertFalse(OAuthCallbackHandler.constantTimeEquals("abc123", "abc124"))
+        XCTAssertFalse(OAuthCallbackHandler.constantTimeEquals("abc", "abcd"))
+    }
 }
