@@ -4,7 +4,7 @@ cask "remindian" do
 
   url "https://github.com/Santofer/Remindian/releases/download/v#{version}/Remindian-#{version}.dmg"
   name "Remindian"
-  desc "Sync Obsidian tasks with Apple Reminders, Todoist, Asana, Linear, and more"
+  desc "Sync Obsidian tasks with Apple Reminders, Things 3, Todoist, and TickTick"
   homepage "https://github.com/Santofer/Remindian"
 
   auto_updates true
