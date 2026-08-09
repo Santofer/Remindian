@@ -4,6 +4,22 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.28.0 (August 2026)
+
+Subtask handling, and each sync profile now keeps its own schedule.
+
+### New
+
+- **Choose what happens to indented subtasks.** **Settings → Advanced → "Indented subtasks"** offers three modes:
+  - *Sync as separate reminders* — the existing behaviour, and still the default.
+  - *Don't sync subtasks* — only top-level tasks become reminders; indented ones stay in Obsidian.
+  - *Show in the parent's notes* — subtasks are folded into the parent reminder as a checklist, with nesting preserved and completed items shown ticked.
+
+  > **Why not real subtasks?** Apple Reminders and Things 3 provide **no API for them** — EventKit exposes no parent/child relationship at all, and Things 3 checklist items aren't reachable over AppleScript. Reminders shows subtasks in its own UI, but that's private to Apple. Rather than ship something that half-works, these are three honest compromises. Folding into notes is display-only: ticking an item there can't be read back.
+- **Each profile keeps its own sync schedule.** "Enable automatic sync" and the interval used to be forced identical across every profile. They're now per profile, so a work pipeline can sync every 5 minutes while a personal one runs hourly. The timer ticks at the shortest enabled interval and syncs only the profiles that are actually due. Existing setups are unaffected — every profile already held the same value, so nothing changes until you edit one.
+
+---
+
 ## v5.27.0 (August 2026)
 
 See why a task lands where it does, and optionally limit how far ahead you sync.

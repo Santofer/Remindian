@@ -95,6 +95,10 @@ class SyncConfiguration: ObservableObject, Codable {
     @Published var taskNotesApiUrl: String  // HTTP API base URL (e.g., http://localhost:8080)
     @Published var launchAtLogin: Bool
     @Published var maxCompletedTaskAgeDays: Int  // 0 = no limit, >0 = skip completed tasks older than N days
+    /// How indented sub-tasks are handled. Defaults to the historic behaviour
+    /// (each becomes its own reminder). See `SubtaskHandling`.
+    @Published var subtaskHandling: SubtaskHandling
+
     /// Only sync tasks due within this many days. `0` = no horizon (sync everything).
     /// Tasks with **no** due date are always synced — a horizon is about how far
     /// ahead you want to look, not a way to drop undated work. Note that raising
@@ -281,6 +285,30 @@ class SyncConfiguration: ObservableObject, Codable {
         }
     }
 
+    /// What to do with indented sub-tasks under a parent task.
+    ///
+    /// Real parent/child nesting at the destination is **not possible** for the
+    /// two main targets: EventKit exposes no parent/child API for reminders, and
+    /// Things 3 checklist items aren't reachable over AppleScript. So the choice
+    /// is between three honest compromises rather than true nesting.
+    enum SubtaskHandling: String, Codable, CaseIterable {
+        /// Each indented task becomes its own independent reminder (historic behaviour).
+        case separate
+        /// Indented tasks are not synced at all — only top-level tasks become reminders.
+        case skip
+        /// Indented tasks are folded into the parent reminder's notes as a checklist.
+        /// One-way: ticking an item in the notes can't be read back.
+        case inNotes
+
+        var displayName: String {
+            switch self {
+            case .separate: return "Sync as separate reminders"
+            case .skip:     return "Don't sync subtasks"
+            case .inNotes:  return "Show in the parent's notes"
+            }
+        }
+    }
+
     struct ListMapping: Codable, Identifiable, Equatable {
         var id = UUID()
         var obsidianTag: String
@@ -347,7 +375,7 @@ class SyncConfiguration: ObservableObject, Codable {
         case enableNotifications, globalHotKeyEnabled, globalHotKeyCode, globalHotKeyModifiers
         case taskSourceType, taskDestinationType, things3AuthToken, taskNotesFolder, taskNotesIntegrationMode
         case taskNotesMtnPath, taskNotesApiUrl
-        case launchAtLogin, maxCompletedTaskAgeDays, maxDueDateHorizonDays, syncedRemindersLists, excludedRemindersLists, addTaskLinkToReminders, appendTaskLinkToNotes
+        case launchAtLogin, maxCompletedTaskAgeDays, maxDueDateHorizonDays, subtaskHandling, syncedRemindersLists, excludedRemindersLists, addTaskLinkToReminders, appendTaskLinkToNotes
         case syncStateLocation, genericMarkdown
         case taskNotesCompletedStatuses, taskNotesOpenStatus, taskNotesDoneStatus
         case obsidianTasksOpenMarkers, obsidianTasksCompletedMarkers, obsidianTasksIgnoredMarkers
@@ -410,6 +438,7 @@ class SyncConfiguration: ObservableObject, Codable {
         launchAtLogin: Bool = false,
         maxCompletedTaskAgeDays: Int = 0,
         maxDueDateHorizonDays: Int = 0,
+        subtaskHandling: SubtaskHandling = .separate,
         syncedRemindersLists: [String] = [],
         excludedRemindersLists: [String] = [],
         excludedTags: [String] = [],
@@ -481,6 +510,7 @@ class SyncConfiguration: ObservableObject, Codable {
         self.launchAtLogin = launchAtLogin
         self.maxCompletedTaskAgeDays = maxCompletedTaskAgeDays
         self.maxDueDateHorizonDays = maxDueDateHorizonDays
+        self.subtaskHandling = subtaskHandling
         self.syncedRemindersLists = syncedRemindersLists
         self.excludedRemindersLists = excludedRemindersLists
         self.excludedTags = excludedTags
@@ -558,6 +588,7 @@ class SyncConfiguration: ObservableObject, Codable {
         launchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
         maxCompletedTaskAgeDays = try container.decodeIfPresent(Int.self, forKey: .maxCompletedTaskAgeDays) ?? 0
         maxDueDateHorizonDays = max(0, try container.decodeIfPresent(Int.self, forKey: .maxDueDateHorizonDays) ?? 0)
+        subtaskHandling = try container.decodeIfPresent(SubtaskHandling.self, forKey: .subtaskHandling) ?? .separate
         syncedRemindersLists = try container.decodeIfPresent([String].self, forKey: .syncedRemindersLists) ?? []
         excludedRemindersLists = try container.decodeIfPresent([String].self, forKey: .excludedRemindersLists) ?? []
         excludedTags = try container.decodeIfPresent([String].self, forKey: .excludedTags) ?? []
@@ -640,6 +671,7 @@ class SyncConfiguration: ObservableObject, Codable {
         try container.encode(launchAtLogin, forKey: .launchAtLogin)
         try container.encode(maxCompletedTaskAgeDays, forKey: .maxCompletedTaskAgeDays)
         try container.encode(maxDueDateHorizonDays, forKey: .maxDueDateHorizonDays)
+        try container.encode(subtaskHandling, forKey: .subtaskHandling)
         try container.encode(syncedRemindersLists, forKey: .syncedRemindersLists)
         try container.encode(excludedRemindersLists, forKey: .excludedRemindersLists)
         try container.encode(excludedTags, forKey: .excludedTags)
@@ -717,9 +749,12 @@ class SyncConfiguration: ObservableObject, Codable {
     /// are propagated from the active profile to all others on save. Everything
     /// NOT in this list is per-profile (source/destination, vault, mappings,
     /// filters, writeback, tokens, state location, etc.).
+    /// Note: `enableAutoSync` and `syncIntervalMinutes` are deliberately **not**
+    /// here — each profile schedules itself, so you can sync a work pipeline every
+    /// 5 minutes and a personal one hourly. They used to be forced identical
+    /// across profiles; existing installs already hold the same value everywhere,
+    /// so dropping the propagation changes nothing until the user edits one.
     func applyGlobalSettings(from other: SyncConfiguration) {
-        enableAutoSync = other.enableAutoSync
-        syncIntervalMinutes = other.syncIntervalMinutes
         syncOnLaunch = other.syncOnLaunch
         enableNotifications = other.enableNotifications
         globalHotKeyEnabled = other.globalHotKeyEnabled

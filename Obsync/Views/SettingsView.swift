@@ -336,6 +336,11 @@ struct GeneralSettingsView: View {
                             Text("30 minutes").tag(30)
                             Text("1 hour").tag(60)
                         }
+                        if syncManager.profileStore.profiles.count > 1 {
+                            Text("Automatic sync is set per profile — this applies to “\(syncManager.profileStore.activeProfile?.name ?? "this profile")”. Other profiles keep their own interval, so a work pipeline can run every few minutes while a personal one runs hourly.")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
                     }
 
                     Toggle("Sync on app launch", isOn: $syncManager.config.syncOnLaunch)
@@ -1032,6 +1037,26 @@ struct AdvancedSettingsView: View {
                         .frame(width: 120)
                     }
                     .padding(.leading, 20)
+                }
+
+                HStack {
+                    Text("Indented subtasks:")
+                        .foregroundColor(.secondary)
+                    Picker("", selection: $syncManager.config.subtaskHandling) {
+                        ForEach(SyncConfiguration.SubtaskHandling.allCases, id: \.self) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    .frame(width: 240)
+                }
+
+                if syncManager.config.subtaskHandling != .separate {
+                    Text(syncManager.config.subtaskHandling == .skip
+                         ? "Only top-level tasks become reminders. Indented tasks stay in Obsidian — and any reminders they already created will be removed on the next sync."
+                         : "Indented tasks are listed as a checklist inside the parent reminder's notes. Apple Reminders and Things 3 provide no API for real subtasks, so this is display-only — ticking an item in the notes can't be read back.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .padding(.leading, 20)
                 }
 
                 HStack {

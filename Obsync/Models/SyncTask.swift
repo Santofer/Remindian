@@ -14,6 +14,11 @@ struct SyncTask: Identifiable, Equatable, Codable {
     var tags: [String]
     var targetList: String? // The hashtag that determines which Reminders list to use
     var notes: String?
+    /// Checklist of this task's indented sub-tasks, when `SubtaskHandling.inNotes`
+    /// is active. Rendered into the destination's notes because neither EventKit
+    /// nor Things 3 exposes real parent/child nesting. Nil in every other mode, so
+    /// it never affects tasks that don't use the feature.
+    var subtaskSummary: String?
     var clientName: String? // Extracted from hierarchical tags (e.g., work/clients/somfy → "somfy") or file path
 
     /// Raw recurrence rule text preserved from the Obsidian line, e.g. "every week",
@@ -93,6 +98,7 @@ struct SyncTask: Identifiable, Equatable, Codable {
         tags: [String] = [],
         targetList: String? = nil,
         notes: String? = nil,
+        subtaskSummary: String? = nil,
         clientName: String? = nil,
         obsidianSource: ObsidianSource? = nil,
         remindersId: String? = nil,
@@ -111,6 +117,7 @@ struct SyncTask: Identifiable, Equatable, Codable {
         self.tags = tags
         self.targetList = targetList
         self.notes = notes
+        self.subtaskSummary = subtaskSummary
         self.clientName = clientName
         self.obsidianSource = obsidianSource
         self.remindersId = remindersId
@@ -838,6 +845,12 @@ extension SyncTask {
             if appendLinkToNotes {
                 noteParts.append(obsidianURL)
             }
+        }
+
+        // Sub-tasks, when folded in. Apple Reminders has no sub-task API, so the
+        // nesting is shown as a checklist in the notes — read-only by nature.
+        if let summary = subtaskSummary, !summary.isEmpty {
+            noteParts.append(summary)
         }
 
         if noteParts.isEmpty {

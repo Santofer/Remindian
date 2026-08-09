@@ -95,6 +95,9 @@ class SyncManager: ObservableObject {
     private var currentSyncTask: Task<Void, Never>?
     /// Per-(last)-sync undo manifest: one earliest pre-sync backup per file.
     private var lastSyncUndoManifest: [FileBackupService.BackupRecord] = []
+    /// When each profile last ran on the timer. In memory only: after a relaunch
+    /// every profile is simply due again, which is the behaviour people expect.
+    private var lastAutoSyncByProfile: [String: Date] = [:]
     /// Throttle for the Today-agenda refresh (menu `.task` can fire often).
     private var lastAgendaRefresh: Date?
 
@@ -437,7 +440,10 @@ class SyncManager: ObservableObject {
     /// picker. User-initiated syncs (menu "Sync Now", quick-add, complete,
     /// preview) pass true; unattended triggers (auto-sync timer, file watcher,
     /// hotkey, Shortcuts) pass false so they never steal focus with a dialog. (audit #14)
-    func performSync(interactive: Bool = true) async {
+    /// - Parameter onlyProfileIds: restrict this run to specific profiles. Used by
+    ///   the timer so each profile keeps its own cadence; `nil` (the default, and
+    ///   what "Sync Now" passes) syncs every enabled profile.
+    func performSync(interactive: Bool = true, onlyProfileIds: Set<String>? = nil) async {
         // Suppress *automatic* syncs (timer / file watcher / hotkey) in Safe Mode.
         // A user-initiated "Sync Now" (interactive) is always allowed so they can
         // push pending work or test a fix. (#80)
@@ -453,10 +459,14 @@ class SyncManager: ObservableObject {
         // profile (also used by list pickers, reset, conflict resolution).
         updateSourceAndDestination()
 
-        let enabled = profileStore.enabledProfiles
+        var enabled = profileStore.enabledProfiles
         guard !enabled.isEmpty else {
             showErrorMessage("No sync profiles are enabled. Enable a profile in Settings.")
             return
+        }
+        if let onlyProfileIds {
+            enabled = enabled.filter { onlyProfileIds.contains($0.id) }
+            guard !enabled.isEmpty else { return }   // nothing due — stay quiet
         }
 
         let activeId = profileStore.activeProfileId
@@ -865,20 +875,59 @@ class SyncManager: ObservableObject {
         syncTimer?.invalidate()
         syncTimer = nil
 
-        guard config.enableAutoSync else { return }
         // Don't arm the interval timer in Safe Mode. (#80)
         guard !SafeMode.isActive else { return }
 
-        // Clamp to a sane range so a corrupt persisted config can't schedule a timer
-        // that fires continuously (0/negative → low clamp) or overflow `minutes * 60`
-        // when the value is absurdly large (corrupt profiles.json → trap, #80 class).
-        let minutes = min(max(1, config.syncIntervalMinutes), 24 * 60)
-        let interval = TimeInterval(minutes * 60)
+        // Auto-sync is per profile, so a work pipeline can run every 5 minutes
+        // while a personal one runs hourly. The timer ticks at the shortest
+        // enabled interval and each tick syncs only the profiles that are due.
+        let schedules = profileStore.enabledProfiles
+            .filter { $0.config.enableAutoSync }
+            .map { SyncManager.clampedIntervalMinutes($0.config.syncIntervalMinutes) }
+        guard let tickMinutes = schedules.min() else { return }
+
+        let interval = TimeInterval(tickMinutes * 60)
         syncTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                await self?.performSync(interactive: false)
+                await self?.runDueProfiles()
             }
         }
+
+    }
+
+    /// Clamp a configured interval to a sane range.
+    ///
+    /// The low clamp stops a corrupt config scheduling a continuously-firing
+    /// timer; the high clamp stops `minutes * 60` overflowing `Int` (#80 class).
+    static func clampedIntervalMinutes(_ minutes: Int) -> Int {
+        min(max(1, minutes), 24 * 60)
+    }
+
+    /// Profiles whose own interval has elapsed since they last ran on the timer.
+    static func profilesDue(
+        _ profiles: [SyncProfile],
+        lastRun: [String: Date],
+        now: Date
+    ) -> [SyncProfile] {
+        profiles.filter { profile in
+            guard profile.config.enableAutoSync else { return false }
+            guard let last = lastRun[profile.id] else { return true }   // never run → due
+            let minutes = clampedIntervalMinutes(profile.config.syncIntervalMinutes)
+            return now.timeIntervalSince(last) >= TimeInterval(minutes * 60)
+        }
+    }
+
+    /// Timer tick: sync only the profiles that are actually due right now.
+    private func runDueProfiles() async {
+        let due = SyncManager.profilesDue(
+            profileStore.enabledProfiles,
+            lastRun: lastAutoSyncByProfile,
+            now: Date()
+        )
+        guard !due.isEmpty else { return }
+        let now = Date()
+        for profile in due { lastAutoSyncByProfile[profile.id] = now }
+        await performSync(interactive: false, onlyProfileIds: Set(due.map(\.id)))
     }
 
     /// Leave Safe Mode at the user's request: clear the sticky flag, re-arm the

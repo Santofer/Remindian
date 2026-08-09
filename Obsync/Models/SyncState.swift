@@ -353,6 +353,14 @@ class SyncState: Codable {
             // writeback to the other side. #57 Phase B.
             task.recurrenceRule ?? ""
         ]
-        return components.joined(separator: "|").data(using: .utf8)?.base64EncodedString() ?? ""
+        // Appended only when sub-tasks are folded into the notes. Without this the
+        // parent's hash wouldn't change when a child changed, so the updated
+        // checklist would never be pushed. Kept conditional so every task that
+        // doesn't use the feature keeps a byte-identical hash — no mass re-sync.
+        var all = components
+        if let summary = task.subtaskSummary, !summary.isEmpty {
+            all.append(summary)
+        }
+        return all.joined(separator: "|").data(using: .utf8)?.base64EncodedString() ?? ""
     }
 }

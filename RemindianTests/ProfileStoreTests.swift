@@ -95,6 +95,7 @@ final class ProfileStoreTests: XCTestCase {
         let otherCfg = SyncConfiguration()
         otherCfg.vaultPath = "/other-vault"
         otherCfg.defaultList = "OtherList"
+        otherCfg.syncIntervalMinutes = 7             // per-profile schedule — must NOT be overwritten
 
         let active = SyncProfile(id: "a", name: "A", isDefault: true, config: activeCfg)
         let other = SyncProfile(id: "b", name: "B", isDefault: false, config: otherCfg)
@@ -105,8 +106,11 @@ final class ProfileStoreTests: XCTestCase {
         // Globals copied:
         XCTAssertTrue(otherCfg.launchAtLogin)
         XCTAssertTrue(otherCfg.globalHotKeyEnabled)
-        XCTAssertEqual(otherCfg.syncIntervalMinutes, 42)
         XCTAssertFalse(otherCfg.enableNotifications)
+        // The sync schedule is per-profile since v5.28.0, so each pipeline can run
+        // at its own cadence. It used to be forced identical everywhere.
+        XCTAssertEqual(otherCfg.syncIntervalMinutes, 7,
+                       "The auto-sync interval is per-profile and must not be propagated.")
         // Per-pipeline untouched:
         XCTAssertEqual(otherCfg.vaultPath, "/other-vault", "Vault path is per-profile and must not be propagated.")
         XCTAssertEqual(otherCfg.defaultList, "OtherList")

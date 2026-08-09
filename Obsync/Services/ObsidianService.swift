@@ -19,6 +19,9 @@ class ObsidianService {
         let openMarkers: Set<Character>
         let completedMarkers: Set<Character>
         let ignoredMarkers: Set<Character>
+        /// Sub-task handling changes what `parseTasksFromFile` returns for the same
+        /// bytes, so it must invalidate the cache or a stale parse would be reused.
+        let subtaskHandling: SyncConfiguration.SubtaskHandling
     }
 
     /// One file's cached parse. Reused only when the file's modification date
@@ -63,6 +66,7 @@ class ObsidianService {
         excludedFolders: [String],
         includedFolders: [String] = [],
         inboxRelativePath: String = "",
+        subtaskHandling: SyncConfiguration.SubtaskHandling = .separate,
         openMarkers: Set<Character> = SyncTask.defaultOpenMarkers,
         completedMarkers: Set<Character> = SyncTask.defaultCompletedMarkers,
         ignoredMarkers: Set<Character> = []
@@ -89,7 +93,8 @@ class ObsidianService {
             vaultPath: path,
             openMarkers: openMarkers,
             completedMarkers: completedMarkers,
-            ignoredMarkers: ignoredMarkers
+            ignoredMarkers: ignoredMarkers,
+            subtaskHandling: subtaskHandling
         )
         var liveKeys = Set<String>(minimumCapacity: markdownFiles.count)
         var cacheHits = 0
@@ -118,7 +123,8 @@ class ObsidianService {
                     vaultPath: path,
                     openMarkers: openMarkers,
                     completedMarkers: completedMarkers,
-                    ignoredMarkers: ignoredMarkers
+                    ignoredMarkers: ignoredMarkers,
+                    subtaskHandling: subtaskHandling
                 )
                 tasks.append(contentsOf: fileTasks)
 
@@ -165,12 +171,78 @@ class ObsidianService {
     /// nesting at the destination (`EKReminder.parentItem`, TickTick
     /// `parentId`, etc.) is a future phase; this is a behavioral compromise
     /// that puts indented subtasks in the *same list* as their parent.
+    /// Fold or drop indented sub-tasks, given each task's indent level.
+    ///
+    /// Pure and index-parallel (`indents[i]` describes `tasks[i]`) so it can be
+    /// tested without touching disk. A task is a sub-task when some earlier task
+    /// has a strictly smaller indent — the same structural rule the parent-tag
+    /// inheritance pass uses, so the two can't disagree.
+    static func applySubtaskHandling(
+        _ handling: SyncConfiguration.SubtaskHandling,
+        to indents: [Int],
+        tasks: [SyncTask]
+    ) -> [SyncTask] {
+        guard handling != .separate, indents.count == tasks.count else { return tasks }
+
+        // Resolve each task's parent index using the same ancestor-stack walk.
+        var parentIndex = [Int?](repeating: nil, count: tasks.count)
+        var stack: [(indent: Int, index: Int)] = []
+        for i in tasks.indices {
+            while let top = stack.last, top.indent >= indents[i] { stack.removeLast() }
+            parentIndex[i] = stack.last?.index
+            stack.append((indents[i], i))
+        }
+
+        switch handling {
+        case .separate:
+            return tasks
+
+        case .skip:
+            return tasks.enumerated()
+                .filter { parentIndex[$0.offset] == nil }
+                .map { $0.element }
+
+        case .inNotes:
+            // Collect each parent's direct and nested children, in document order,
+            // rendered as a Markdown checklist so it reads naturally in Reminders.
+            var childrenByRoot: [Int: [String]] = [:]
+            func rootOf(_ index: Int) -> Int? {
+                var current = index
+                var root: Int? = nil
+                while let parent = parentIndex[current] {
+                    root = parent
+                    current = parent
+                }
+                return root
+            }
+            for i in tasks.indices {
+                guard let root = rootOf(i) else { continue }
+                let depth = (indents[i] - indents[root]) / 2
+                let indentPrefix = String(repeating: "  ", count: max(0, depth - 1))
+                let box = tasks[i].isCompleted ? "[x]" : "[ ]"
+                childrenByRoot[root, default: []].append("\(indentPrefix)- \(box) \(tasks[i].title)")
+            }
+
+            var result: [SyncTask] = []
+            result.reserveCapacity(tasks.count)
+            for i in tasks.indices where parentIndex[i] == nil {
+                var task = tasks[i]
+                if let lines = childrenByRoot[i], !lines.isEmpty {
+                    task.subtaskSummary = lines.joined(separator: "\n")
+                }
+                result.append(task)
+            }
+            return result
+        }
+    }
+
     func parseTasksFromFile(
         _ fileURL: URL,
         vaultPath: String,
         openMarkers: Set<Character> = SyncTask.defaultOpenMarkers,
         completedMarkers: Set<Character> = SyncTask.defaultCompletedMarkers,
-        ignoredMarkers: Set<Character> = []
+        ignoredMarkers: Set<Character> = [],
+        subtaskHandling: SyncConfiguration.SubtaskHandling = .separate
     ) throws -> [SyncTask] {
         let content = try String(contentsOf: fileURL, encoding: .utf8)
         let lines = content.components(separatedBy: "\n")
@@ -236,6 +308,18 @@ class ObsidianService {
 
             ancestorStack.append((indent, task))
             tasks.append(task)
+        }
+
+        // Sub-task handling. Neither EventKit nor Things 3 exposes real
+        // parent/child nesting (verified against the SDK headers and the Things
+        // AppleScript dictionary), so "nesting" can only be approximated.
+        // `.separate` is the historic behaviour and stays the default.
+        if subtaskHandling != .separate {
+            tasks = ObsidianService.applySubtaskHandling(
+                subtaskHandling,
+                to: taggedTasks.map { $0.indent },
+                tasks: tasks
+            )
         }
 
         return tasks
