@@ -298,7 +298,8 @@ class ObsidianService {
     func appendTaskToInbox(
         task: SyncTask,
         inboxRelativePath: String,
-        vaultPath: String
+        vaultPath: String,
+        globalFilter: String = ""
     ) throws -> (filePath: String, lineNumber: Int, lineContent: String) {
         let relativePath = inboxRelativePath.hasPrefix("/") ? inboxRelativePath : "/" + inboxRelativePath
         let fileURL = URL(fileURLWithPath: vaultPath + relativePath)
@@ -313,6 +314,15 @@ class ObsidianService {
         var parts: [String] = []
         parts.append(task.isCompleted ? "- [x]" : "- [ ]")
         parts.append(task.title)
+
+        // Carry the global filter onto the new line. Without it the task we just
+        // wrote fails the eligibility check on the very next scan, the engine
+        // treats it as deleted from Obsidian, and it deletes the reminder that
+        // created it — the task silently disappears from Reminders. (#89-adjacent)
+        let filterMarker = globalFilter.trimmingCharacters(in: .whitespaces)
+        if !filterMarker.isEmpty && !task.title.contains(filterMarker) {
+            parts.append(filterMarker)
+        }
 
         if task.priority != .none {
             parts.append(task.priority.obsidianEmoji)

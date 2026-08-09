@@ -4,6 +4,22 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.26.0 (August 2026)
+
+Global-filter fixes for Obsidian Tasks, and Things 3 no longer steals focus.
+
+### Bug fixes
+
+- **Things 3 no longer jumps in front during a sync (#87).** Each write to Things 3 is sent through its URL scheme, and macOS brings an app to the foreground when you hand it a URL — so a background sync would yank focus away mid-typing. Writes are now delivered without activating Things 3. It still launches if it isn't running; it just stays out of your way.
+- **The global filter no longer decides which list a task lands in (#88).** With a tag filter such as `#task`, every synced task carries that tag — and Remindian was treating it as a routing tag. It would invent a "Task" list from it, override your folder/path mappings, and (if you had a synced-lists whitelist) silently skip tasks unless you added a `#task` list mapping. The filter now only controls *whether* a task syncs; routing comes from your mappings as intended. More specific sub-tags such as `#task/work` still route normally.
+- **New tasks created in the destination keep the global filter (#89-adjacent).** When a global filter was set, a task created in Reminders and written back to your inbox didn't include the filter text — so the next scan judged it ineligible, concluded it had been deleted from Obsidian, and removed the reminder that created it. The task appeared to vanish. The filter is now written onto the new line so the round-trip holds.
+
+### New
+
+- **Option: keep the global filter out of synced titles (#89).** A non-tag filter such as `TODO` used to appear in every synced reminder title. Turn on **Settings → Global filter → "Remove the filter text from synced titles"** to strip it. Your Markdown is never modified, and existing reminders are *renamed* rather than deleted and recreated. Off by default. (Tag filters like `#task` were already excluded from titles.)
+
+---
+
 ## v5.25.17 (July 2026)
 
 Restores TickTick sign-in after a credential rotation.

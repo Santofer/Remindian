@@ -917,8 +917,15 @@ class SyncEngine {
 
                         var score = 0
 
-                        // Title match is required (minimum bar)
-                        guard candidateTask.title == rTask.title else { continue }
+                        // Title match is required (minimum bar). Compare with the
+                        // global filter removed from both sides so that turning on
+                        // "strip global filter from titles" migrates existing
+                        // mappings in place — otherwise every title would change at
+                        // once, fail this gate, and the reminders would be deleted
+                        // and recreated rather than renamed. (#89)
+                        let candidateTitle = SyncConfiguration.removingGlobalFilter(candidateTask.title, filter: config.globalFilter)
+                        let reminderTitle = SyncConfiguration.removingGlobalFilter(rTask.title, filter: config.globalFilter)
+                        guard candidateTitle == reminderTitle else { continue }
                         score += 10
 
                         // Bonus: same target list / tag

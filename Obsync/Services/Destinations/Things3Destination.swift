@@ -267,6 +267,30 @@ class Things3Destination: TaskDestination {
         return lists
     }
 
+    // MARK: - URL scheme
+
+    /// Hand a `things:///` URL to Things 3 **without bringing it to the front**.
+    ///
+    /// `NSWorkspace.open(_:)` activates the target app, so every write during a
+    /// background sync yanked focus away from whatever the user was doing — the
+    /// app would jump in front mid-typing (#87). `OpenConfiguration.activates =
+    /// false` performs the identical URL-scheme call while leaving the frontmost
+    /// app alone. Things 3 is still launched if it isn't running, it just doesn't
+    /// steal focus. Never call `NSWorkspace.open(_:)` directly here.
+    @discardableResult
+    static func openWithoutStealingFocus(_ url: URL) async -> Bool {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = false          // ← the fix for #87
+        configuration.addsToRecentItems = false
+        do {
+            _ = try await NSWorkspace.shared.open(url, configuration: configuration)
+            return true
+        } catch {
+            debugLog("[Things3] URL scheme open failed: \(error.localizedDescription)")
+            return false
+        }
+    }
+
     // MARK: - AppleScript escaping
 
     /// Escape a value for embedding inside an AppleScript string literal.
@@ -493,7 +517,7 @@ class Things3Destination: TaskDestination {
             throw Things3Error.invalidURL
         }
 
-        let success = NSWorkspace.shared.open(url)
+        let success = await Things3Destination.openWithoutStealingFocus(url)
         if !success {
             throw Things3Error.urlSchemeNotHandled
         }
@@ -529,7 +553,7 @@ class Things3Destination: TaskDestination {
             throw Things3Error.invalidURL
         }
 
-        let success = NSWorkspace.shared.open(url)
+        let success = await Things3Destination.openWithoutStealingFocus(url)
         if !success {
             throw Things3Error.urlSchemeNotHandled
         }
@@ -596,7 +620,7 @@ class Things3Destination: TaskDestination {
     }
 
     /// Send an update to Things 3 via URL scheme (locale-independent).
-    private func updateTaskViaURLScheme(params: [String: String]) throws {
+    private func updateTaskViaURLScheme(params: [String: String]) async throws {
         var components = URLComponents()
         components.scheme = "things"
         components.host = ""
@@ -604,7 +628,7 @@ class Things3Destination: TaskDestination {
         components.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
 
         guard let url = components.url else { return }
-        let success = NSWorkspace.shared.open(url)
+        let success = await Things3Destination.openWithoutStealingFocus(url)
         if !success {
             debugLog("[Things3] URL scheme update failed for task \(params["id"] ?? "?")")
         }

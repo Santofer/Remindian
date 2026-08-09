@@ -35,6 +35,18 @@ class ObsidianTasksSource: TaskSource {
                 return originalLine.contains(filter)
             }
             debugLog("[ObsidianTasks] Global filter \"\(filter)\": \(before) → \(tasks.count) tasks")
+
+            // Optionally drop the filter text from the title we hand to the
+            // destination, so a non-tag filter like `TODO` doesn't ride along in
+            // every reminder title. Done here (not at write time) so both sync
+            // directions compare the same title. The source line is untouched. (#89)
+            if config.stripGlobalFilterFromTitle {
+                tasks = tasks.map { task in
+                    var stripped = task
+                    stripped.title = config.titleForDestination(task.title)
+                    return stripped
+                }
+            }
         }
 
         // Parse dataview inline fields (#41) — augment tasks with [key::value] metadata
@@ -112,7 +124,8 @@ class ObsidianTasksSource: TaskSource {
         let result = try obsidianService.appendTaskToInbox(
             task: task,
             inboxRelativePath: config.inboxFilePath,
-            vaultPath: config.vaultPath
+            vaultPath: config.vaultPath,
+            globalFilter: config.globalFilter
         )
         return SyncTask.ObsidianSource(
             filePath: result.filePath,

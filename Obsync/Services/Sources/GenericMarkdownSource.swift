@@ -49,6 +49,14 @@ class GenericMarkdownSource: TaskSource {
             tasks = tasks.filter { task in
                 (task.obsidianSource?.originalLine ?? "").contains(globalFilter)
             }
+            // Optionally keep the filter text out of the destination title (#89).
+            if config.stripGlobalFilterFromTitle {
+                tasks = tasks.map { task in
+                    var stripped = task
+                    stripped.title = config.titleForDestination(task.title)
+                    return stripped
+                }
+            }
         }
         return tasks
     }

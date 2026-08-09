@@ -1070,9 +1070,19 @@ struct AdvancedSettingsView: View {
                         Text("Global filter")
                     }
 
-                    Text("Only sync tasks whose line contains this text. Matches the Obsidian Tasks plugin global filter setting. Leave empty to sync all tasks.")
+                    Text("Only sync tasks whose line contains this text. Matches the Obsidian Tasks plugin global filter setting. Leave empty to sync all tasks. The filter marks which tasks sync — it never decides which list they go to.")
                         .font(.caption)
                         .foregroundColor(.secondary)
+
+                    if !syncManager.config.globalFilter.trimmingCharacters(in: .whitespaces).isEmpty {
+                        Toggle("Remove the filter text from synced titles",
+                               isOn: $syncManager.config.stripGlobalFilterFromTitle)
+                            .help("Keeps a non-tag filter such as TODO out of the reminder title. Your Markdown is not modified.")
+
+                        Text("Useful when the filter isn't a tag (e.g. `TODO`), which would otherwise appear in every synced title. Tags are already excluded from titles. Existing reminders are renamed on the next sync, not recreated.")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
 
                     Toggle("Parse dataview inline fields", isOn: $syncManager.config.enableDataviewFormat)
                         .help("Also read [key::value] and (key::value) metadata from task lines")

@@ -161,6 +161,12 @@ class SyncConfiguration: ObservableObject, Codable {
 
     // MARK: - Global Filter (#36)
     @Published var globalFilter: String  // Text that must appear in the file/section for tasks to be synced (e.g., "#task" for Obsidian Tasks global filter)
+    /// Remove the global-filter text from the title sent to the destination (#89).
+    /// A non-tag filter like `TODO` otherwise shows up in every reminder title.
+    /// (Tag filters such as `#task` are already stripped, since tags never
+    /// appear in titles.) Off by default so existing titles don't change unless
+    /// asked. The source Markdown line is never modified.
+    @Published var stripGlobalFilterFromTitle: Bool
 
     // MARK: - Todoist
     @Published var todoistApiToken: String
@@ -344,7 +350,7 @@ class SyncConfiguration: ObservableObject, Codable {
         case folderPathMappings
         case enableDataviewFormat
         case excludedTags
-        case globalFilter
+        case globalFilter, stripGlobalFilterFromTitle
         case todoistApiToken
         case tickTickAccessToken, tickTickRefreshToken, tickTickTokenExpiry
         case asanaApiToken
@@ -417,6 +423,7 @@ class SyncConfiguration: ObservableObject, Codable {
         folderPathMappings: [FolderMapping] = [],
         enableDataviewFormat: Bool = false,
         globalFilter: String = "",
+        stripGlobalFilterFromTitle: Bool = false,
         todoistApiToken: String = "",
         tickTickAccessToken: String = "",
         tickTickRefreshToken: String = "",
@@ -486,6 +493,7 @@ class SyncConfiguration: ObservableObject, Codable {
         self.folderPathMappings = folderPathMappings
         self.enableDataviewFormat = enableDataviewFormat
         self.globalFilter = globalFilter
+        self.stripGlobalFilterFromTitle = stripGlobalFilterFromTitle
         self.todoistApiToken = todoistApiToken
         self.tickTickAccessToken = tickTickAccessToken
         self.tickTickRefreshToken = tickTickRefreshToken
@@ -569,6 +577,7 @@ class SyncConfiguration: ObservableObject, Codable {
         folderPathMappings = try container.decodeIfPresent([FolderMapping].self, forKey: .folderPathMappings) ?? []
         enableDataviewFormat = try container.decodeIfPresent(Bool.self, forKey: .enableDataviewFormat) ?? false
         globalFilter = try container.decodeIfPresent(String.self, forKey: .globalFilter) ?? ""
+        stripGlobalFilterFromTitle = try container.decodeIfPresent(Bool.self, forKey: .stripGlobalFilterFromTitle) ?? false
         todoistApiToken = try container.decodeIfPresent(String.self, forKey: .todoistApiToken) ?? ""
         tickTickAccessToken = try container.decodeIfPresent(String.self, forKey: .tickTickAccessToken) ?? ""
         tickTickRefreshToken = try container.decodeIfPresent(String.self, forKey: .tickTickRefreshToken) ?? ""
@@ -641,6 +650,7 @@ class SyncConfiguration: ObservableObject, Codable {
         try container.encode(folderPathMappings, forKey: .folderPathMappings)
         try container.encode(enableDataviewFormat, forKey: .enableDataviewFormat)
         try container.encode(globalFilter, forKey: .globalFilter)
+        try container.encode(stripGlobalFilterFromTitle, forKey: .stripGlobalFilterFromTitle)
         try container.encode(todoistApiToken, forKey: .todoistApiToken)
         try container.encode(tickTickAccessToken, forKey: .tickTickAccessToken)
         try container.encode(tickTickRefreshToken, forKey: .tickTickRefreshToken)
@@ -753,11 +763,51 @@ class SyncConfiguration: ObservableObject, Codable {
     ///     Used to try the most-specific hierarchical path first. Defaults to
     ///     empty for callers that don't have access — the old `tag`-only path
     ///     still works in that case. (#64)
+    /// The title to send to the destination, honouring `stripGlobalFilterFromTitle` (#89).
+    func titleForDestination(_ title: String) -> String {
+        guard stripGlobalFilterFromTitle else { return title }
+        return SyncConfiguration.removingGlobalFilter(title, filter: globalFilter)
+    }
+
+    /// Remove the global-filter text from a title and tidy the leftover whitespace.
+    ///
+    /// Also used when re-linking existing mappings: the sync identity includes the
+    /// title, so turning the option on changes every affected task's id. Comparing
+    /// filter-stripped titles lets those mappings migrate in place instead of the
+    /// engine deleting and recreating every reminder. (#89)
+    static func removingGlobalFilter(_ title: String, filter: String) -> String {
+        let needle = filter.trimmingCharacters(in: .whitespaces)
+        guard !needle.isEmpty else { return title }
+        var result = title.replacingOccurrences(of: needle, with: "")
+        while result.contains("  ") {
+            result = result.replacingOccurrences(of: "  ", with: " ")
+        }
+        return result.trimmingCharacters(in: .whitespaces)
+    }
+
     func resolveTargetList(tag: String?, filePath: String?, tags: [String] = []) -> String {
         let cleanTag = {
             guard let tag = tag else { return "" }
             return (tag.hasPrefix("#") || tag.hasPrefix("+")) ? String(tag.dropFirst()) : tag
         }()
+
+        // The global filter marks which tasks are *eligible* to sync — it is not a
+        // category. When it's a tag (e.g. `#task`), every synced task carries it,
+        // so letting it drive list routing sends everything to one list and
+        // overrides the user's path/folder mappings. Worse, an unmapped filter tag
+        // used to be auto-capitalised into a list name ("task" → "Task"), which
+        // silently skipped tasks when a synced-lists whitelist was configured (#88).
+        // Exclude the filter tag from every tag-derived routing step below. More
+        // specific sub-tags (`#task/work`) still route normally — only the bare
+        // filter tag is ignored.
+        let filterTagName: String = {
+            let raw = globalFilter.trimmingCharacters(in: .whitespaces)
+            guard raw.hasPrefix("#") || raw.hasPrefix("+") else { return "" }
+            return String(raw.dropFirst()).lowercased()
+        }()
+        func isFilterTag(_ candidate: String) -> Bool {
+            !filterTagName.isEmpty && candidate.lowercased() == filterTagName
+        }
 
         // 1a. Try most-specific hierarchical match across all of the task's
         // tags. For each tag we walk from the full path down to the root,
@@ -776,6 +826,15 @@ class SyncConfiguration: ObservableObject, Codable {
                 : fullTag
             var candidate = stripped
             while !candidate.isEmpty {
+                // Skip the bare global-filter tag; keep walking so a more
+                // specific sub-tag (e.g. `task/work`) can still match. (#88)
+                if isFilterTag(candidate) {
+                    if let slashIndex = candidate.lastIndex(of: "/") {
+                        candidate = String(candidate[..<slashIndex])
+                        continue
+                    }
+                    break
+                }
                 if let mapping = listMappings.first(where: {
                     let mappingTag = ($0.obsidianTag.hasPrefix("#") || $0.obsidianTag.hasPrefix("+"))
                         ? String($0.obsidianTag.dropFirst())
@@ -799,7 +858,7 @@ class SyncConfiguration: ObservableObject, Codable {
         // didn't pass `tags` (test fixtures, edge paths) AND the case where
         // the task's first-segment targetList differs from any entry in its
         // tags array (shouldn't happen in practice, but defensive).
-        if !cleanTag.isEmpty {
+        if !cleanTag.isEmpty && !isFilterTag(cleanTag) {
             if let mapping = listMappings.first(where: {
                 let mappingTag = ($0.obsidianTag.hasPrefix("#") || $0.obsidianTag.hasPrefix("+"))
                     ? String($0.obsidianTag.dropFirst())
@@ -834,8 +893,9 @@ class SyncConfiguration: ObservableObject, Codable {
             }
         }
 
-        // 3. Auto-capitalize tag
-        if !cleanTag.isEmpty {
+        // 3. Auto-capitalize tag — but never the global-filter tag, which would
+        //    invent a list ("task" → "Task") that the user never asked for (#88).
+        if !cleanTag.isEmpty && !isFilterTag(cleanTag) {
             return cleanTag.prefix(1).uppercased() + cleanTag.dropFirst()
         }
 
