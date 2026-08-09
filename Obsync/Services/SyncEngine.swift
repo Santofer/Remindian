@@ -155,6 +155,22 @@ class SyncEngine {
         return Calendar.current.date(byAdding: .day, value: -config.maxCompletedTaskAgeDays, to: Date()) ?? .distantPast
     }
 
+    /// Latest due date still in scope, or `nil` when no horizon is configured.
+    static func dueDateHorizon(for config: SyncConfiguration) -> Date? {
+        guard config.maxDueDateHorizonDays > 0 else { return nil }
+        let end = Calendar.current.date(byAdding: .day, value: config.maxDueDateHorizonDays, to: Date()) ?? .distantFuture
+        // Include the whole of the final day.
+        return Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: end) ?? end
+    }
+
+    /// True when a task is due beyond the configured horizon and should sit this
+    /// sync out. Tasks with **no** due date are always in scope — a horizon limits
+    /// how far ahead you look, it isn't a filter on undated work.
+    static func isBeyondDueHorizon(_ task: SyncTask, horizon: Date) -> Bool {
+        guard let due = task.dueDate else { return false }
+        return due > horizon
+    }
+
     /// True if a completed task is older than the supplied cutoff and should
     /// be excluded from sync. Uncompleted tasks and a nil cutoff (filter
     /// disabled) always return false. Falls back to `lastModified` when
@@ -240,6 +256,16 @@ class SyncEngine {
                 let filtered = beforeCount - obsidianTasks.count
                 if filtered > 0 {
                     debugLog("[SyncEngine] Filtered out \(filtered) completed tasks older than \(config.maxCompletedTaskAgeDays) days")
+                }
+            }
+
+            // Due-date horizon: only look N days ahead. Undated tasks always stay.
+            if let horizon = SyncEngine.dueDateHorizon(for: config) {
+                let beforeCount = obsidianTasks.count
+                obsidianTasks = obsidianTasks.filter { !SyncEngine.isBeyondDueHorizon($0, horizon: horizon) }
+                let filtered = beforeCount - obsidianTasks.count
+                if filtered > 0 {
+                    debugLog("[SyncEngine] Due horizon \(config.maxDueDateHorizonDays)d: held back \(filtered) far-future tasks")
                 }
             }
             // Filter tasks with excluded tags (#47)

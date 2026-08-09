@@ -778,6 +778,8 @@ struct ListMappingsView: View {
                 }
                 .foregroundColor(.secondary)
             }
+
+            RoutingTester()
         }
         .padding()
         } // ScrollView
@@ -1030,6 +1032,27 @@ struct AdvancedSettingsView: View {
                         .frame(width: 120)
                     }
                     .padding(.leading, 20)
+                }
+
+                HStack {
+                    Text("Only sync tasks due within:")
+                        .foregroundColor(.secondary)
+                    Picker("", selection: $syncManager.config.maxDueDateHorizonDays) {
+                        Text("No limit").tag(0)
+                        Text("7 days").tag(7)
+                        Text("14 days").tag(14)
+                        Text("30 days").tag(30)
+                        Text("90 days").tag(90)
+                        Text("1 year").tag(365)
+                    }
+                    .frame(width: 120)
+                }
+
+                if syncManager.config.maxDueDateHorizonDays > 0 {
+                    Text("Tasks with **no** due date are always synced — this only limits how far ahead you look. Tasks due beyond the horizon are removed from the destination and come back automatically as their due date approaches. Useful for very large vaults.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .padding(.leading, 20)
                 }
 
                 Toggle("Add task link to Reminders", isOn: $syncManager.config.addTaskLinkToReminders)
@@ -1403,4 +1426,82 @@ extension View {
 #Preview {
     SettingsView()
         .environmentObject(SyncManager.shared)
+}
+
+// MARK: - Routing Tester
+//
+// List routing is a four-level cascade, and when a task lands in an unexpected
+// list there is no way to see *which* rule won — that opacity is what made #88
+// hard to diagnose from the outside. Type a task's file path and tags here and
+// the app reports the resolved list and the rule responsible, using the exact
+// same code path as a real sync (`explainTargetList`), so it can never drift.
+struct RoutingTester: View {
+    @EnvironmentObject var syncManager: SyncManager
+    @State private var filePath: String = ""
+    @State private var tagsText: String = ""
+
+    private var parsedTags: [String] {
+        tagsText
+            .split(whereSeparator: { $0 == "," || $0 == " " })
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .map { $0.hasPrefix("#") || $0.hasPrefix("+") ? $0 : "#\($0)" }
+    }
+
+    /// First tag drives the legacy `targetList` convention, mirroring the parser.
+    private var primaryTag: String? {
+        guard let first = parsedTags.first else { return nil }
+        let stripped = String(first.dropFirst())
+        return stripped.contains("/") ? String(stripped.split(separator: "/")[0]) : stripped
+    }
+
+    private var result: (list: String, reason: String)? {
+        guard !filePath.isEmpty || !parsedTags.isEmpty else { return nil }
+        return syncManager.config.explainTargetList(
+            tag: primaryTag,
+            filePath: filePath.isEmpty ? nil : filePath,
+            tags: parsedTags
+        )
+    }
+
+    var body: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Which list would a task go to?")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+
+                Text("Try a task without syncing — this uses the same routing code as a real sync.")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+
+                HStack {
+                    TextField("File path (e.g. Projects/plan.md)", text: $filePath)
+                        .textFieldStyle(.roundedBorder)
+                    TextField("Tags (e.g. #task, #work)", text: $tagsText)
+                        .textFieldStyle(.roundedBorder)
+                }
+                .font(.system(size: 12))
+
+                if let result {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Image(systemName: "arrow.turn.down.right")
+                            .foregroundColor(.secondary)
+                        Text(result.list)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.accentColor)
+                        Text("— \(result.reason)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.top, 2)
+                } else {
+                    Text("Enter a file path and/or tags to see the result.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .padding(.top, 2)
+                }
+            }
+        }
+    }
 }

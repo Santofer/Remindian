@@ -95,6 +95,12 @@ class SyncConfiguration: ObservableObject, Codable {
     @Published var taskNotesApiUrl: String  // HTTP API base URL (e.g., http://localhost:8080)
     @Published var launchAtLogin: Bool
     @Published var maxCompletedTaskAgeDays: Int  // 0 = no limit, >0 = skip completed tasks older than N days
+    /// Only sync tasks due within this many days. `0` = no horizon (sync everything).
+    /// Tasks with **no** due date are always synced — a horizon is about how far
+    /// ahead you want to look, not a way to drop undated work. Note that raising
+    /// then lowering the horizon removes the now-out-of-range reminders, because
+    /// the destination mirrors whatever is in scope.
+    @Published var maxDueDateHorizonDays: Int
     @Published var syncedRemindersLists: [String]  // Empty = sync all lists, non-empty = only these lists
     @Published var excludedRemindersLists: [String]  // Lists to always exclude from sync (e.g., Groceries)
     @Published var addTaskLinkToReminders: Bool  // Add obsidian:// link to Reminders URL field
@@ -341,7 +347,7 @@ class SyncConfiguration: ObservableObject, Codable {
         case enableNotifications, globalHotKeyEnabled, globalHotKeyCode, globalHotKeyModifiers
         case taskSourceType, taskDestinationType, things3AuthToken, taskNotesFolder, taskNotesIntegrationMode
         case taskNotesMtnPath, taskNotesApiUrl
-        case launchAtLogin, maxCompletedTaskAgeDays, syncedRemindersLists, excludedRemindersLists, addTaskLinkToReminders, appendTaskLinkToNotes
+        case launchAtLogin, maxCompletedTaskAgeDays, maxDueDateHorizonDays, syncedRemindersLists, excludedRemindersLists, addTaskLinkToReminders, appendTaskLinkToNotes
         case syncStateLocation, genericMarkdown
         case taskNotesCompletedStatuses, taskNotesOpenStatus, taskNotesDoneStatus
         case obsidianTasksOpenMarkers, obsidianTasksCompletedMarkers, obsidianTasksIgnoredMarkers
@@ -403,6 +409,7 @@ class SyncConfiguration: ObservableObject, Codable {
         taskNotesApiUrl: String = "http://localhost:8080",
         launchAtLogin: Bool = false,
         maxCompletedTaskAgeDays: Int = 0,
+        maxDueDateHorizonDays: Int = 0,
         syncedRemindersLists: [String] = [],
         excludedRemindersLists: [String] = [],
         excludedTags: [String] = [],
@@ -473,6 +480,7 @@ class SyncConfiguration: ObservableObject, Codable {
         self.taskNotesApiUrl = taskNotesApiUrl
         self.launchAtLogin = launchAtLogin
         self.maxCompletedTaskAgeDays = maxCompletedTaskAgeDays
+        self.maxDueDateHorizonDays = maxDueDateHorizonDays
         self.syncedRemindersLists = syncedRemindersLists
         self.excludedRemindersLists = excludedRemindersLists
         self.excludedTags = excludedTags
@@ -549,6 +557,7 @@ class SyncConfiguration: ObservableObject, Codable {
         taskNotesApiUrl = try container.decodeIfPresent(String.self, forKey: .taskNotesApiUrl) ?? "http://localhost:8080"
         launchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
         maxCompletedTaskAgeDays = try container.decodeIfPresent(Int.self, forKey: .maxCompletedTaskAgeDays) ?? 0
+        maxDueDateHorizonDays = max(0, try container.decodeIfPresent(Int.self, forKey: .maxDueDateHorizonDays) ?? 0)
         syncedRemindersLists = try container.decodeIfPresent([String].self, forKey: .syncedRemindersLists) ?? []
         excludedRemindersLists = try container.decodeIfPresent([String].self, forKey: .excludedRemindersLists) ?? []
         excludedTags = try container.decodeIfPresent([String].self, forKey: .excludedTags) ?? []
@@ -630,6 +639,7 @@ class SyncConfiguration: ObservableObject, Codable {
         try container.encode(taskNotesApiUrl, forKey: .taskNotesApiUrl)
         try container.encode(launchAtLogin, forKey: .launchAtLogin)
         try container.encode(maxCompletedTaskAgeDays, forKey: .maxCompletedTaskAgeDays)
+        try container.encode(maxDueDateHorizonDays, forKey: .maxDueDateHorizonDays)
         try container.encode(syncedRemindersLists, forKey: .syncedRemindersLists)
         try container.encode(excludedRemindersLists, forKey: .excludedRemindersLists)
         try container.encode(excludedTags, forKey: .excludedTags)
@@ -785,7 +795,13 @@ class SyncConfiguration: ObservableObject, Codable {
         return result.trimmingCharacters(in: .whitespaces)
     }
 
-    func resolveTargetList(tag: String?, filePath: String?, tags: [String] = []) -> String {
+    /// The destination list for a task, plus a plain-English reason for the choice.
+    ///
+    /// Routing is a four-level cascade and it is genuinely hard to predict from the
+    /// outside — #88 was a bug precisely because the winning rule wasn't visible.
+    /// This is the single source of truth; `resolveTargetList` is a thin wrapper,
+    /// so the explanation can never drift from the actual decision.
+    func explainTargetList(tag: String?, filePath: String?, tags: [String] = []) -> (list: String, reason: String) {
         let cleanTag = {
             guard let tag = tag else { return "" }
             return (tag.hasPrefix("#") || tag.hasPrefix("+")) ? String(tag.dropFirst()) : tag
@@ -841,7 +857,7 @@ class SyncConfiguration: ObservableObject, Codable {
                         : $0.obsidianTag
                     return mappingTag.lowercased() == candidate.lowercased()
                 }) {
-                    return mapping.remindersList
+                    return (mapping.remindersList, "tag mapping “\(candidate)”")
                 }
                 // Trim the trailing `/segment`. If there's no `/`, exit so
                 // we don't infinite-loop on a single-segment tag (which is
@@ -865,7 +881,7 @@ class SyncConfiguration: ObservableObject, Codable {
                     : $0.obsidianTag
                 return mappingTag.lowercased() == cleanTag.lowercased()
             }) {
-                return mapping.remindersList
+                return (mapping.remindersList, "tag mapping “\(cleanTag)”")
             }
         }
 
@@ -875,7 +891,7 @@ class SyncConfiguration: ObservableObject, Codable {
                 filePath.lowercased() == $0.filePath.lowercased()
                 || filePath.lowercased().hasSuffix("/\($0.filePath.lowercased())")
             }) {
-                return mapping.remindersList
+                return (mapping.remindersList, "file mapping “\(mapping.filePath)”")
             }
         }
 
@@ -888,7 +904,7 @@ class SyncConfiguration: ObservableObject, Codable {
                 var folderPrefix = mapping.folderPath.lowercased()
                 if !folderPrefix.hasSuffix("/") { folderPrefix += "/" }
                 if normalizedPath.hasPrefix(folderPrefix) || normalizedPath.hasPrefix("/\(folderPrefix)") {
-                    return mapping.remindersList
+                    return (mapping.remindersList, "folder mapping “\(mapping.folderPath)”")
                 }
             }
         }
@@ -896,11 +912,20 @@ class SyncConfiguration: ObservableObject, Codable {
         // 3. Auto-capitalize tag — but never the global-filter tag, which would
         //    invent a list ("task" → "Task") that the user never asked for (#88).
         if !cleanTag.isEmpty && !isFilterTag(cleanTag) {
-            return cleanTag.prefix(1).uppercased() + cleanTag.dropFirst()
+            let auto = cleanTag.prefix(1).uppercased() + cleanTag.dropFirst()
+            return (auto, "tag “\(cleanTag)” with no mapping (name used as-is)")
         }
 
         // 4. Default list
-        return defaultList
+        let filterNote = isFilterTag(cleanTag) && !cleanTag.isEmpty
+            ? " (the global filter tag is not used for routing)"
+            : ""
+        return (defaultList, "default list\(filterNote)")
+    }
+
+    /// The destination list for a task. See `explainTargetList` for the reasoning.
+    func resolveTargetList(tag: String?, filePath: String?, tags: [String] = []) -> String {
+        explainTargetList(tag: tag, filePath: filePath, tags: tags).list
     }
 
     func obsidianTagForList(_ listName: String) -> String? {

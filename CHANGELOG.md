@@ -4,6 +4,17 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.27.0 (August 2026)
+
+See why a task lands where it does, and optionally limit how far ahead you sync.
+
+### New
+
+- **Routing tester — "which list would this go to?"** List routing is a four-level cascade (tag mapping → file mapping → folder mapping → tag name → default list), and until now there was no way to see *which* rule won when a task ended up somewhere unexpected. **Settings → Mappings** now has a tester: type a file path and/or tags and it shows the destination list **and the rule responsible** — e.g. *"Projects — folder mapping “Projects”"*, or *"Reminders — default list (the global filter tag is not used for routing)"*. It runs the exact same routing code as a real sync, so the explanation can't drift from the decision.
+- **Due-date horizon — only sync what's coming up.** **Settings → Advanced → "Only sync tasks due within"** limits syncing to tasks due in the next 7/14/30/90/365 days. Useful for very large vaults. Tasks with **no due date are always synced** — this limits how far ahead you look, it isn't a filter on undated work — and overdue tasks always stay in scope. Tasks beyond the horizon are removed from the destination and return automatically as their due date approaches. Off by default.
+
+---
+
 ## v5.26.0 (August 2026)
 
 Global-filter fixes for Obsidian Tasks, and Things 3 no longer steals focus.

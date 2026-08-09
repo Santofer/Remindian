@@ -109,6 +109,54 @@ final class GlobalFilterTests: XCTestCase {
         XCTAssertEqual(SyncConfiguration.removingGlobalFilter("Buy milk", filter: "   "), "Buy milk")
     }
 
+    // MARK: - Routing explainer: the reason must match the actual decision
+
+    func test_explain_reportsTheWinningRule() {
+        let c = config(filter: "#task")
+        c.folderPathMappings = [SyncConfiguration.FolderMapping(folderPath: "Projects", remindersList: "Projects")]
+        let explained = c.explainTargetList(tag: "task", filePath: "/Projects/plan.md", tags: ["#task"])
+        XCTAssertEqual(explained.list, "Projects")
+        XCTAssertTrue(explained.reason.contains("folder mapping"), "Reason should name the rule. Got: \(explained.reason)")
+        XCTAssertTrue(explained.reason.contains("Projects"))
+    }
+
+    func test_explain_namesTagMappingWhenItWins() {
+        let c = config(filter: "")
+        c.listMappings = [SyncConfiguration.ListMapping(obsidianTag: "work", remindersList: "Work")]
+        let explained = c.explainTargetList(tag: "work", filePath: nil, tags: ["#work"])
+        XCTAssertEqual(explained.list, "Work")
+        XCTAssertTrue(explained.reason.contains("tag mapping"), "Got: \(explained.reason)")
+    }
+
+    func test_explain_callsOutTheIgnoredFilterTag() {
+        // The #88 confusion, made visible: the user sees *why* the tag didn't route.
+        let c = config(filter: "#task")
+        let explained = c.explainTargetList(tag: "task", filePath: nil, tags: ["#task"])
+        XCTAssertEqual(explained.list, "Reminders")
+        XCTAssertTrue(explained.reason.lowercased().contains("global filter"),
+                      "Must explain that the filter tag isn't used for routing. Got: \(explained.reason)")
+    }
+
+    /// The explanation must never drift from the decision — same code path.
+    func test_explain_agreesWithResolveTargetList() {
+        let c = config(filter: "#task")
+        c.listMappings = [SyncConfiguration.ListMapping(obsidianTag: "work", remindersList: "Work")]
+        c.folderPathMappings = [SyncConfiguration.FolderMapping(folderPath: "Projects", remindersList: "Projects")]
+        let cases: [(String?, String?, [String])] = [
+            ("task", "/Projects/a.md", ["#task"]),
+            ("work", "/Projects/a.md", ["#task", "#work"]),
+            (nil, "/Elsewhere/b.md", []),
+            ("solo", nil, ["#solo"]),
+        ]
+        for (tag, path, tags) in cases {
+            XCTAssertEqual(
+                c.explainTargetList(tag: tag, filePath: path, tags: tags).list,
+                c.resolveTargetList(tag: tag, filePath: path, tags: tags),
+                "Explainer and resolver disagreed for tag=\(tag ?? "nil") path=\(path ?? "nil")"
+            )
+        }
+    }
+
     // MARK: - Round-trip: a new task must stay eligible on the next scan
 
     /// Without the filter on the appended line, the task we just wrote fails the
