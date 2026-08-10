@@ -133,6 +133,12 @@ struct MenuBarView: View {
             }
             .disabled(!syncManager.hasDestinationAccess)
 
+            RowButton(icon: "stethoscope", title: "Check Sync Health…") {
+                syncManager.healthReport = nil
+                openHealthWindow()
+            }
+            .help("Check your vault, filters, and destination for anything that would make a sync do something you didn't expect. Changes nothing.")
+
             if syncManager.lastSyncUndoCount > 0 {
                 RowButton(
                     icon: "arrow.uturn.backward",

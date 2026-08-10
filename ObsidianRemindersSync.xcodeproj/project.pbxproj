@@ -44,6 +44,8 @@
 		035 /* RecurrenceConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 137; };
 		SM0 /* SafeMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = SM1; };
 		SF0 /* SecureFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = SF1; };
+		SH0 /* SyncHealth.swift in Sources */ = {isa = PBXBuildFile; fileRef = SH1; };
+		SHV /* SyncHealthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SHW; };
 		036 /* GenericMarkdownParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 138; };
 		037 /* GenericMarkdownSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 139; };
 		038 /* ProfileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 140; };
@@ -89,6 +91,7 @@
 		DHT /* DueHorizonTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DHU; };
 		STT /* SubtaskHandlingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = STU; };
 		PST /* ProfileScheduleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PSU; };
+		HLT /* SyncHealthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = HLU; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -142,6 +145,8 @@
 		137 /* RecurrenceConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurrenceConverter.swift; sourceTree = "<group>"; };
 		SM1 /* SafeMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeMode.swift; sourceTree = "<group>"; };
 		SF1 /* SecureFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureFile.swift; sourceTree = "<group>"; };
+		SH1 /* SyncHealth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncHealth.swift; sourceTree = "<group>"; };
+		SHW /* SyncHealthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncHealthView.swift; sourceTree = "<group>"; };
 		138 /* GenericMarkdownParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenericMarkdownParser.swift; sourceTree = "<group>"; };
 		139 /* GenericMarkdownSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenericMarkdownSource.swift; sourceTree = "<group>"; };
 		140 /* ProfileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileStore.swift; sourceTree = "<group>"; };
@@ -188,6 +193,7 @@
 		DHU /* DueHorizonTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DueHorizonTests.swift; sourceTree = "<group>"; };
 		STU /* SubtaskHandlingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtaskHandlingTests.swift; sourceTree = "<group>"; };
 		PSU /* ProfileScheduleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileScheduleTests.swift; sourceTree = "<group>"; };
+		HLU /* SyncHealthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncHealthTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -250,6 +256,7 @@
 				146 /* PinnedTasksView.swift */,
 				119 /* SyncHistoryView.swift */,
 				141 /* PreviewChangesView.swift */,
+				SHW /* SyncHealthView.swift */,
 				122 /* OnboardingView.swift */,
 				123 /* AboutView.swift */,
 			);
@@ -289,6 +296,7 @@
 				137 /* RecurrenceConverter.swift */,
 				SM1 /* SafeMode.swift */,
 				SF1 /* SecureFile.swift */,
+				SH1 /* SyncHealth.swift */,
 				307 /* Sources */,
 				308 /* Destinations */,
 			);
@@ -368,6 +376,7 @@
 				DHU /* DueHorizonTests.swift */,
 				STU /* SubtaskHandlingTests.swift */,
 				PSU /* ProfileScheduleTests.swift */,
+				HLU /* SyncHealthTests.swift */,
 			);
 			path = RemindianTests;
 			sourceTree = "<group>";
@@ -499,6 +508,8 @@
 				035 /* RecurrenceConverter.swift in Sources */,
 				SM0 /* SafeMode.swift in Sources */,
 				SF0 /* SecureFile.swift in Sources */,
+				SH0 /* SyncHealth.swift in Sources */,
+				SHV /* SyncHealthView.swift in Sources */,
 				036 /* GenericMarkdownParser.swift in Sources */,
 				037 /* GenericMarkdownSource.swift in Sources */,
 				038 /* ProfileStore.swift in Sources */,
@@ -551,6 +562,7 @@
 				DHT /* DueHorizonTests.swift in Sources */,
 				STT /* SubtaskHandlingTests.swift in Sources */,
 				PST /* ProfileScheduleTests.swift in Sources */,
+				HLT /* SyncHealthTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -692,7 +704,7 @@
 				CODE_SIGN_ENTITLEMENTS = Obsync/Remindian.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 26;
+				CURRENT_PROJECT_VERSION = 27;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -704,7 +716,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 5.28.0;
+				MARKETING_VERSION = 5.29.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -720,7 +732,7 @@
 				CODE_SIGN_ENTITLEMENTS = Obsync/Remindian.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 26;
+				CURRENT_PROJECT_VERSION = 27;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -732,7 +744,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 5.28.0;
+				MARKETING_VERSION = 5.29.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -745,7 +757,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 26;
+				CURRENT_PROJECT_VERSION = 27;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.tests;
@@ -761,7 +773,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 26;
+				CURRENT_PROJECT_VERSION = 27;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.remindian.tests;

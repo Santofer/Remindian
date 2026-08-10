@@ -4,6 +4,23 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.29.0 (August 2026)
+
+A pre-flight check for your sync setup.
+
+### New
+
+- **Sync Health — "is this configured the way I think it is?"** New **Check Sync Health…** in the menu bar. It scans your vault, simulates a sync, and reports anything that would make the next sync do something you didn't expect — **without changing a thing**. It catches the failure mode that's hardest to notice, where the sync works exactly as configured but the configuration doesn't mean what you assumed:
+  - a folder in **Only scan** that doesn't exist (a typo — so nothing syncs),
+  - a **global filter that matches no tasks** (silently syncing nothing),
+  - **reminders about to be deleted**, with a sample list — escalating to critical when there are many, which is the signature of a scan that just narrowed,
+  - a vault folder that's moved or unmounted, missing destination access, unresolved conflicts, errors from the last sync,
+  - plus context: dry-run mode is on, no list mappings configured, or your inbox sitting outside the scanned folders (safe by design — Remindian always includes it — but worth knowing).
+
+  Each finding says what's wrong, why it matters, and what to do about it.
+
+---
+
 ## v5.28.0 (August 2026)
 
 Subtask handling, and each sync profile now keeps its own schedule.

@@ -57,6 +57,9 @@ class SyncManager: ObservableObject {
     /// applying. (Diff preview + Undo)
     @Published var isPreviewing = false
     @Published var previewResult: SyncEngine.SyncResult?
+    /// Latest pre-flight health report, and whether one is running. (sync health)
+    @Published var healthReport: SyncHealth.Report?
+    @Published var isCheckingHealth = false
     /// Number of vault files restorable via "Undo last sync" (0 = nothing to undo).
     @Published var lastSyncUndoCount: Int = 0
     /// Open tasks due today or earlier, for the menu-bar "Today" glance. (Today list)
@@ -704,6 +707,96 @@ class SyncManager: ObservableObject {
         previewResult = aggregate
         isPreviewing = false
         statusMessage = "Preview ready: \(aggregate.summary)"
+    }
+
+    // MARK: - Sync health (pre-flight check)
+
+    /// Gather the facts a health check needs, then hand them to the pure
+    /// evaluator. Runs a dry run under the hood, so it never writes anything.
+    func runHealthCheck() async {
+        guard !isSyncing, !isPreviewing, !isCheckingHealth else { return }
+        updateSourceAndDestination()
+        isCheckingHealth = true
+        statusMessage = "Checking sync health…"
+        defer {
+            isCheckingHealth = false
+        }
+
+        let cfg = config
+        let fileManager = FileManager.default
+        let vaultExists = !cfg.vaultPath.isEmpty && fileManager.fileExists(atPath: cfg.vaultPath)
+
+        // Whitelisted folders that aren't on disk — the usual cause of "nothing syncs".
+        var missingFolders: [String] = []
+        if vaultExists {
+            let vaultURL = URL(fileURLWithPath: cfg.vaultPath)
+            for entry in cfg.includedFolders {
+                let trimmed = entry.trimmingCharacters(in: CharacterSet(charactersIn: "/ ."))
+                guard !trimmed.isEmpty else { continue }   // "/" root sentinel
+                if !fileManager.fileExists(atPath: vaultURL.appendingPathComponent(trimmed).path) {
+                    missingFolders.append(entry)
+                }
+            }
+        }
+
+        // Scan once with the filter off to tell "no tasks at all" apart from
+        // "tasks exist but the filter excludes them" — different problems.
+        var scanned = 0
+        var eligible = 0
+        if vaultExists {
+            let unfiltered = cfg.deepCopy()
+            unfiltered.globalFilter = ""
+            scanned = (try? taskSource.scanTasks(config: unfiltered))?.count ?? 0
+            eligible = cfg.globalFilter.trimmingCharacters(in: .whitespaces).isEmpty
+                ? scanned
+                : ((try? taskSource.scanTasks(config: cfg))?.count ?? 0)
+        }
+
+        // A dry run tells us what a real sync would delete.
+        var pendingDeletions: [String] = []
+        for profile in profileStore.enabledProfiles {
+            let result = await previewSingleProfile(profile)
+            pendingDeletions += result.details
+                .filter { $0.action == .deleted }
+                .map(\.taskTitle)
+        }
+
+        // Is the inbox inside the whitelist? Remindian force-includes it either
+        // way (#81), but saying so explains an otherwise surprising scan scope.
+        let inbox = cfg.inboxFilePath.trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
+        let whitelist = cfg.includedFolders
+            .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "/ .")) }
+            .filter { !$0.isEmpty }
+        let rootOptedIn = cfg.includedFolders.contains {
+            let t = $0.trimmingCharacters(in: .whitespaces)
+            return t == "/" || t == "." || t == "./"
+        }
+        let inboxOutside = !whitelist.isEmpty && !inbox.isEmpty && !rootOptedIn
+            && !whitelist.contains { inbox == $0 || inbox.hasPrefix($0 + "/") }
+
+        let input = SyncHealth.Input(
+            vaultPathExists: vaultExists,
+            vaultPath: cfg.vaultPath,
+            missingWhitelistFolders: missingFolders,
+            scannedTaskCount: scanned,
+            eligibleTaskCount: eligible,
+            globalFilter: cfg.globalFilter,
+            pendingDeletionTitles: pendingDeletions,
+            unresolvedConflictCount: pendingConflicts.count,
+            lastSyncErrorCount: lastSyncResult?.errors.count ?? 0,
+            mappingCount: cfg.listMappings.count + cfg.filePathMappings.count + cfg.folderPathMappings.count,
+            destinationAuthorized: hasDestinationAccess,
+            destinationName: taskDestination.destinationName,
+            inboxRelativePath: cfg.inboxFilePath,
+            inboxOutsideWhitelist: inboxOutside,
+            isDryRun: cfg.dryRunMode
+        )
+
+        let report = SyncHealth.evaluate(input)
+        healthReport = report
+        statusMessage = report.isHealthy
+            ? "Sync health: no problems found"
+            : "Sync health: \(report.criticalCount) critical, \(report.warningCount) warning"
     }
 
     private func previewSingleProfile(_ profile: SyncProfile) async -> SyncEngine.SyncResult {
