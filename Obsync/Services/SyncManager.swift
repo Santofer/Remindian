@@ -1200,6 +1200,21 @@ class SyncManager: ObservableObject {
         config.listMappings.removeAll { $0.id == id }
     }
 
+    func addHeadingMapping(heading: String, remindersList: String) {
+        let normalized = SyncConfiguration.normalizedHeading(heading)
+        guard !normalized.isEmpty else { return }
+        config.headingMappings.append(.init(heading: normalized, remindersList: remindersList))
+    }
+
+    func removeHeadingMapping(id: UUID) {
+        config.headingMappings.removeAll { $0.id == id }
+    }
+
+    func removeHeadingMapping(at index: Int) {
+        guard config.headingMappings.indices.contains(index) else { return }
+        config.headingMappings.remove(at: index)
+    }
+
     func addFileMapping(filePath: String, remindersList: String) {
         let mapping = SyncConfiguration.FileMapping(
             filePath: filePath,

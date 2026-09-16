@@ -549,6 +549,8 @@ struct ListMappingsView: View {
     @EnvironmentObject var syncManager: SyncManager
     @State private var newTag = ""
     @State private var newList = ""
+    @State private var newHeading = ""
+    @State private var newHeadingList = ""
     @State private var newFilePath = ""
     @State private var newFileList = ""
     @State private var newFolderPath = ""
@@ -618,6 +620,65 @@ struct ListMappingsView: View {
                     newList = ""
                 }
                 .disabled(newTag.isEmpty || newList.isEmpty)
+            }
+
+            Divider()
+
+            // MARK: - Heading Mappings
+            Text("Heading → List Mappings")
+                .font(.headline)
+
+            Text("Tasks below a Markdown heading (for example, ## Work) sync to the mapped list. Tag mappings still take priority.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            List {
+                // Use the live index rather than an Identifiable snapshot here.
+                // List can retain a row while its backing @Published array is
+                // changing; removing the current index guarantees the button
+                // mutates the same row the user clicked.
+                ForEach(syncManager.config.headingMappings.indices, id: \.self) { index in
+                    let mapping = syncManager.config.headingMappings[index]
+                    HStack {
+                        Text("## \(SyncConfiguration.normalizedHeading(mapping.heading))")
+                            .fontWeight(.medium)
+                            .foregroundColor(.accentColor)
+                        Image(systemName: "arrow.right")
+                            .foregroundColor(.secondary)
+                        Text(mapping.remindersList)
+                        Spacer()
+                        Button(action: {
+                            syncManager.removeHeadingMapping(at: index)
+                        }) {
+                            Image(systemName: "trash").foregroundColor(.red)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            .frame(minHeight: 80)
+
+            HStack {
+                TextField("Heading (e.g., Work or ## Work)", text: $newHeading)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(minWidth: 120, maxWidth: 250)
+                Image(systemName: "arrow.right").foregroundColor(.secondary)
+                Picker("List", selection: $newHeadingList) {
+                    Text("Select list...").tag("")
+                    ForEach(syncManager.availableLists, id: \.self) { list in
+                        Text(list).tag(list)
+                    }
+                }
+                .frame(minWidth: 120, maxWidth: 200)
+                Button("Add") {
+                    let heading = SyncConfiguration.normalizedHeading(newHeading)
+                    guard !heading.isEmpty && !newHeadingList.isEmpty else { return }
+                    syncManager.addHeadingMapping(heading: heading, remindersList: newHeadingList)
+                    newHeading = ""
+                    newHeadingList = ""
+                }
+                .disabled(SyncConfiguration.normalizedHeading(newHeading).isEmpty || newHeadingList.isEmpty)
             }
 
             Divider()

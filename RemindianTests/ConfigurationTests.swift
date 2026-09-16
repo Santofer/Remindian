@@ -164,6 +164,52 @@ final class ConfigurationTests: XCTestCase {
         XCTAssertEqual(config.remindersListForTag("unknown"), "Unknown")  // Auto-capitalize
     }
 
+    func testHeadingMappingRoutesTaskBeforeFileAndFolderMappings() {
+        let config = SyncConfiguration()
+        config.headingMappings = [.init(heading: "Work", remindersList: "Work Tasks")]
+        config.filePathMappings = [.init(filePath: "Tasks.md", remindersList: "File Tasks")]
+        config.folderPathMappings = [.init(folderPath: "Projects", remindersList: "Project Tasks")]
+
+        let result = config.explainTargetList(
+            tag: nil,
+            filePath: "/Projects/Tasks.md",
+            heading: "work"
+        )
+
+        XCTAssertEqual(result.list, "Work Tasks")
+        XCTAssertTrue(result.reason.contains("heading mapping"))
+    }
+
+    func testExplicitTagMappingTakesPriorityOverHeadingMapping() {
+        let config = SyncConfiguration()
+        config.listMappings = [.init(obsidianTag: "urgent", remindersList: "Urgent")]
+        config.headingMappings = [.init(heading: "Work", remindersList: "Work Tasks")]
+
+        XCTAssertEqual(
+            config.resolveTargetList(tag: "urgent", filePath: "/Tasks.md", tags: ["#urgent"], heading: "Work"),
+            "Urgent"
+        )
+    }
+
+    func testHeadingMappingsRoundTripThroughConfigurationEncoding() throws {
+        let config = SyncConfiguration()
+        config.headingMappings = [.init(heading: "Personal", remindersList: "Home")]
+
+        let decoded = try JSONDecoder().decode(SyncConfiguration.self, from: JSONEncoder().encode(config))
+        XCTAssertEqual(decoded.headingMappings, config.headingMappings)
+    }
+
+    func testHeadingMappingAcceptsMarkdownHeadingSyntax() {
+        let config = SyncConfiguration()
+        config.headingMappings = [.init(heading: "## Work", remindersList: "Work Tasks")]
+
+        XCTAssertEqual(
+            config.resolveTargetList(tag: nil, filePath: "/Tasks.md", heading: "Work"),
+            "Work Tasks"
+        )
+        XCTAssertEqual(SyncConfiguration.normalizedHeading("## Work ##"), "Work")
+    }
+
     // MARK: - Source/Destination Types
 
     func testSourceTypeDisplayNames() {

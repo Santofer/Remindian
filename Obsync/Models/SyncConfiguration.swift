@@ -53,6 +53,7 @@ class SyncConfiguration: ObservableObject, Codable {
     @Published var enableAutoSync: Bool
     @Published var syncOnLaunch: Bool
     @Published var listMappings: [ListMapping]
+    @Published var headingMappings: [HeadingMapping]
     @Published var defaultList: String
     @Published var taskFilesPattern: String
     @Published var excludedFolders: [String]
@@ -315,6 +316,22 @@ class SyncConfiguration: ObservableObject, Codable {
         var remindersList: String
     }
 
+    /// Route tasks under a Markdown heading (for example, `## Work`) to a list.
+    struct HeadingMapping: Codable, Identifiable, Equatable {
+        var id = UUID()
+        var heading: String
+        var remindersList: String
+    }
+
+    /// Normalize either a heading's displayed text (`Work`) or Markdown form
+    /// (`## Work`) for comparisons and storage.
+    static func normalizedHeading(_ value: String) -> String {
+        var result = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        result = result.replacingOccurrences(of: "^#{1,6}\\s+", with: "", options: .regularExpression)
+        result = result.replacingOccurrences(of: "\\s+#+\\s*$", with: "", options: .regularExpression)
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     struct FileMapping: Codable, Identifiable, Equatable {
         var id = UUID()
         var filePath: String        // Relative path within vault (e.g., "Projects/Work.md")
@@ -367,7 +384,7 @@ class SyncConfiguration: ObservableObject, Codable {
 
     enum CodingKeys: String, CodingKey {
         case vaultPath, syncIntervalMinutes, enableAutoSync, syncOnLaunch
-        case listMappings, defaultList, taskFilesPattern, excludedFolders, includedFolders
+        case listMappings, headingMappings, defaultList, taskFilesPattern, excludedFolders, includedFolders
         case syncCompletedTasks, deleteCompletedAfterDays, conflictResolution
         case includeDueTime, addReminderAlarm, reminderAlarmHour, hideDockIcon, forceDarkIcon, showMenuBarTaskCount, dryRunMode, enableCompletionWriteback
         case enableDueDateWriteback, enableStartDateWriteback, enablePriorityWriteback
@@ -402,6 +419,7 @@ class SyncConfiguration: ObservableObject, Codable {
         enableAutoSync: Bool = false,
         syncOnLaunch: Bool = true,
         listMappings: [ListMapping] = [],
+        headingMappings: [HeadingMapping] = [],
         defaultList: String = "Reminders",
         taskFilesPattern: String = "**/*.md",
         excludedFolders: [String] = [".obsidian", ".git", ".trash"],
@@ -474,6 +492,7 @@ class SyncConfiguration: ObservableObject, Codable {
         self.enableAutoSync = enableAutoSync
         self.syncOnLaunch = syncOnLaunch
         self.listMappings = listMappings
+        self.headingMappings = headingMappings
         self.defaultList = defaultList
         self.taskFilesPattern = taskFilesPattern
         self.excludedFolders = excludedFolders
@@ -552,6 +571,7 @@ class SyncConfiguration: ObservableObject, Codable {
         enableAutoSync = try container.decode(Bool.self, forKey: .enableAutoSync)
         syncOnLaunch = try container.decode(Bool.self, forKey: .syncOnLaunch)
         listMappings = try container.decode([ListMapping].self, forKey: .listMappings)
+        headingMappings = try container.decodeIfPresent([HeadingMapping].self, forKey: .headingMappings) ?? []
         defaultList = try container.decode(String.self, forKey: .defaultList)
         taskFilesPattern = try container.decode(String.self, forKey: .taskFilesPattern)
         excludedFolders = try container.decode([String].self, forKey: .excludedFolders)
@@ -635,6 +655,7 @@ class SyncConfiguration: ObservableObject, Codable {
         try container.encode(enableAutoSync, forKey: .enableAutoSync)
         try container.encode(syncOnLaunch, forKey: .syncOnLaunch)
         try container.encode(listMappings, forKey: .listMappings)
+        try container.encode(headingMappings, forKey: .headingMappings)
         try container.encode(defaultList, forKey: .defaultList)
         try container.encode(taskFilesPattern, forKey: .taskFilesPattern)
         try container.encode(excludedFolders, forKey: .excludedFolders)
@@ -794,10 +815,11 @@ class SyncConfiguration: ObservableObject, Codable {
     /// 1. Explicit tag mapping (ListMapping) — tries the full hierarchical path
     ///    first (e.g. `task/work`), then progressively trims back toward the
     ///    root segment so a config for `task` still catches `#task/work` (#64).
-    /// 2. File path mapping (FileMapping, #37)
-    /// 3. Folder path mapping (FolderMapping, #40)
-    /// 4. Auto-capitalize tag name
-    /// 5. Default list
+    /// 2. Heading mapping (HeadingMapping)
+    /// 3. File path mapping (FileMapping, #37)
+    /// 4. Folder path mapping (FolderMapping, #40)
+    /// 5. Auto-capitalize tag name
+    /// 6. Default list
     ///
     /// - Parameters:
     ///   - tag: The first-segment tag from a task (e.g. `task` for `#task/work`).
@@ -836,7 +858,7 @@ class SyncConfiguration: ObservableObject, Codable {
     /// outside — #88 was a bug precisely because the winning rule wasn't visible.
     /// This is the single source of truth; `resolveTargetList` is a thin wrapper,
     /// so the explanation can never drift from the actual decision.
-    func explainTargetList(tag: String?, filePath: String?, tags: [String] = []) -> (list: String, reason: String) {
+    func explainTargetList(tag: String?, filePath: String?, tags: [String] = [], heading: String? = nil) -> (list: String, reason: String) {
         let cleanTag = {
             guard let tag = tag else { return "" }
             return (tag.hasPrefix("#") || tag.hasPrefix("+")) ? String(tag.dropFirst()) : tag
@@ -920,7 +942,20 @@ class SyncConfiguration: ObservableObject, Codable {
             }
         }
 
-        // 2. Check file path mappings (#37)
+        // 2. A task inherits the nearest preceding Markdown heading. Heading
+        // mappings are deliberately below explicit tag mappings, so a task can
+        // still opt out of its section with a tag, but above broad file/folder
+        // rules so headings can split one todo file into several lists.
+        let normalizedHeading = heading.map { Self.normalizedHeading($0) } ?? ""
+        if !normalizedHeading.isEmpty,
+           let mapping = headingMappings.first(where: {
+               Self.normalizedHeading($0.heading)
+                   .caseInsensitiveCompare(normalizedHeading) == .orderedSame
+           }) {
+            return (mapping.remindersList, "heading mapping “\(normalizedHeading)”")
+        }
+
+        // 3. Check file path mappings (#37)
         if let filePath = filePath, !filePath.isEmpty {
             if let mapping = filePathMappings.first(where: {
                 filePath.lowercased() == $0.filePath.lowercased()
@@ -930,7 +965,7 @@ class SyncConfiguration: ObservableObject, Codable {
             }
         }
 
-        // 2b. Check folder path mappings (#40) — most specific folder wins
+        // 4. Check folder path mappings (#40) — most specific folder wins
         if let filePath = filePath, !filePath.isEmpty {
             let normalizedPath = filePath.lowercased()
             // Sort by path length descending so more specific folders match first
@@ -944,14 +979,14 @@ class SyncConfiguration: ObservableObject, Codable {
             }
         }
 
-        // 3. Auto-capitalize tag — but never the global-filter tag, which would
+        // 5. Auto-capitalize tag — but never the global-filter tag, which would
         //    invent a list ("task" → "Task") that the user never asked for (#88).
         if !cleanTag.isEmpty && !isFilterTag(cleanTag) {
             let auto = cleanTag.prefix(1).uppercased() + cleanTag.dropFirst()
             return (auto, "tag “\(cleanTag)” with no mapping (name used as-is)")
         }
 
-        // 4. Default list
+        // 6. Default list
         let filterNote = isFilterTag(cleanTag) && !cleanTag.isEmpty
             ? " (the global filter tag is not used for routing)"
             : ""
@@ -959,8 +994,8 @@ class SyncConfiguration: ObservableObject, Codable {
     }
 
     /// The destination list for a task. See `explainTargetList` for the reasoning.
-    func resolveTargetList(tag: String?, filePath: String?, tags: [String] = []) -> String {
-        explainTargetList(tag: tag, filePath: filePath, tags: tags).list
+    func resolveTargetList(tag: String?, filePath: String?, tags: [String] = [], heading: String? = nil) -> String {
+        explainTargetList(tag: tag, filePath: filePath, tags: tags, heading: heading).list
     }
 
     func obsidianTagForList(_ listName: String) -> String? {
