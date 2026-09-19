@@ -105,6 +105,12 @@ class SyncConfiguration: ObservableObject, Codable {
     /// (each becomes its own reminder). See `SubtaskHandling`.
     @Published var subtaskHandling: SubtaskHandling
 
+    /// Refuse a sync that would delete more than this many destination items at
+    /// once. `0` = no limit. Deleting is the only irreversible thing a sync does,
+    /// and a large batch almost always means the scan narrowed (moved vault, new
+    /// filter) rather than that the user really deleted that many tasks.
+    @Published var maxDeletionsPerSync: Int
+
     /// Only sync tasks due within this many days. `0` = no horizon (sync everything).
     /// Tasks with **no** due date are always synced — a horizon is about how far
     /// ahead you want to look, not a way to drop undated work. Note that raising
@@ -397,7 +403,7 @@ class SyncConfiguration: ObservableObject, Codable {
         case enableNotifications, globalHotKeyEnabled, globalHotKeyCode, globalHotKeyModifiers
         case taskSourceType, taskDestinationType, things3AuthToken, taskNotesFolder, taskNotesIntegrationMode
         case taskNotesMtnPath, taskNotesApiUrl
-        case launchAtLogin, maxCompletedTaskAgeDays, maxDueDateHorizonDays, subtaskHandling, syncedRemindersLists, excludedRemindersLists, addTaskLinkToReminders, appendTaskLinkToNotes
+        case launchAtLogin, maxCompletedTaskAgeDays, maxDueDateHorizonDays, subtaskHandling, maxDeletionsPerSync, syncedRemindersLists, excludedRemindersLists, addTaskLinkToReminders, appendTaskLinkToNotes
         case syncStateLocation, genericMarkdown
         case taskNotesCompletedStatuses, taskNotesOpenStatus, taskNotesDoneStatus
         case obsidianTasksOpenMarkers, obsidianTasksCompletedMarkers, obsidianTasksIgnoredMarkers
@@ -462,6 +468,7 @@ class SyncConfiguration: ObservableObject, Codable {
         launchAtLogin: Bool = false,
         maxCompletedTaskAgeDays: Int = 0,
         maxDueDateHorizonDays: Int = 0,
+        maxDeletionsPerSync: Int = 25,
         subtaskHandling: SubtaskHandling = .separate,
         syncedRemindersLists: [String] = [],
         excludedRemindersLists: [String] = [],
@@ -536,6 +543,7 @@ class SyncConfiguration: ObservableObject, Codable {
         self.launchAtLogin = launchAtLogin
         self.maxCompletedTaskAgeDays = maxCompletedTaskAgeDays
         self.maxDueDateHorizonDays = maxDueDateHorizonDays
+        self.maxDeletionsPerSync = maxDeletionsPerSync
         self.subtaskHandling = subtaskHandling
         self.syncedRemindersLists = syncedRemindersLists
         self.excludedRemindersLists = excludedRemindersLists
@@ -616,6 +624,7 @@ class SyncConfiguration: ObservableObject, Codable {
         launchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
         maxCompletedTaskAgeDays = try container.decodeIfPresent(Int.self, forKey: .maxCompletedTaskAgeDays) ?? 0
         maxDueDateHorizonDays = max(0, try container.decodeIfPresent(Int.self, forKey: .maxDueDateHorizonDays) ?? 0)
+        maxDeletionsPerSync = max(0, try container.decodeIfPresent(Int.self, forKey: .maxDeletionsPerSync) ?? 25)
         subtaskHandling = try container.decodeIfPresent(SubtaskHandling.self, forKey: .subtaskHandling) ?? .separate
         syncedRemindersLists = try container.decodeIfPresent([String].self, forKey: .syncedRemindersLists) ?? []
         excludedRemindersLists = try container.decodeIfPresent([String].self, forKey: .excludedRemindersLists) ?? []
@@ -701,6 +710,7 @@ class SyncConfiguration: ObservableObject, Codable {
         try container.encode(launchAtLogin, forKey: .launchAtLogin)
         try container.encode(maxCompletedTaskAgeDays, forKey: .maxCompletedTaskAgeDays)
         try container.encode(maxDueDateHorizonDays, forKey: .maxDueDateHorizonDays)
+        try container.encode(maxDeletionsPerSync, forKey: .maxDeletionsPerSync)
         try container.encode(subtaskHandling, forKey: .subtaskHandling)
         try container.encode(syncedRemindersLists, forKey: .syncedRemindersLists)
         try container.encode(excludedRemindersLists, forKey: .excludedRemindersLists)

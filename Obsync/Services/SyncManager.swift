@@ -1449,6 +1449,59 @@ class SyncManager: ObservableObject {
         return removed
     }
 
+    // MARK: - Vault cleanup (duplicate task lines)
+
+    /// Duplicate task lines in the vault, as "file — title" strings for preview.
+    /// Scans the same files a sync would, so it can't report lines the sync
+    /// doesn't consider tasks.
+    func previewVaultDuplicates() async -> [String] {
+        await vaultDuplicates(apply: false).summaries
+    }
+
+    /// Remove duplicate task lines, keeping the first copy of each. Every touched
+    /// file is backed up first — this edits the user's notes, so it must be undoable.
+    @discardableResult
+    func removeVaultDuplicates() async -> Int {
+        let result = await vaultDuplicates(apply: true)
+        statusMessage = "Removed \(result.count) duplicate line\(result.count == 1 ? "" : "s") from the vault"
+        debugLog("[SyncManager] Vault cleanup removed \(result.count) duplicate task lines")
+        return result.count
+    }
+
+    private func vaultDuplicates(apply: Bool) async -> (count: Int, summaries: [String]) {
+        let vaultPath = config.vaultPath
+        guard !vaultPath.isEmpty,
+              FileManager.default.fileExists(atPath: vaultPath) else { return (0, []) }
+
+        let vaultURL = URL(fileURLWithPath: vaultPath)
+        guard let enumerator = FileManager.default.enumerator(
+            at: vaultURL, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+        ) else { return (0, []) }
+
+        var summaries: [String] = []
+        var removed = 0
+
+        for case let fileURL as URL in enumerator {
+            guard fileURL.pathExtension.lowercased() == "md",
+                  let content = try? String(contentsOf: fileURL, encoding: .utf8) else { continue }
+
+            let duplicates = VaultCleanup.duplicateTaskLines(in: content)
+            guard !duplicates.isEmpty else { continue }
+
+            let name = fileURL.lastPathComponent
+            summaries += duplicates.map { "\(name): \($0.title)" }
+
+            if apply {
+                _ = try? FileBackupService.shared.backupFile(at: fileURL)
+                let cleaned = VaultCleanup.removingLines(duplicates.map(\.lineIndex), from: content)
+                if (try? cleaned.write(to: fileURL, atomically: true, encoding: .utf8)) != nil {
+                    removed += duplicates.count
+                }
+            }
+        }
+        return (apply ? removed : summaries.count, summaries)
+    }
+
     // MARK: - Error Handling
 
     private func showErrorMessage(_ message: String) {

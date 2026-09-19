@@ -4,6 +4,22 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.32.0 (September 2026)
+
+Stops recurring duplicates at the source, and refuses to delete your reminders en masse.
+
+### New
+
+- **A sync will no longer delete more than 25 items at once.** Deleting is the only irreversible thing a sync does, and a large batch almost always means the *scan narrowed* — a moved vault, a new folder or tag filter, a typo'd folder name — rather than that you really deleted that many tasks. Above the limit the whole batch is refused and reported; **nothing is removed**. Adjustable (or disabled) in **Settings → Advanced**.
+- **Clean up duplicate task lines in your vault.** **Settings → Advanced → "Remove Duplicate Task Lines in Vault…"** finds repeated tasks inside your notes — the debris an older sync loop could append to your inbox, one copy per recurrence — and keeps the first copy of each. Matching mirrors the reminder cleanup: same title and completion state count as duplicates even when their dates differ. Every file is backed up before editing.
+- **Sync Health can now fix duplicates, not just report them.** When the health check finds duplicate reminders it offers a **Clean Up Duplicates** button directly.
+
+### Bug fixes
+
+- **Completed occurrences of recurring reminders no longer land in your inbox.** Apple Reminders gives every occurrence of a natively-recurring reminder a fresh identifier, so each month's completed copy looked like a brand-new reminder and got appended to the vault — one line per occurrence, indefinitely. A real vault accumulated **140 such lines and 67 duplicate reminders** this way. A completed occurrence of a recurring reminder is history, not new work, and is now skipped structurally rather than relying on a title match.
+
+---
+
 ## v5.31.0 (September 2026)
 
 Two new ways to choose what syncs.

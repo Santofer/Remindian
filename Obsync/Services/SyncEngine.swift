@@ -524,6 +524,7 @@ class SyncEngine {
             // several tasks live in the same file (and on iCloud vaults).
             var filesWrittenByEngine: Set<String> = Set()
 
+            var pendingDeletions: [(obsidianId: String, remindersId: String, title: String)] = []
             for mapping in syncState.mappings {
                 let obsidianTask = obsidianMap[mapping.obsidianId]
                 let remindersTask = remindersMap[mapping.remindersId]
@@ -1033,28 +1034,15 @@ class SyncEngine {
                                 syncState.removeMapping(obsidianId: mapping.obsidianId)
                             }
                         } else {
-                            // Truly deleted from Obsidian — delete from Reminders too
-                            do {
-                                if !config.dryRunMode {
-                                    try await destination.deleteTask(withId: mapping.remindersId)
-                                    syncState.removeMapping(obsidianId: mapping.obsidianId)
-                                }
-                                result.deleted += 1
-                                result.details.append(SyncLogDetail(
-                                    action: .deleted,
-                                    taskTitle: rTask.title,
-                                    filePath: nil,
-                                    errorMessage: nil
-                                ))
-                            } catch {
-                                result.errors.append(error)
-                                result.details.append(SyncLogDetail(
-                                    action: .error,
-                                    taskTitle: "Delete failed",
-                                    filePath: nil,
-                                    errorMessage: error.localizedDescription
-                                ))
-                            }
+                            // Truly deleted from Obsidian — queue the destination
+                            // delete. Deferred rather than done here so the whole
+                            // batch can be weighed against the safety threshold
+                            // below: a scan that just narrowed (a moved vault, a new
+                            // folder filter) can otherwise wipe out hundreds of
+                            // reminders one by one before anyone notices.
+                            pendingDeletions.append((obsidianId: mapping.obsidianId,
+                                                     remindersId: mapping.remindersId,
+                                                     title: rTask.title))
                         }
                     }
                     remindersMap.removeValue(forKey: mapping.remindersId)
@@ -1063,6 +1051,53 @@ class SyncEngine {
                     // Both deleted - clean up mapping
                     if !config.dryRunMode {
                         syncState.removeMapping(obsidianId: mapping.obsidianId)
+                    }
+                }
+            }
+
+            // Mass-deletion guard. Deleting reminders is the one irreversible
+            // thing a sync does, and every destructive incident this project has
+            // had looked the same from here: the scan narrowed for a reason nobody
+            // noticed, so a pile of still-wanted tasks looked deleted at once.
+            // Above the threshold we refuse the whole batch and report it, rather
+            // than destroying data and explaining afterwards.
+            let deletionLimit = config.maxDeletionsPerSync
+            if deletionLimit > 0 && pendingDeletions.count > deletionLimit {
+                let sample = pendingDeletions.prefix(5).map { $0.title }.joined(separator: ", ")
+                let message = "Refused to delete \(pendingDeletions.count) items in one sync (limit \(deletionLimit)). "
+                    + "This usually means the scan narrowed — a moved vault, a new folder or tag filter — rather than that you deleted \(pendingDeletions.count) tasks. "
+                    + "Nothing was removed. Examples: \(sample). "
+                    + "Check Sync Health, or raise the limit in Settings → Advanced if this is expected."
+                debugLog("[SyncEngine] \(message)")
+                result.errors.append(SyncError.massDeletionBlocked(count: pendingDeletions.count, limit: deletionLimit))
+                result.details.append(SyncLogDetail(
+                    action: .error,
+                    taskTitle: "Mass deletion blocked",
+                    filePath: nil,
+                    errorMessage: message
+                ))
+            } else {
+                for deletion in pendingDeletions {
+                    do {
+                        if !config.dryRunMode {
+                            try await destination.deleteTask(withId: deletion.remindersId)
+                            syncState.removeMapping(obsidianId: deletion.obsidianId)
+                        }
+                        result.deleted += 1
+                        result.details.append(SyncLogDetail(
+                            action: .deleted,
+                            taskTitle: deletion.title,
+                            filePath: nil,
+                            errorMessage: nil
+                        ))
+                    } catch {
+                        result.errors.append(error)
+                        result.details.append(SyncLogDetail(
+                            action: .error,
+                            taskTitle: "Delete failed",
+                            filePath: nil,
+                            errorMessage: error.localizedDescription
+                        ))
                     }
                 }
             }
@@ -1263,6 +1298,19 @@ class SyncEngine {
                 for (remindersId, rTask) in remindersMap {
                     // Skip completed tasks unless configured to sync them
                     if rTask.isCompleted && !config.syncCompletedTasks { continue }
+
+                    // A *completed* occurrence of a natively-recurring reminder is
+                    // history, not new work. Apple gives every occurrence a fresh
+                    // identifier, so without this each month's completed copy looks
+                    // like a brand-new reminder and gets appended to the inbox — one
+                    // line per occurrence, forever. A real vault accumulated 140 such
+                    // lines (and 67 duplicate reminders) this way. The title-dedup
+                    // below catches it only while a matching task still exists in the
+                    // vault; this closes it structurally.
+                    if rTask.isCompleted, rTask.recurrenceRule != nil {
+                        debugLog("[SyncEngine] Skipping inbox writeback for completed recurring occurrence \"\(rTask.title)\"")
+                        continue
+                    }
 
                     // CRITICAL: skip reminders whose title already exists anywhere in
                     // the vault. Without this, Apple Reminders' recurring-task history
@@ -1554,6 +1602,7 @@ extension DateFormatter {
 enum SyncError: LocalizedError {
     case noVaultConfigured
     case missingSourceInfo
+    case massDeletionBlocked(count: Int, limit: Int)
     case conflictNotResolved
     case syncAlreadyInProgress
     case syncCancelled
@@ -1568,6 +1617,8 @@ enum SyncError: LocalizedError {
             return "No vault path configured"
         case .missingSourceInfo:
             return "Task is missing source information required for sync"
+        case .massDeletionBlocked(let count, let limit):
+            return "Refused to delete \(count) items in one sync (limit \(limit)). Nothing was removed — this usually means the scan narrowed rather than that you deleted that many tasks."
         case .conflictNotResolved:
             return "Conflict must be resolved before continuing"
         case .syncAlreadyInProgress:

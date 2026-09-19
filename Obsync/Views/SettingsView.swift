@@ -1078,6 +1078,9 @@ struct AdvancedSettingsView: View {
     @State private var showDuplicateConfirm = false
     /// Widen the match so recurring copies (same title, different dates) are seen.
     @State private var dedupeIgnoreDueDate = false
+    @State private var isCheckingVault = false
+    @State private var vaultDuplicates: [String] = []
+    @State private var showVaultConfirm = false
 
     var body: some View {
         ScrollView {
@@ -1101,6 +1104,24 @@ struct AdvancedSettingsView: View {
                     }
                     .padding(.leading, 20)
                 }
+
+                HStack {
+                    Text("Refuse a sync deleting more than:")
+                        .foregroundColor(.secondary)
+                    Picker("", selection: $syncManager.config.maxDeletionsPerSync) {
+                        Text("No limit").tag(0)
+                        Text("10 items").tag(10)
+                        Text("25 items").tag(25)
+                        Text("50 items").tag(50)
+                        Text("100 items").tag(100)
+                    }
+                    .frame(width: 130)
+                }
+
+                Text("Deleting is the only irreversible thing a sync does. A large batch almost always means the scan narrowed — a moved vault, a new folder or tag filter — rather than that you really deleted that many tasks. Above the limit the whole batch is refused and reported; nothing is removed.")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .padding(.leading, 20)
 
                 HStack {
                     Text("Indented subtasks:")
@@ -1431,6 +1452,22 @@ struct AdvancedSettingsView: View {
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
+                Divider()
+                HStack {
+                    Button(isCheckingVault ? "Checking…" : "Remove Duplicate Task Lines in Vault…") {
+                        Task {
+                            isCheckingVault = true
+                            vaultDuplicates = await syncManager.previewVaultDuplicates()
+                            isCheckingVault = false
+                            showVaultConfirm = true
+                        }
+                    }
+                    .disabled(isCheckingVault)
+                    if isCheckingVault { ProgressView().scaleEffect(0.6) }
+                }
+                Text("Finds repeated task lines inside your notes — the debris an older sync loop could append to your inbox, one copy per recurrence. Keeps the first copy of each and backs up every file it touches, so it's undoable from the backups folder.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             } header: {
                 Text("Troubleshooting")
             }
@@ -1470,6 +1507,24 @@ struct AdvancedSettingsView: View {
             }
         } message: {
             Text("This will clear all sync mappings, history, and logs. The next sync will treat all tasks as new and re-create them in Reminders.")
+        }
+        .alert("Remove duplicate task lines?", isPresented: $showVaultConfirm) {
+            if !vaultDuplicates.isEmpty {
+                Button("Cancel", role: .cancel) { }
+                Button("Remove \(vaultDuplicates.count)", role: .destructive) {
+                    Task { await syncManager.removeVaultDuplicates() }
+                }
+            } else {
+                Button("OK", role: .cancel) { }
+            }
+        } message: {
+            if vaultDuplicates.isEmpty {
+                Text("No duplicate task lines found in your vault.")
+            } else {
+                let sample = vaultDuplicates.prefix(6).map { "• \($0)" }.joined(separator: "\n")
+                let more = vaultDuplicates.count > 6 ? "\n…and \(vaultDuplicates.count - 6) more." : ""
+                Text("Found \(vaultDuplicates.count) repeated task line\(vaultDuplicates.count == 1 ? "" : "s"), keeping the first copy of each:\n\n\(sample)\(more)\n\nEvery file is backed up before editing — you can restore from the backups folder.")
+            }
         }
         .alert("Remove duplicate reminders?", isPresented: $showDuplicateConfirm) {
             if !duplicateTitles.isEmpty {

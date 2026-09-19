@@ -4,6 +4,7 @@ import SwiftUI
 struct SyncHealthView: View {
     @EnvironmentObject var syncManager: SyncManager
     @Environment(\.dismiss) private var dismiss
+    @State private var isCleaning = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -131,6 +132,18 @@ struct SyncHealthView: View {
             Text("Nothing here changes your data.")
                 .font(.caption2)
                 .foregroundColor(.secondary)
+
+            if syncManager.healthReport?.findings.contains(where: { $0.title.contains("duplicate reminder") }) == true {
+                Button(isCleaning ? "Cleaning…" : "Clean Up Duplicates") {
+                    Task {
+                        isCleaning = true
+                        _ = await syncManager.removeDuplicateReminders(ignoreDueDate: true)
+                        await syncManager.runHealthCheck()
+                        isCleaning = false
+                    }
+                }
+                .disabled(isCleaning)
+            }
 
             Button("Done") { dismiss() }
                 .keyboardShortcut(.defaultAction)
