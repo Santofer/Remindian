@@ -58,6 +58,11 @@ class SyncConfiguration: ObservableObject, Codable {
     @Published var taskFilesPattern: String
     @Published var excludedFolders: [String]
     @Published var includedFolders: [String]  // Whitelist: if non-empty, ONLY scan these folders
+    /// Only scan notes carrying one of these tags (frontmatter `tags:` or an
+    /// inline `#tag`). Empty = every note. Like the folder whitelist this narrows
+    /// the synced set, so tasks in notes that stop matching are treated as removed
+    /// and their reminders are deleted — see the note on `includedFolders`.
+    @Published var includedNoteTags: [String]
     @Published var syncCompletedTasks: Bool
     @Published var deleteCompletedAfterDays: Int?
     @Published var conflictResolution: ConflictResolution
@@ -384,7 +389,7 @@ class SyncConfiguration: ObservableObject, Codable {
 
     enum CodingKeys: String, CodingKey {
         case vaultPath, syncIntervalMinutes, enableAutoSync, syncOnLaunch
-        case listMappings, headingMappings, defaultList, taskFilesPattern, excludedFolders, includedFolders
+        case listMappings, headingMappings, defaultList, taskFilesPattern, excludedFolders, includedFolders, includedNoteTags
         case syncCompletedTasks, deleteCompletedAfterDays, conflictResolution
         case includeDueTime, addReminderAlarm, reminderAlarmHour, hideDockIcon, forceDarkIcon, showMenuBarTaskCount, dryRunMode, enableCompletionWriteback
         case enableDueDateWriteback, enableStartDateWriteback, enablePriorityWriteback
@@ -424,6 +429,7 @@ class SyncConfiguration: ObservableObject, Codable {
         taskFilesPattern: String = "**/*.md",
         excludedFolders: [String] = [".obsidian", ".git", ".trash"],
         includedFolders: [String] = [],
+        includedNoteTags: [String] = [],
         syncCompletedTasks: Bool = true,
         deleteCompletedAfterDays: Int? = nil,
         conflictResolution: ConflictResolution = .obsidianWins,
@@ -497,6 +503,7 @@ class SyncConfiguration: ObservableObject, Codable {
         self.taskFilesPattern = taskFilesPattern
         self.excludedFolders = excludedFolders
         self.includedFolders = includedFolders
+        self.includedNoteTags = includedNoteTags
         self.syncCompletedTasks = syncCompletedTasks
         self.deleteCompletedAfterDays = deleteCompletedAfterDays
         self.conflictResolution = conflictResolution
@@ -576,6 +583,7 @@ class SyncConfiguration: ObservableObject, Codable {
         taskFilesPattern = try container.decode(String.self, forKey: .taskFilesPattern)
         excludedFolders = try container.decode([String].self, forKey: .excludedFolders)
         includedFolders = try container.decodeIfPresent([String].self, forKey: .includedFolders) ?? []
+        includedNoteTags = try container.decodeIfPresent([String].self, forKey: .includedNoteTags) ?? []
         syncCompletedTasks = try container.decode(Bool.self, forKey: .syncCompletedTasks)
         deleteCompletedAfterDays = try container.decodeIfPresent(Int.self, forKey: .deleteCompletedAfterDays)
         conflictResolution = try container.decode(ConflictResolution.self, forKey: .conflictResolution)
@@ -660,6 +668,7 @@ class SyncConfiguration: ObservableObject, Codable {
         try container.encode(taskFilesPattern, forKey: .taskFilesPattern)
         try container.encode(excludedFolders, forKey: .excludedFolders)
         try container.encode(includedFolders, forKey: .includedFolders)
+        try container.encode(includedNoteTags, forKey: .includedNoteTags)
         try container.encode(syncCompletedTasks, forKey: .syncCompletedTasks)
         try container.encode(deleteCompletedAfterDays, forKey: .deleteCompletedAfterDays)
         try container.encode(conflictResolution, forKey: .conflictResolution)

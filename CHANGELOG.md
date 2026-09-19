@@ -4,6 +4,21 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.31.0 (September 2026)
+
+Two new ways to choose what syncs.
+
+### New
+
+- **Heading-based list mappings (#94).** Tasks under a Markdown heading route to a list — organise everything in one note with `## Work` / `## Home` sections instead of separate files. Direct tags still take precedence. Configure it in **Settings → Mappings**. Contributed by **@ponychicken**.
+- **Scan only notes with a given tag (#95).** **Settings → Mappings → "Only notes tagged"** limits the scan to notes carrying one of the listed tags — in the note's frontmatter `tags:` or written inline anywhere in it. A parent tag also selects its children (`project` matches `project/alpha`). Your inbox file is always scanned regardless, so tasks pulled in from your destination keep round-tripping. Off by default.
+
+  > Like the folder whitelist, this narrows what syncs — tasks in notes that no longer match are treated as removed and their reminders are deleted. Use **Preview Changes** or **Check Sync Health** first if you have an established setup.
+
+- The routing tester (Settings → Mappings) now takes a heading too, so it still reports the rule that actually wins.
+
+---
+
 ## v5.30.0 (September 2026)
 
 Clean up duplicate reminders left by recurring tasks, and three HTTP API fixes.

@@ -1315,6 +1315,20 @@ struct AdvancedSettingsView: View {
                     .foregroundColor(.secondary)
 
                 LabeledContent {
+                    TextField("e.g. project, area/work", text: Binding(
+                        get: { syncManager.config.includedNoteTags.joined(separator: ", ") },
+                        set: { syncManager.config.includedNoteTags = $0.split(separator: ",").map { String($0.trimmingCharacters(in: .whitespaces)) }.filter { !$0.isEmpty } }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                } label: {
+                    Text("Only notes tagged")
+                }
+
+                Text("Comma-separated. If set, only notes carrying one of these tags are scanned — the tag can be in the note's frontmatter `tags:` or written inline anywhere in it. A parent tag also matches its children, so `project` selects `project/alpha`. The inbox file is always scanned. Leave empty to scan every note.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                LabeledContent {
                     TextField(".obsidian, .git, .trash", text: Binding(
                         get: { syncManager.config.excludedFolders.joined(separator: ", ") },
                         set: { syncManager.config.excludedFolders = $0.split(separator: ",").map { String($0.trimmingCharacters(in: .whitespaces)) } }
@@ -1538,6 +1552,7 @@ struct RoutingTester: View {
     @EnvironmentObject var syncManager: SyncManager
     @State private var filePath: String = ""
     @State private var tagsText: String = ""
+    @State private var headingText: String = ""
 
     private var parsedTags: [String] {
         tagsText
@@ -1555,11 +1570,12 @@ struct RoutingTester: View {
     }
 
     private var result: (list: String, reason: String)? {
-        guard !filePath.isEmpty || !parsedTags.isEmpty else { return nil }
+        guard !filePath.isEmpty || !parsedTags.isEmpty || !headingText.isEmpty else { return nil }
         return syncManager.config.explainTargetList(
             tag: primaryTag,
             filePath: filePath.isEmpty ? nil : filePath,
-            tags: parsedTags
+            tags: parsedTags,
+            heading: headingText.isEmpty ? nil : headingText
         )
     }
 
@@ -1579,6 +1595,8 @@ struct RoutingTester: View {
                         .textFieldStyle(.roundedBorder)
                     TextField("Tags (e.g. #task, #work)", text: $tagsText)
                         .textFieldStyle(.roundedBorder)
+                    TextField("Heading (e.g. ## Work)", text: $headingText)
+                        .textFieldStyle(.roundedBorder)
                 }
                 .font(.system(size: 12))
 
@@ -1595,7 +1613,7 @@ struct RoutingTester: View {
                     }
                     .padding(.top, 2)
                 } else {
-                    Text("Enter a file path and/or tags to see the result.")
+                    Text("Enter a file path, tags and/or a heading to see the result.")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                         .padding(.top, 2)

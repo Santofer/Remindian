@@ -22,6 +22,9 @@ class ObsidianService {
         /// Sub-task handling changes what `parseTasksFromFile` returns for the same
         /// bytes, so it must invalidate the cache or a stale parse would be reused.
         let subtaskHandling: SyncConfiguration.SubtaskHandling
+        /// The note-tag whitelist changes which notes yield tasks at all, so a
+        /// cached parse from a different whitelist must not be reused (#95).
+        let includedNoteTags: [String]
     }
 
     /// One file's cached parse. Reused only when the file's modification date
@@ -67,6 +70,7 @@ class ObsidianService {
         includedFolders: [String] = [],
         inboxRelativePath: String = "",
         subtaskHandling: SyncConfiguration.SubtaskHandling = .separate,
+        includedNoteTags: [String] = [],
         openMarkers: Set<Character> = SyncTask.defaultOpenMarkers,
         completedMarkers: Set<Character> = SyncTask.defaultCompletedMarkers,
         ignoredMarkers: Set<Character> = []
@@ -94,7 +98,8 @@ class ObsidianService {
             openMarkers: openMarkers,
             completedMarkers: completedMarkers,
             ignoredMarkers: ignoredMarkers,
-            subtaskHandling: subtaskHandling
+            subtaskHandling: subtaskHandling,
+            includedNoteTags: includedNoteTags
         )
         var liveKeys = Set<String>(minimumCapacity: markdownFiles.count)
         var cacheHits = 0
@@ -118,13 +123,22 @@ class ObsidianService {
             }
 
             do {
+                // The inbox is exempt from the note-tag whitelist for the same
+                // reason it is exempt from the folder whitelist: tasks written
+                // there by the destination→vault direction would otherwise look
+                // deleted on the next scan and their reminders would be removed.
+                let isInbox = !inboxRelativePath.isEmpty
+                    && fileURL.standardizedFileURL.path == URL(fileURLWithPath: path)
+                        .appendingPathComponent(inboxRelativePath).standardizedFileURL.path
+
                 let fileTasks = try parseTasksFromFile(
                     fileURL,
                     vaultPath: path,
                     openMarkers: openMarkers,
                     completedMarkers: completedMarkers,
                     ignoredMarkers: ignoredMarkers,
-                    subtaskHandling: subtaskHandling
+                    subtaskHandling: subtaskHandling,
+                    includedNoteTags: isInbox ? [] : includedNoteTags
                 )
                 tasks.append(contentsOf: fileTasks)
 
@@ -171,6 +185,75 @@ class ObsidianService {
     /// nesting at the destination (`EKReminder.parentItem`, TickTick
     /// `parentId`, etc.) is a future phase; this is a behavioral compromise
     /// that puts indented subtasks in the *same list* as their parent.
+    /// Tags that apply to a whole note: the frontmatter `tags:` field (inline
+    /// `[a, b]` or a `- item` list) plus inline `#tags` in the body.
+    ///
+    /// Returned without the leading `#`, lowercased, so callers can compare
+    /// directly. Nested tags keep their full path (`work/clients`).
+    static func noteTags(in content: String) -> Set<String> {
+        var tags = Set<String>()
+        let lines = content.components(separatedBy: "\n")
+
+        // --- frontmatter tags: ---
+        if lines.first?.trimmingCharacters(in: .whitespaces) == "---" {
+            var inTagsBlock = false
+            for line in lines.dropFirst() {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if trimmed == "---" { break }
+
+                if trimmed.lowercased().hasPrefix("tags:") {
+                    let value = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                    if value.isEmpty {
+                        inTagsBlock = true          // list form follows on later lines
+                    } else {
+                        inTagsBlock = false
+                        for part in value.replacingOccurrences(of: "[", with: "")
+                            .replacingOccurrences(of: "]", with: "")
+                            .components(separatedBy: ",") {
+                            let t = part.trimmingCharacters(in: CharacterSet(whitespaces: true, extra: "#\"'"))
+                            if !t.isEmpty { tags.insert(t.lowercased()) }
+                        }
+                    }
+                    continue
+                }
+
+                if inTagsBlock {
+                    if trimmed.hasPrefix("- ") {
+                        let t = String(trimmed.dropFirst(2))
+                            .trimmingCharacters(in: CharacterSet(whitespaces: true, extra: "#\"'"))
+                        if !t.isEmpty { tags.insert(t.lowercased()) }
+                        continue
+                    }
+                    inTagsBlock = false             // any other key ends the list
+                }
+            }
+        }
+
+        // --- inline #tags anywhere in the note ---
+        if let rx = try? NSRegularExpression(pattern: "(?:^|\\s)#([\\p{L}\\p{N}_/-]+)") {
+            let range = NSRange(content.startIndex..., in: content)
+            for match in rx.matches(in: content, range: range) {
+                if let r = Range(match.range(at: 1), in: content) {
+                    tags.insert(String(content[r]).lowercased())
+                }
+            }
+        }
+        return tags
+    }
+
+    /// True when the note should be scanned under the configured tag whitelist.
+    /// An empty whitelist means "every note". A configured tag matches its own
+    /// nested children too, so `#project` also selects `#project/alpha`.
+    static func noteMatchesTagFilter(_ noteTags: Set<String>, whitelist: [String]) -> Bool {
+        let wanted = whitelist
+            .map { $0.trimmingCharacters(in: CharacterSet(whitespaces: true, extra: "#")).lowercased() }
+            .filter { !$0.isEmpty }
+        guard !wanted.isEmpty else { return true }
+        return wanted.contains { want in
+            noteTags.contains { $0 == want || $0.hasPrefix(want + "/") }
+        }
+    }
+
     /// Fold or drop indented sub-tasks, given each task's indent level.
     ///
     /// Pure and index-parallel (`indents[i]` describes `tasks[i]`) so it can be
@@ -242,9 +325,19 @@ class ObsidianService {
         openMarkers: Set<Character> = SyncTask.defaultOpenMarkers,
         completedMarkers: Set<Character> = SyncTask.defaultCompletedMarkers,
         ignoredMarkers: Set<Character> = [],
-        subtaskHandling: SyncConfiguration.SubtaskHandling = .separate
+        subtaskHandling: SyncConfiguration.SubtaskHandling = .separate,
+        includedNoteTags: [String] = []
     ) throws -> [SyncTask] {
         let content = try String(contentsOf: fileURL, encoding: .utf8)
+
+        // Note-tag whitelist (#95): skip whole notes that don't carry one of the
+        // configured tags. Empty whitelist = every note, so this is inert unless
+        // the user opts in.
+        if !includedNoteTags.isEmpty,
+           !ObsidianService.noteMatchesTagFilter(ObsidianService.noteTags(in: content), whitelist: includedNoteTags) {
+            return []
+        }
+
         let lines = content.components(separatedBy: "\n")
         let relativePath = fileURL.path.replacingOccurrences(of: vaultPath, with: "")
 
@@ -1616,5 +1709,14 @@ enum ObsidianError: LocalizedError {
         case .unsafeWriteDisabled:
             return "This write method has been disabled for safety. It previously caused data loss by reconstructing task lines and losing metadata."
         }
+    }
+}
+
+
+private extension CharacterSet {
+    /// Whitespace plus a few literal characters, for trimming YAML/tag noise.
+    init(whitespaces: Bool, extra: String) {
+        self = whitespaces ? CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: extra))
+                           : CharacterSet(charactersIn: extra)
     }
 }
