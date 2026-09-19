@@ -734,7 +734,14 @@ class TaskNotesSource: TaskSource {
     }
 
     private func resolveFullPath(source: SyncTask.ObsidianSource, config: SyncConfiguration) -> String {
-        return config.vaultPath + source.filePath
+        // String concatenation only worked because Direct Files mode happens to
+        // return a leading-slash path. The HTTP API returns "Task/note.md" with no
+        // slash, producing "/vault rootTask/note.md" — which can't be stat'd, so
+        // every task tripped the "file modified during sync" guard and writeback
+        // silently never happened (#92).
+        return URL(fileURLWithPath: config.vaultPath)
+            .appendingPathComponent(source.filePath)
+            .path
     }
 
     // MARK: - File-Based Scanning
@@ -1001,7 +1008,29 @@ class TaskNotesSource: TaskSource {
     }
 
     private func scanTasksViaApi() throws -> [SyncTask] {
-        guard let url = URL(string: "\(apiBaseUrl)/api/tasks") else {
+        // The plugin's /api/tasks defaults to limit=50 (max 200) and supports
+        // offset. Fetching without them silently returned only the first 50 tasks
+        // no matter how big the vault was (#92). Page until a short page arrives.
+        var all: [SyncTask] = []
+        var offset = 0
+        let pageSize = 200
+        while true {
+            let page = try fetchApiTaskPage(limit: pageSize, offset: offset)
+            all += page.map { $0.toSyncTask(completedStatuses: self.completedStatuses, listField: self.listField) }
+            if page.count < pageSize { break }
+            offset += pageSize
+            // Defensive stop: a server that ignores `offset` would loop forever.
+            if offset > 20_000 {
+                debugLog("[TaskNotes] API paging stopped at \(offset) — server may be ignoring offset")
+                break
+            }
+        }
+        debugLog("[TaskNotes] API returned \(all.count) tasks")
+        return all
+    }
+
+    private func fetchApiTaskPage(limit: Int, offset: Int) throws -> [TaskNotesApiTask] {
+        guard let url = URL(string: "\(apiBaseUrl)/api/tasks?limit=\(limit)&offset=\(offset)") else {
             throw TaskNotesError.invalidApiUrl
         }
 
@@ -1035,8 +1064,7 @@ class TaskNotesSource: TaskSource {
             throw TaskNotesError.apiError("HTTP \(statusCode): \(responseSnippet(from: data))")
         }
 
-        let apiTasks = try decodeApiTasks(from: data)
-        return apiTasks.map { $0.toSyncTask(completedStatuses: self.completedStatuses, listField: self.listField) }
+        return try decodeApiTasks(from: data)
     }
 
     // MARK: - Frontmatter Helpers
@@ -1142,9 +1170,9 @@ private struct MtnCliTask: Codable {
             title: taskTitle,
             isCompleted: isCompleted,
             priority: taskPriority,
-            dueDate: due.flatMap { dateFormatter.date(from: $0) },
-            startDate: scheduled.flatMap { dateFormatter.date(from: $0) },
-            completedDate: completedDate.flatMap { dateFormatter.date(from: $0) },
+            dueDate: due.flatMap { TaskNotesSource.parseFrontmatterDate($0) },
+            startDate: scheduled.flatMap { TaskNotesSource.parseFrontmatterDate($0) },
+            completedDate: completedDate.flatMap { TaskNotesSource.parseFrontmatterDate($0) },
             tags: taskTags,
             targetList: targetList,
             obsidianSource: SyncTask.ObsidianSource(
@@ -1204,9 +1232,9 @@ private struct TaskNotesApiTask: Codable {
             title: title,
             isCompleted: isCompleted,
             priority: taskPriority,
-            dueDate: due.flatMap { dateFormatter.date(from: $0) },
-            startDate: (scheduled ?? start).flatMap { dateFormatter.date(from: $0) },
-            completedDate: completed.flatMap { dateFormatter.date(from: $0) },
+            dueDate: due.flatMap { TaskNotesSource.parseFrontmatterDate($0) },
+            startDate: (scheduled ?? start).flatMap { TaskNotesSource.parseFrontmatterDate($0) },
+            completedDate: completed.flatMap { TaskNotesSource.parseFrontmatterDate($0) },
             tags: taskTags,
             targetList: targetList,
             notes: notes,

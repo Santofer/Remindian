@@ -1013,8 +1013,10 @@ struct AdvancedSettingsView: View {
     @EnvironmentObject var syncManager: SyncManager
     @State private var showResetConfirmation = false
     @State private var isCheckingDuplicates = false
-    @State private var duplicateCount: Int?
+    @State private var duplicateTitles: [String] = []
     @State private var showDuplicateConfirm = false
+    /// Widen the match so recurring copies (same title, different dates) are seen.
+    @State private var dedupeIgnoreDueDate = false
 
     var body: some View {
         ScrollView {
@@ -1337,7 +1339,7 @@ struct AdvancedSettingsView: View {
                         Button(isCheckingDuplicates ? "Checking…" : "Remove Duplicate Reminders…") {
                             Task {
                                 isCheckingDuplicates = true
-                                duplicateCount = await syncManager.previewDuplicateReminders()
+                                duplicateTitles = await syncManager.previewDuplicateReminders(ignoreDueDate: dedupeIgnoreDueDate)
                                 isCheckingDuplicates = false
                                 showDuplicateConfirm = true
                             }
@@ -1347,6 +1349,11 @@ struct AdvancedSettingsView: View {
                     }
                     Text("Finds reminders that are exact duplicates (same title, due date, list) — left over from older buggy versions — and removes all but one. Reminders synced from Obsidian (with the obsidian:// link) are kept.")
                         .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    Toggle("Also match copies with different due dates", isOn: $dedupeIgnoreDueDate)
+                    Text("Recurring tasks pile up as one copy per occurrence, each with a different date — the strict match above can't see those. With this on, copies sharing a title and list count as duplicates and the most relevant one is kept (still open, latest due date). You'll see the full list before anything is removed.")
+                        .font(.caption2)
                         .foregroundColor(.secondary)
                 }
             } header: {
@@ -1390,17 +1397,23 @@ struct AdvancedSettingsView: View {
             Text("This will clear all sync mappings, history, and logs. The next sync will treat all tasks as new and re-create them in Reminders.")
         }
         .alert("Remove duplicate reminders?", isPresented: $showDuplicateConfirm) {
-            if (duplicateCount ?? 0) > 0 {
+            if !duplicateTitles.isEmpty {
                 Button("Cancel", role: .cancel) { }
-                Button("Remove \(duplicateCount ?? 0)", role: .destructive) {
-                    Task { await syncManager.removeDuplicateReminders() }
+                Button("Remove \(duplicateTitles.count)", role: .destructive) {
+                    Task { await syncManager.removeDuplicateReminders(ignoreDueDate: dedupeIgnoreDueDate) }
                 }
             } else {
                 Button("OK", role: .cancel) { }
             }
         } message: {
-            if let n = duplicateCount, n > 0 {
-                Text("Found \(n) duplicate reminder\(n == 1 ? "" : "s") (same title, due date and list). Remove all but one of each? Reminders synced from Obsidian are kept. This can't be undone — but Obsidian stays your source of truth, so the next sync re-creates anything still in your vault.")
+            if !duplicateTitles.isEmpty {
+                let n = duplicateTitles.count
+                let counts = Dictionary(duplicateTitles.map { ($0, 1) }, uniquingKeysWith: +)
+                let sample = counts.sorted { $0.value > $1.value }.prefix(6)
+                    .map { "• \($0.key)\($0.value > 1 ? " ×\($0.value)" : "")" }
+                    .joined(separator: "\n")
+                let more = counts.count > 6 ? "\n…and \(counts.count - 6) more title\(counts.count - 6 == 1 ? "" : "s")." : ""
+                Text("Found \(n) duplicate reminder\(n == 1 ? "" : "s") to remove, keeping one of each:\n\n\(sample)\(more)\n\nThis can't be undone — but Obsidian stays your source of truth, so the next sync re-creates anything still in your vault.")
             } else {
                 Text("No duplicate reminders found 🎉")
             }

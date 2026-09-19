@@ -122,6 +122,31 @@ final class SyncHealthTests: XCTestCase {
         XCTAssertTrue(report.findings[0].detail.contains("and 20 more"), "Truncate the list. Got:\n\(report.findings[0].detail)")
     }
 
+    // MARK: - Duplicate accumulation (the recurring-task pile-up)
+
+    func test_duplicateRemindersAreFlagged() {
+        var input = healthyInput()
+        input.duplicateReminderCount = 5
+        let report = SyncHealth.evaluate(input)
+        XCTAssertEqual(report.findings.first?.severity, .warning)
+        XCTAssertTrue(report.findings[0].title.contains("5 duplicate"))
+        XCTAssertNotNil(report.findings[0].suggestion, "Must point at the cleanup tool")
+    }
+
+    /// 67 duplicates out of 87 reminders is what a year of recurring pile-up looks
+    /// like — that has to shout, not sit in a warning list.
+    func test_manyDuplicatesEscalateToCritical() {
+        var input = healthyInput()
+        input.duplicateReminderCount = 67
+        XCTAssertEqual(SyncHealth.evaluate(input).findings[0].severity, .critical)
+    }
+
+    func test_noDuplicatesIsSilent() {
+        var input = healthyInput()
+        input.duplicateReminderCount = 0
+        XCTAssertTrue(SyncHealth.evaluate(input).isHealthy)
+    }
+
     // MARK: - Informational
 
     func test_inboxOutsideWhitelistIsExplainedNotAlarming() {

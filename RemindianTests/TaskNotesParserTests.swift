@@ -237,6 +237,25 @@ final class TaskNotesParserTests: XCTestCase {
         XCTAssertEqual([c.hour, c.minute], [14, 30], "The time-of-day must survive the scan")
     }
 
+    // MARK: - #92: path joining for API mode
+
+    /// The HTTP API returns paths without a leading slash. Plain concatenation
+    /// produced "/vault rootTask/note.md", which can't be stat'd — so every task
+    /// tripped the "file modified during sync" guard and writeback never ran.
+    func test_92_pathJoinHandlesMissingLeadingSlash() {
+        let joined = URL(fileURLWithPath: "/Users/x/Vault")
+            .appendingPathComponent("Task/my note.md").path
+        XCTAssertEqual(joined, "/Users/x/Vault/Task/my note.md")
+    }
+
+    func test_92_pathJoinStillHandlesLeadingSlash() {
+        // Direct Files mode returns "/Task/note.md" — must not double the slash.
+        let joined = URL(fileURLWithPath: "/Users/x/Vault")
+            .appendingPathComponent("/Task/note.md").path
+        XCTAssertEqual(joined, "/Users/x/Vault/Task/note.md")
+        XCTAssertFalse(joined.contains("//"))
+    }
+
     // MARK: - #80: fieldLookup must never trap on blank / duplicate field names
     // The original code built `fieldLookup` as a dictionary *literal* of
     // user-entered names. Two blanked fields (both "") or two identical names

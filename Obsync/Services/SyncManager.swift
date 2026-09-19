@@ -789,7 +789,8 @@ class SyncManager: ObservableObject {
             destinationName: taskDestination.destinationName,
             inboxRelativePath: cfg.inboxFilePath,
             inboxOutsideWhitelist: inboxOutside,
-            isDryRun: cfg.dryRunMode
+            isDryRun: cfg.dryRunMode,
+            duplicateReminderCount: await previewDuplicateReminders(ignoreDueDate: true).count
         )
 
         let report = SyncHealth.evaluate(input)
@@ -1415,19 +1416,21 @@ class SyncManager: ObservableObject {
 
     /// Count duplicate reminders that "Remove Duplicate Reminders" would delete
     /// (a dry run). Returns 0 if the active destination isn't Apple Reminders.
-    func previewDuplicateReminders() async -> Int {
+    /// Titles that a duplicate cleanup would remove. See `removeDuplicateReminders`
+    /// for what `ignoreDueDate` widens.
+    func previewDuplicateReminders(ignoreDueDate: Bool = false) async -> [String] {
         updateSourceAndDestination()
-        guard let dest = taskDestination as? RemindersDestination else { return 0 }
-        return (try? await dest.removeDuplicateReminders(dryRun: true)) ?? 0
+        guard let dest = taskDestination as? RemindersDestination else { return [] }
+        return (try? await dest.removeDuplicateReminders(dryRun: true, ignoreDueDate: ignoreDueDate)) ?? []
     }
 
     /// Delete duplicate reminders. Returns the number removed.
     @discardableResult
-    func removeDuplicateReminders() async -> Int {
+    func removeDuplicateReminders(ignoreDueDate: Bool = false) async -> Int {
         guard let dest = taskDestination as? RemindersDestination else { return 0 }
-        let removed = (try? await dest.removeDuplicateReminders(dryRun: false)) ?? 0
+        let removed = ((try? await dest.removeDuplicateReminders(dryRun: false, ignoreDueDate: ignoreDueDate)) ?? []).count
         statusMessage = "Removed \(removed) duplicate reminder\(removed == 1 ? "" : "s")"
-        debugLog("[SyncManager] Removed \(removed) duplicate reminders")
+        debugLog("[SyncManager] Removed \(removed) duplicate reminders (ignoreDueDate=\(ignoreDueDate))")
         return removed
     }
 

@@ -77,6 +77,10 @@ enum SyncHealth {
         /// is explanatory rather than broken.
         var inboxOutsideWhitelist: Bool = false
         var isDryRun: Bool = false
+        /// Reminders that look like duplicate copies of another (same title+list).
+        /// Recurring tasks used to pile up one copy per occurrence, so a growing
+        /// number here is the early signal that it has started again.
+        var duplicateReminderCount: Int = 0
     }
 
     struct Report {
@@ -161,6 +165,16 @@ enum SyncHealth {
         }
 
         // --- Things worth knowing ---
+
+        if input.duplicateReminderCount > 0 {
+            let n = input.duplicateReminderCount
+            findings.append(Finding(
+                severity: n >= 20 ? .critical : .warning,
+                title: "\(n) duplicate reminder\(n == 1 ? "" : "s") in \(input.destinationName)",
+                detail: "\(n) reminder\(n == 1 ? " looks like a copy" : "s look like copies") of another with the same title in the same list. Recurring tasks pile up this way — one copy per occurrence, each with a different due date — so this grows quietly over months.",
+                suggestion: "Settings → Advanced → Remove Duplicate Reminders, with “Also match copies with different due dates” turned on."
+            ))
+        }
 
         if input.unresolvedConflictCount > 0 {
             findings.append(Finding(

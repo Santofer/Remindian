@@ -4,6 +4,25 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.30.0 (September 2026)
+
+Clean up duplicate reminders left by recurring tasks, and three HTTP API fixes.
+
+### New
+
+- **Duplicate cleanup now finds recurring pile-ups.** Recurring tasks accumulate one reminder per occurrence, each with a *different* due date — so the old exact match (same title, due date and list) could never see them. **Settings → Advanced** gains **"Also match copies with different due dates"**: copies sharing a title and list count as duplicates, and the copy you still act on is kept (open beats completed, then the latest due date). The confirmation now lists the titles it will remove, with counts, before anything is deleted.
+- **Sync Health flags duplicate accumulation.** The health check now reports duplicate reminders — escalating to critical past 20 — so a pile-up gets caught while it's small instead of after a year.
+
+### Bug fixes
+
+- **TaskNotes HTTP API: due times were dropped (#92, follow-up to #82).** API and CLI modes still parsed `due` with a date-only formatter, so a value like `2026-09-04T10:00` produced a reminder with **no due date at all** while date-only values worked — which made it look random. Both now use the same multi-format parser as Direct Files mode.
+- **TaskNotes HTTP API: writeback never worked (#92).** Vault path and file path were joined by string concatenation. The API returns paths without a leading slash, so the result pointed at a file that doesn't exist — every task logged *"File was modified during sync operation"* on every sync, and completion/metadata writeback silently did nothing. Paths are now joined properly.
+- **TaskNotes HTTP API: only the first 50 tasks synced (#92).** The task list was fetched without `limit`/`offset`, and the plugin defaults to 50. Vaults with more than 50 task notes had an arbitrary subset silently never reach Apple Reminders. The API is now paged until exhausted.
+
+Thanks to **@m-secc** for a precise, line-referenced report on all three.
+
+---
+
 ## v5.29.0 (August 2026)
 
 A pre-flight check for your sync setup.

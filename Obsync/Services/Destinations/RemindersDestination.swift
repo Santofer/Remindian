@@ -79,7 +79,16 @@ class RemindersDestination: TaskDestination {
     ///
     /// This cleans up the mess left by older buggy versions that created the same
     /// reminder many times. (cleanup tool)
-    func removeDuplicateReminders(dryRun: Bool) async throws -> Int {
+    /// Find reminders that are duplicates of each other and delete all but one.
+    ///
+    /// - Parameter ignoreDueDate: when true, copies of the same title in the same
+    ///   list count as duplicates even when their due dates differ. Recurring
+    ///   tasks accumulate exactly that way — one copy per occurrence, each with a
+    ///   different date — so the default strict key can never see them. Off by
+    ///   default because two same-titled reminders with different dates *can* be
+    ///   deliberate; always show the caller a dry run first.
+    /// - Returns: the titles affected (or that would be, for a dry run).
+    func removeDuplicateReminders(dryRun: Bool, ignoreDueDate: Bool = false) async throws -> [String] {
         let lists = eventStore.calendars(for: .reminder)
         let all: [EKReminder] = try await withThrowingTaskGroup(of: [EKReminder].self) { group in
             for list in lists {
@@ -97,10 +106,19 @@ class RemindersDestination: TaskDestination {
 
         func key(_ r: EKReminder) -> String {
             let title = (r.title ?? "").trimmingCharacters(in: .whitespaces)
+            let list = r.calendar?.calendarIdentifier ?? "?"
+            if ignoreDueDate { return "\(title)|\(list)" }
             let due: String
             if let c = r.dueDateComponents { due = "\(c.year ?? 0)-\(c.month ?? 0)-\(c.day ?? 0)" } else { due = "none" }
-            let list = r.calendar?.calendarIdentifier ?? "?"
             return "\(title)|\(due)|\(r.isCompleted)|\(list)"
+        }
+
+        // Which copy survives. Strict mode keeps the Obsidian-linked one. In
+        // ignore-due mode a group spans several occurrences, so keep the one the
+        // user still acts on: open beats completed, then the latest due date.
+        func rank(_ r: EKReminder) -> (Int, Date) {
+            let due = r.dueDateComponents.flatMap { Calendar.current.date(from: $0) } ?? .distantPast
+            return (r.isCompleted ? 0 : 1, due)
         }
 
         var groups: [String: [EKReminder]] = [:]
@@ -108,11 +126,17 @@ class RemindersDestination: TaskDestination {
 
         var toDelete: [EKReminder] = []
         for (_, members) in groups where members.count > 1 {
-            let keepIdx = members.firstIndex { $0.url?.scheme == "obsidian" } ?? 0
+            let keepIdx: Int
+            if ignoreDueDate {
+                keepIdx = members.indices.max { rank(members[$0]) < rank(members[$1]) } ?? 0
+            } else {
+                keepIdx = members.firstIndex { $0.url?.scheme == "obsidian" } ?? 0
+            }
             for (i, r) in members.enumerated() where i != keepIdx { toDelete.append(r) }
         }
 
-        if dryRun { return toDelete.count }
+        let titles = toDelete.map { $0.title ?? "(untitled)" }
+        if dryRun { return titles }
 
         var removed = 0
         for r in toDelete {
@@ -120,8 +144,8 @@ class RemindersDestination: TaskDestination {
             catch { debugLog("[RemindersDestination] Failed to remove duplicate '\(r.title ?? "?")': \(error.localizedDescription)") }
         }
         if removed > 0 { try? eventStore.commit() }
-        debugLog("[RemindersDestination] Removed \(removed) duplicate reminder(s) of \(toDelete.count) candidates across \(all.count) total.")
-        return removed
+        debugLog("[RemindersDestination] Removed \(removed) duplicate reminder(s) of \(toDelete.count) candidates across \(all.count) total (ignoreDueDate=\(ignoreDueDate)).")
+        return titles
     }
 
     // MARK: - CRUD
