@@ -300,4 +300,22 @@ final class TaskParserTests: XCTestCase {
         SyncTask.parseDataviewFields(from: line, into: &task)
         XCTAssertNotNil(task.startDate)
     }
+
+    func testMarkdownHeadingRecognizesATXHeadingAndStripsClosingHashes() {
+        XCTAssertEqual(ObsidianService.markdownHeading(in: "## Work ##"), "Work")
+        XCTAssertEqual(ObsidianService.markdownHeading(in: "  ### Personal"), "Personal")
+        XCTAssertNil(ObsidianService.markdownHeading(in: "#not-a-heading"))
+    }
+
+    func testTasksCarryTheirNearestPrecedingHeading() throws {
+        let vault = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: vault, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: vault) }
+        let file = vault.appendingPathComponent("Tasks.md")
+        try "# Top\n## Work\n- [ ] Send proposal\n## Home\n- [ ] Buy milk\n"
+            .write(to: file, atomically: true, encoding: .utf8)
+
+        let tasks = try ObsidianService().parseTasksFromFile(file, vaultPath: vault.path)
+        XCTAssertEqual(tasks.map { $0.obsidianSource?.sectionHeading }, ["Work", "Home"])
+    }
 }

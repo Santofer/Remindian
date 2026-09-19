@@ -255,8 +255,12 @@ class ObsidianService {
         // can run parent-inheritance below. We can't store indent on SyncTask
         // itself without bloating the model — local-only computation is fine.
         var taggedTasks: [(indent: Int, task: SyncTask)] = []
+        var currentHeading: String?
 
         for (index, line) in lines.enumerated() {
+            if let heading = Self.markdownHeading(in: line) {
+                currentHeading = heading
+            }
             if var task = SyncTask.fromObsidianLine(
                 line,
                 filePath: relativePath,
@@ -265,6 +269,14 @@ class ObsidianService {
                 completedMarkers: completedMarkers,
                 ignoredMarkers: ignoredMarkers
             ) {
+                if let source = task.obsidianSource {
+                    task.obsidianSource = SyncTask.ObsidianSource(
+                        filePath: source.filePath,
+                        lineNumber: source.lineNumber,
+                        originalLine: source.originalLine,
+                        sectionHeading: currentHeading
+                    )
+                }
                 // Attach client name from frontmatter for work tasks
                 if clientName != nil {
                     task.clientName = clientName
@@ -323,6 +335,25 @@ class ObsidianService {
         }
 
         return tasks
+    }
+
+    /// Return the text of an ATX Markdown heading (`# Heading` through
+    /// `###### Heading`). Closing hashes are ignored, matching Markdown's
+    /// normal heading syntax.
+    static func markdownHeading(in line: String) -> String? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        var hashCount = 0
+        for char in trimmed {
+            guard char == "#" else { break }
+            hashCount += 1
+        }
+        guard (1...6).contains(hashCount), trimmed.count > hashCount else { return nil }
+        let afterHashes = trimmed.dropFirst(hashCount)
+        guard afterHashes.first?.isWhitespace == true else { return nil }
+        let heading = afterHashes.trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: "\\s+#+\\s*$", with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+        return heading.isEmpty ? nil : heading
     }
 
     /// Count leading whitespace characters (tabs and spaces both count as 1

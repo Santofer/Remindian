@@ -571,8 +571,23 @@ class SyncEngine {
                         && oTask.obsidianSource != nil
                         && !config.vaultPath.isEmpty
                         && (rTask.url == nil || rTask.url?.scheme != "obsidian")
+                    // Routing settings are independent from a task's content, so
+                    // their changes don't alter either task hash. Compare the live
+                    // destination list explicitly: adding/changing a tag, heading,
+                    // file, or folder mapping must relocate existing reminders even
+                    // when their Markdown line is otherwise untouched.
+                    let resolvedList = config.resolveTargetList(
+                        tag: oTask.targetList,
+                        filePath: oTask.obsidianSource?.filePath,
+                        tags: oTask.tags,
+                        heading: oTask.obsidianSource?.sectionHeading
+                    )
+                    let needsListMove = resolvedList.caseInsensitiveCompare(rTask.targetList ?? "") != .orderedSame
+                    if needsListMove {
+                        debugLog("[SyncEngine] Routing \"\(oTask.title)\" to \"\(resolvedList)\" (was \"\(rTask.targetList ?? "no list")\")")
+                    }
 
-                    if oChanged || completionDiffers || rChanged || needsURLBackfill {
+                    if oChanged || completionDiffers || rChanged || needsURLBackfill || needsListMove {
                         do {
                             var taskForReminders = oTask
 
@@ -787,9 +802,8 @@ class SyncEngine {
                                     )
 
                                     // Move to correct list if needed
-                                    let targetList = config.resolveTargetList(tag: oTask.targetList, filePath: oTask.obsidianSource?.filePath, tags: oTask.tags)
-                                    if targetList != rTask.targetList {
-                                        try await destination.moveTask(withId: mapping.remindersId, toList: targetList)
+                                    if needsListMove {
+                                        try await destination.moveTask(withId: mapping.remindersId, toList: resolvedList)
                                     }
                                 }
 
@@ -830,7 +844,8 @@ class SyncEngine {
                                     reminderStateAfterSync.targetList = config.resolveTargetList(
                                         tag: oTask.targetList,
                                         filePath: oTask.obsidianSource?.filePath,
-                                        tags: oTask.tags
+                                        tags: oTask.tags,
+                                        heading: oTask.obsidianSource?.sectionHeading
                                     )
                                     syncState.addOrUpdateMapping(
                                         obsidianId: mapping.obsidianId,
@@ -893,7 +908,7 @@ class SyncEngine {
                     if !reconnected {
                         // Truly deleted — recreate from Obsidian
                         do {
-                            let listName = config.resolveTargetList(tag: oTask.targetList, filePath: oTask.obsidianSource?.filePath, tags: oTask.tags)
+                            let listName = config.resolveTargetList(tag: oTask.targetList, filePath: oTask.obsidianSource?.filePath, tags: oTask.tags, heading: oTask.obsidianSource?.sectionHeading)
                             if !config.dryRunMode {
                                 let newId = try await destination.createTask(
                                     from: oTask,
@@ -1122,7 +1137,7 @@ class SyncEngine {
 
                 // Skip tasks whose target list is not in the allowed lists
                 if !config.syncedRemindersLists.isEmpty {
-                    let targetList = config.resolveTargetList(tag: task.targetList, filePath: task.obsidianSource?.filePath, tags: task.tags)
+                    let targetList = config.resolveTargetList(tag: task.targetList, filePath: task.obsidianSource?.filePath, tags: task.tags, heading: task.obsidianSource?.sectionHeading)
                     let allowedLists = Set(config.syncedRemindersLists.map { $0.lowercased() })
                     if !allowedLists.contains(targetList.lowercased()) {
                         result.details.append(SyncLogDetail(
@@ -1137,7 +1152,7 @@ class SyncEngine {
 
                 // Skip tasks whose target list is excluded (#21)
                 if !config.excludedRemindersLists.isEmpty {
-                    let targetList = config.resolveTargetList(tag: task.targetList, filePath: task.obsidianSource?.filePath, tags: task.tags)
+                    let targetList = config.resolveTargetList(tag: task.targetList, filePath: task.obsidianSource?.filePath, tags: task.tags, heading: task.obsidianSource?.sectionHeading)
                     let excludedLists = Set(config.excludedRemindersLists.map { $0.lowercased() })
                     if excludedLists.contains(targetList.lowercased()) {
                         result.details.append(SyncLogDetail(
@@ -1155,7 +1170,7 @@ class SyncEngine {
                 // sync state reset or ID format migration).
                 if var candidates = unmatchedRemindersByTitle[task.title], !candidates.isEmpty {
                     // Pick the best candidate — prefer one in the same list
-                    let targetList = config.resolveTargetList(tag: task.targetList, filePath: task.obsidianSource?.filePath, tags: task.tags)
+                    let targetList = config.resolveTargetList(tag: task.targetList, filePath: task.obsidianSource?.filePath, tags: task.tags, heading: task.obsidianSource?.sectionHeading)
                     var bestIndex = 0
                     for (i, candidate) in candidates.enumerated() {
                         if candidate.task.targetList == targetList {
@@ -1210,7 +1225,7 @@ class SyncEngine {
                 }
 
                 // Queue for batch creation
-                let listName = config.resolveTargetList(tag: task.targetList, filePath: task.obsidianSource?.filePath, tags: task.tags)
+                let listName = config.resolveTargetList(tag: task.targetList, filePath: task.obsidianSource?.filePath, tags: task.tags, heading: task.obsidianSource?.sectionHeading)
                 debugLog("[SyncEngine] Queuing: \"\(task.title)\" → list \"\(listName)\"")
                 newTasksToCreate.append((obsidianId: obsidianId, task: task, listName: listName))
             }

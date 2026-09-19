@@ -84,6 +84,16 @@ struct SyncTask: Identifiable, Equatable, Codable {
         let filePath: String
         let lineNumber: Int
         let originalLine: String
+        /// The nearest preceding Markdown heading, without its `#` markers.
+        /// Optional so sync state written by earlier versions still decodes.
+        let sectionHeading: String?
+
+        init(filePath: String, lineNumber: Int, originalLine: String, sectionHeading: String? = nil) {
+            self.filePath = filePath
+            self.lineNumber = lineNumber
+            self.originalLine = originalLine
+            self.sectionHeading = sectionHeading
+        }
     }
     
     init(

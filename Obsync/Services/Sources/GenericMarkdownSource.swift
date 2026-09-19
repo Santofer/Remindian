@@ -35,8 +35,20 @@ class GenericMarkdownSource: TaskSource {
             guard let content = try? String(contentsOf: fileURL, encoding: .utf8) else { continue }
             let relativePath = fileURL.path.replacingOccurrences(of: config.vaultPath, with: "")
             let lines = content.components(separatedBy: "\n")
+            var currentHeading: String?
             for (index, line) in lines.enumerated() {
-                if let task = parser.parse(line, filePath: relativePath, lineNumber: index + 1, ignoredMarkers: ignoredMarkers) {
+                if let heading = ObsidianService.markdownHeading(in: line) {
+                    currentHeading = heading
+                }
+                if var task = parser.parse(line, filePath: relativePath, lineNumber: index + 1, ignoredMarkers: ignoredMarkers) {
+                    if let source = task.obsidianSource {
+                        task.obsidianSource = SyncTask.ObsidianSource(
+                            filePath: source.filePath,
+                            lineNumber: source.lineNumber,
+                            originalLine: source.originalLine,
+                            sectionHeading: currentHeading
+                        )
+                    }
                     tasks.append(task)
                 }
             }

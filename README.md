@@ -77,6 +77,7 @@ brew update && brew upgrade --cask santofer/tap/remindian
 
 ### 🗂️ Organization
 - **Tag-based list mapping** — `#work` → "Work" list
+- **Heading-based list mapping** — tasks under `## Work` → "Work" list
 - **File-to-list mapping** — Map entire files to lists
 - **Project/context routing** — TaskNotes field-based routing
 - **Folder filtering** — Whitelist or exclude vault folders
@@ -124,7 +125,7 @@ Open **Settings** from the menu bar icon:
 | Tab | What it configures |
 |-----|-------------------|
 | **General** | Source & destination, vault path, sync interval, writeback toggles, notifications, default list, hotkey |
-| **List Mappings** | Tag → list mappings, file → list mappings |
+| **List Mappings** | Tag → list mappings, heading → list mappings, file → list mappings |
 | **TaskNotes** | Integration mode, status mapping, field mapping, list/folder source |
 | **Advanced** | Folder filtering, Reminders list filtering, dry run, sync state reset, global filter |
 
