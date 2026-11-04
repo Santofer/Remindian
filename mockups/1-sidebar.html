@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: transparent;
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .window {
+    width: 720px;
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+    overflow: hidden;
+    display: flex;
+  }
+  .sidebar {
+    width: 200px;
+    background: #fafafa;
+    border-right: 1px solid #e5e7eb;
+    padding: 16px 0;
+  }
+  .sidebar-header {
+    padding: 0 16px 16px;
+    border-bottom: 1px solid #e5e7eb;
+    margin-bottom: 8px;
+  }
+  .sidebar-header h2 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #111;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sidebar-header h2 .icon {
+    width: 20px;
+    height: 20px;
+    background: linear-gradient(135deg, #7c3aed, #a855f7);
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: white;
+  }
+  .sidebar-item {
+    padding: 8px 16px;
+    font-size: 13px;
+    color: #666;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.15s;
+  }
+  .sidebar-item:hover {
+    background: #f0f0f0;
+    color: #333;
+  }
+  .sidebar-item.active {
+    background: #f0f0f0;
+    color: #111;
+    font-weight: 500;
+  }
+  .sidebar-item .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+  .sidebar-item .dot.green { background: #22c55e; }
+  .sidebar-item .dot.blue { background: #3b82f6; }
+  .sidebar-item .dot.gray { background: #9ca3af; }
+  .sidebar-item .dot.orange { background: #f59e0b; }
+  .sidebar-item .dot.purple { background: #8b5cf6; }
+  .sidebar-section {
+    padding: 12px 16px 4px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .main {
+    flex: 1;
+    padding: 24px;
+  }
+  .main h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #111;
+    margin-bottom: 4px;
+  }
+  .main .subtitle {
+    font-size: 13px;
+    color: #9ca3af;
+    margin-bottom: 20px;
+  }
+  .stat-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .stat-card {
+    flex: 1;
+    background: #fafafa;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .stat-card .label {
+    font-size: 11px;
+    color: #9ca3af;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .stat-card .value {
+    font-size: 24px;
+    font-weight: 600;
+    color: #111;
+    margin-top: 2px;
+  }
+  .stat-card .change {
+    font-size: 11px;
+    color: #22c55e;
+    margin-top: 2px;
+  }
+  .stat-card .change.neutral { color: #9ca3af; }
+  .activity-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid #f3f4f6;
+    gap: 10px;
+  }
+  .activity-item:last-child { border-bottom: none; }
+  .activity-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+  .activity-icon.sync { background: #dbeafe; color: #3b82f6; }
+  .activity-icon.check { background: #dcfce7; color: #22c55e; }
+  .activity-icon.conflict { background: #fef3c7; color: #f59e0b; }
+  .activity-text {
+    flex: 1;
+    font-size: 13px;
+    color: #333;
+  }
+  .activity-text .meta {
+    font-size: 11px;
+    color: #9ca3af;
+    margin-top: 1px;
+  }
+  .activity-time {
+    font-size: 11px;
+    color: #9ca3af;
+    flex-shrink: 0;
+  }
+  .section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #111;
+    margin-bottom: 8px;
+  }
+</style>
+</head>
+<body>
+<div class="window">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h2><span class="icon">R</span> Remindian</h2>
+    </div>
+    <div class="sidebar-section">Dashboard</div>
+    <div class="sidebar-item active"><span class="dot green"></span> Overview</div>
+    <div class="sidebar-item"><span class="dot blue"></span> Sync History</div>
+    <div class="sidebar-item"><span class="dot orange"></span> Conflicts</div>
+    <div class="sidebar-section">Settings</div>
+    <div class="sidebar-item"><span class="dot gray"></span> General</div>
+    <div class="sidebar-item"><span class="dot purple"></span> Mappings</div>
+    <div class="sidebar-item"><span class="dot gray"></span> Advanced</div>
+  </div>
+  <div class="main">
+    <h1>Overview</h1>
+    <p class="subtitle">Your sync is healthy. Last sync 2 minutes ago.</p>
+    <div class="stat-row">
+      <div class="stat-card">
+        <div class="label">Tasks Synced</div>
+        <div class="value">247</div>
+        <div class="change">+12 today</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Active Mappings</div>
+        <div class="value">5</div>
+        <div class="change neutral">Tag to List</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Conflicts</div>
+        <div class="value">0</div>
+        <div class="change">All resolved</div>
+      </div>
+    </div>
+    <div class="section-title">Recent Activity</div>
+    <div class="activity-item">
+      <div class="activity-icon sync">&#8635;</div>
+      <div class="activity-text">Synced 12 tasks from Obsidian to Reminders<div class="meta">Inbox.md, Work.md, Projects.md</div></div>
+      <div class="activity-time">2 min ago</div>
+    </div>
+    <div class="activity-item">
+      <div class="activity-icon check">&#10003;</div>
+      <div class="activity-text">Completion writeback: "Review PR #53"<div class="meta">Projects/Remindian.md : line 24</div></div>
+      <div class="activity-time">15 min ago</div>
+    </div>
+    <div class="activity-item">
+      <div class="activity-icon check">&#10003;</div>
+      <div class="activity-text">Created 3 new tasks in Apple Reminders<div class="meta">List: Work, Personal</div></div>
+      <div class="activity-time">1 hr ago</div>
+    </div>
+    <div class="activity-item">
+      <div class="activity-icon conflict">&#9888;</div>
+      <div class="activity-text">Conflict auto-resolved: "Ship v5.6"<div class="meta">Obsidian version kept (newer)</div></div>
+      <div class="activity-time">3 hr ago</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

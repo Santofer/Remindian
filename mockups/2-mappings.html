@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: transparent;
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .card {
+    width: 560px;
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 20px 24px 0;
+  }
+  .card-header h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #111;
+  }
+  .card-header p {
+    font-size: 13px;
+    color: #9ca3af;
+    margin-top: 2px;
+  }
+  .card-body {
+    padding: 16px 24px 24px;
+  }
+  .mapping-row {
+    display: flex;
+    align-items: center;
+    padding: 12px 14px;
+    background: #fafafa;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    gap: 12px;
+  }
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    min-width: 100px;
+    justify-content: center;
+  }
+  .tag.work { background: #dbeafe; color: #1d4ed8; }
+  .tag.personal { background: #dcfce7; color: #15803d; }
+  .tag.health { background: #fce7f3; color: #be185d; }
+  .tag.urgent { background: #fee2e2; color: #dc2626; }
+  .tag.reading { background: #f3e8ff; color: #7c3aed; }
+  .arrow {
+    color: #9ca3af;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .list-name {
+    font-size: 13px;
+    color: #333;
+    font-weight: 500;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .list-icon {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+  .list-icon.reminders { background: #f0f0f0; color: #666; }
+  .count {
+    font-size: 11px;
+    color: #9ca3af;
+    background: #f3f4f6;
+    padding: 2px 8px;
+    border-radius: 10px;
+    flex-shrink: 0;
+  }
+  .add-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px;
+    border: 1px dashed #d1d5db;
+    border-radius: 8px;
+    color: #9ca3af;
+    font-size: 13px;
+    cursor: pointer;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .add-row:hover {
+    background: #fafafa;
+    color: #666;
+    border-color: #9ca3af;
+  }
+  .badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+  }
+  .badge.bi { background: #dbeafe; color: #1d4ed8; }
+  .badge.one { background: #f3f4f6; color: #6b7280; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-header">
+    <h2>Tag Mappings</h2>
+    <p>Route Obsidian tags to specific lists in Apple Reminders</p>
+  </div>
+  <div class="card-body">
+    <div class="mapping-row">
+      <span class="tag work">#work</span>
+      <span class="arrow">&rarr;</span>
+      <span class="list-name"><span class="list-icon reminders">&#9776;</span> Work Tasks</span>
+      <span class="count">84 tasks</span>
+      <span class="badge bi">Bi-directional</span>
+    </div>
+    <div class="mapping-row">
+      <span class="tag personal">#personal</span>
+      <span class="arrow">&rarr;</span>
+      <span class="list-name"><span class="list-icon reminders">&#9776;</span> Personal</span>
+      <span class="count">52 tasks</span>
+      <span class="badge bi">Bi-directional</span>
+    </div>
+    <div class="mapping-row">
+      <span class="tag health">#health</span>
+      <span class="arrow">&rarr;</span>
+      <span class="list-name"><span class="list-icon reminders">&#9776;</span> Health & Fitness</span>
+      <span class="count">23 tasks</span>
+      <span class="badge one">One-way</span>
+    </div>
+    <div class="mapping-row">
+      <span class="tag urgent">#urgent</span>
+      <span class="arrow">&rarr;</span>
+      <span class="list-name"><span class="list-icon reminders">&#9776;</span> Urgent</span>
+      <span class="count">7 tasks</span>
+      <span class="badge bi">Bi-directional</span>
+    </div>
+    <div class="mapping-row">
+      <span class="tag reading">#reading</span>
+      <span class="arrow">&rarr;</span>
+      <span class="list-name"><span class="list-icon reminders">&#9776;</span> Reading List</span>
+      <span class="count">31 tasks</span>
+      <span class="badge one">One-way</span>
+    </div>
+    <div class="add-row">+ Add mapping</div>
+  </div>
+</div>
+</body>
+</html>

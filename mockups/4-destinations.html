@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: transparent;
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .card {
+    width: 480px;
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 20px 24px 0;
+  }
+  .card-header h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #111;
+  }
+  .card-header p {
+    font-size: 13px;
+    color: #9ca3af;
+    margin-top: 2px;
+  }
+  .card-body {
+    padding: 16px 24px 24px;
+  }
+  .dest-item {
+    display: flex;
+    align-items: center;
+    padding: 14px;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    gap: 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .dest-item:hover {
+    border-color: #c7d2fe;
+    background: #fafafe;
+  }
+  .dest-item.active {
+    border-color: #818cf8;
+    background: #f5f3ff;
+  }
+  .dest-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .dest-icon.reminders { background: #fee2e2; }
+  .dest-icon.things { background: #dbeafe; }
+  .dest-icon.todoist { background: #fee2e2; }
+  .dest-icon.ticktick { background: #dbeafe; }
+  .dest-icon.calendar { background: #fef3c7; }
+  .dest-info {
+    flex: 1;
+  }
+  .dest-info .name {
+    font-size: 14px;
+    font-weight: 500;
+    color: #111;
+  }
+  .dest-info .desc {
+    font-size: 12px;
+    color: #9ca3af;
+    margin-top: 1px;
+  }
+  .check {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid #e5e7eb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 12px;
+    color: transparent;
+  }
+  .dest-item.active .check {
+    background: #818cf8;
+    border-color: #818cf8;
+    color: white;
+  }
+  .connected-badge {
+    font-size: 11px;
+    color: #15803d;
+    background: #dcfce7;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-header">
+    <h2>Choose Destination</h2>
+    <p>Where should your Obsidian tasks sync to?</p>
+  </div>
+  <div class="card-body">
+    <div class="dest-item active">
+      <div class="dest-icon reminders">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>
+      </div>
+      <div class="dest-info">
+        <div class="name">Apple Reminders</div>
+        <div class="desc">Native integration via EventKit</div>
+      </div>
+      <span class="connected-badge">Connected</span>
+      <div class="check">&#10003;</div>
+    </div>
+    <div class="dest-item">
+      <div class="dest-icon things">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m9 12 2 2 4-4"/></svg>
+      </div>
+      <div class="dest-info">
+        <div class="name">Things 3</div>
+        <div class="desc">AppleScript + URL scheme</div>
+      </div>
+      <div class="check">&#10003;</div>
+    </div>
+    <div class="dest-item">
+      <div class="dest-icon todoist">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </div>
+      <div class="dest-info">
+        <div class="name">Todoist</div>
+        <div class="desc">REST API with token auth</div>
+      </div>
+      <div class="check">&#10003;</div>
+    </div>
+    <div class="dest-item">
+      <div class="dest-icon ticktick">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>
+      </div>
+      <div class="dest-info">
+        <div class="name">TickTick</div>
+        <div class="desc">OAuth 2.0 integration</div>
+      </div>
+      <div class="check">&#10003;</div>
+    </div>
+    <div class="dest-item">
+      <div class="dest-icon calendar">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+      </div>
+      <div class="dest-info">
+        <div class="name">Calendar Feed</div>
+        <div class="desc">Export as .ics file</div>
+      </div>
+      <div class="check">&#10003;</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

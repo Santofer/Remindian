@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: transparent;
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .card {
+    width: 620px;
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  .card-header h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #111;
+  }
+  .filter-tabs {
+    display: flex;
+    gap: 2px;
+    background: #f3f4f6;
+    border-radius: 6px;
+    padding: 2px;
+  }
+  .filter-tab {
+    padding: 4px 12px;
+    font-size: 12px;
+    border-radius: 4px;
+    color: #6b7280;
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .filter-tab.active {
+    background: white;
+    color: #111;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  th {
+    text-align: left;
+    padding: 10px 24px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  td {
+    padding: 12px 24px;
+    font-size: 13px;
+    color: #333;
+    border-bottom: 1px solid #f8f9fa;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #fafafa; }
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .status.success {
+    background: #dcfce7;
+    color: #15803d;
+  }
+  .status.partial {
+    background: #fef3c7;
+    color: #b45309;
+  }
+  .status.error {
+    background: #fee2e2;
+    color: #dc2626;
+  }
+  .status-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+  }
+  .status.success .status-dot { background: #22c55e; }
+  .status.partial .status-dot { background: #f59e0b; }
+  .status.error .status-dot { background: #ef4444; }
+  .file-path {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 12px;
+    color: #6b7280;
+    background: #f3f4f6;
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+  .num { font-variant-numeric: tabular-nums; }
+  .time { color: #9ca3af; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-header">
+    <h2>Sync History</h2>
+    <div class="filter-tabs">
+      <div class="filter-tab active">All</div>
+      <div class="filter-tab">Created</div>
+      <div class="filter-tab">Updated</div>
+      <div class="filter-tab">Completed</div>
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Status</th>
+        <th>Action</th>
+        <th>Tasks</th>
+        <th>Source</th>
+        <th>Time</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="status success"><span class="status-dot"></span>Success</span></td>
+        <td>Full sync</td>
+        <td class="num">12 synced</td>
+        <td><span class="file-path">Inbox.md</span></td>
+        <td class="time">2 min ago</td>
+      </tr>
+      <tr>
+        <td><span class="status success"><span class="status-dot"></span>Success</span></td>
+        <td>Completion writeback</td>
+        <td class="num">3 completed</td>
+        <td><span class="file-path">Work/Tasks.md</span></td>
+        <td class="time">15 min ago</td>
+      </tr>
+      <tr>
+        <td><span class="status partial"><span class="status-dot"></span>Partial</span></td>
+        <td>Full sync</td>
+        <td class="num">8 synced, 1 skipped</td>
+        <td><span class="file-path">Projects.md</span></td>
+        <td class="time">1 hr ago</td>
+      </tr>
+      <tr>
+        <td><span class="status success"><span class="status-dot"></span>Success</span></td>
+        <td>Due date writeback</td>
+        <td class="num">2 updated</td>
+        <td><span class="file-path">Personal.md</span></td>
+        <td class="time">2 hr ago</td>
+      </tr>
+      <tr>
+        <td><span class="status success"><span class="status-dot"></span>Success</span></td>
+        <td>Full sync</td>
+        <td class="num">24 synced</td>
+        <td><span class="file-path">5 files</span></td>
+        <td class="time">4 hr ago</td>
+      </tr>
+      <tr>
+        <td><span class="status error"><span class="status-dot"></span>Error</span></td>
+        <td>Full sync</td>
+        <td class="num">0 synced</td>
+        <td><span class="file-path">vault offline</span></td>
+        <td class="time">6 hr ago</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+</body>
+</html>
