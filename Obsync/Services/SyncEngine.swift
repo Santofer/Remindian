@@ -481,14 +481,22 @@ class SyncEngine {
 
             debugLog("[SyncEngine] Existing mappings: \(syncState.mappings.count)")
 
-            // Safety check: if source task count dropped by >50% compared to
-            // existing mappings, something might be wrong (vault unmounted, scan failure).
-            // Abort to prevent mass deletion of destination tasks.
+            // Safety check: an *empty* scan against a populated state is the
+            // signature of a scan that failed (volume not mounted yet, iCloud not
+            // downloaded), not of someone deleting every task they have.
+            //
+            // This used to fire whenever the source count fell below half the
+            // mapping count. That is a proxy, and it was wrong in both directions:
+            // deleting several tasks from a small vault tripped it, and because it
+            // returned before the mappings could be cleaned up it then blocked
+            // every later sync until the state was reset (#98). Deletions are now
+            // judged where they are actually known — the mass-deletion guard below,
+            // which counts real pending deletes against a limit the user controls.
             let existingMappingCount = syncState.mappings.count
-            if existingMappingCount > 10 && obsidianMap.count < existingMappingCount / 2 {
-                debugLog("[SyncEngine] SAFETY: Source task count (\(obsidianMap.count)) is <50% of existing mappings (\(existingMappingCount)). Aborting to prevent mass deletion.")
+            if existingMappingCount > 10 && obsidianMap.isEmpty {
+                debugLog("[SyncEngine] SAFETY: Source returned no tasks but \(existingMappingCount) are mapped. Aborting to prevent mass deletion.")
                 result.errors.append(SyncError.safetyAbort(
-                    "Source returned \(obsidianMap.count) tasks but \(existingMappingCount) are mapped. This might indicate a scan failure. Sync aborted to protect your data."
+                    "The vault scan found no tasks at all, but \(existingMappingCount) are synced. That usually means the vault wasn't readable (not mounted or not downloaded yet), so nothing was changed. If you really did remove every task, use Reset Sync State in Settings → Advanced."
                 ))
                 return result
             }

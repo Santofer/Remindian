@@ -67,6 +67,70 @@ final class PhantomChangeLoopTests: XCTestCase {
     }
 }
 
+/// #98 — deleting tasks in Obsidian must delete their reminders, not wedge the sync.
+final class SourceDeletionTests: XCTestCase {
+
+    private func task(_ n: Int) -> SyncTask {
+        SyncTask(title: "Task \(n)", isCompleted: false,
+                 obsidianSource: SyncTask.ObsidianSource(filePath: "/tasks.md", lineNumber: n, originalLine: "- [ ] Task \(n)"))
+    }
+
+    private func syncedEngine(count: Int) async -> (SyncEngine, FixedSource, LossyDestination, SyncConfiguration, TempVaultPL) {
+        let vault = try! TempVaultPL()
+        let source = FixedSource(scanned: (1...count).map(task))
+        let destination = LossyDestination()
+        let engine = SyncEngine(source: source, destination: destination, syncState: SyncState())
+        let config = SyncConfiguration()
+        config.vaultPath = vault.path
+        _ = await engine.performSync(config: config)
+        return (engine, source, destination, config, vault)
+    }
+
+    func test_98_deletingMoreThanHalfTheTasksDeletesTheirReminders() async throws {
+        let (engine, source, destination, config, vault) = await syncedEngine(count: 12)
+        defer { vault.cleanup() }
+
+        source.scanned = (1...5).map(task)          // 7 of 12 deleted in Obsidian
+        let result = await engine.performSync(config: config)
+
+        XCTAssertTrue(result.errors.isEmpty, "A plain deletion is not an error. Got: \(result.errors)")
+        XCTAssertEqual(result.deleted, 7)
+        let remaining = try await destination.fetchAllTasks()
+        XCTAssertEqual(remaining.count, 5)
+
+        // And the sync is not wedged afterwards.
+        let next = await engine.performSync(config: config)
+        XCTAssertTrue(next.errors.isEmpty)
+        XCTAssertEqual(next.deleted, 0)
+    }
+
+    func test_98_anEmptyScanStillTouchesNothing() async throws {
+        // The failure the old check existed for: the vault could not be read.
+        let (engine, source, destination, config, vault) = await syncedEngine(count: 12)
+        defer { vault.cleanup() }
+
+        source.scanned = []
+        let result = await engine.performSync(config: config)
+
+        XCTAssertEqual(result.deleted, 0)
+        XCTAssertFalse(result.errors.isEmpty, "An empty scan must be reported, not acted on")
+        let remaining = try await destination.fetchAllTasks()
+        XCTAssertEqual(remaining.count, 12)
+    }
+
+    func test_98_aNarrowedScanIsStillStoppedByTheDeletionLimit() async throws {
+        let (engine, source, destination, config, vault) = await syncedEngine(count: 60)
+        defer { vault.cleanup() }
+
+        source.scanned = (1...20).map(task)          // 40 would go — over the default 25
+        let result = await engine.performSync(config: config)
+
+        XCTAssertEqual(result.deleted, 0)
+        let remaining = try await destination.fetchAllTasks()
+        XCTAssertEqual(remaining.count, 60, "Over the limit nothing is removed")
+    }
+}
+
 // MARK: - Fixtures
 
 private final class TempVaultPL {
@@ -81,7 +145,7 @@ private final class TempVaultPL {
 
 private final class FixedSource: TaskSource {
     let sourceName = "FixedSource"
-    private let scanned: [SyncTask]
+    var scanned: [SyncTask]
     init(scanned: [SyncTask]) { self.scanned = scanned }
     func scanTasks(config: SyncConfiguration) throws -> [SyncTask] { scanned }
     func generateTaskId(for task: SyncTask) -> String { "fixed-\(task.title)" }
