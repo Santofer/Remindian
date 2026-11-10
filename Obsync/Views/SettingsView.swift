@@ -826,7 +826,7 @@ struct ListMappingsView: View {
                 .foregroundColor(.secondary)
 
             Toggle("Send tags without a mapping to the default list", isOn: $syncManager.config.unmappedTagsUseDefaultList)
-                .help("Otherwise a tag with no mapping creates a list named after the tag, so a typo like #Logistic adds a new list.")
+                .help("Otherwise a tag with no mapping creates a list named after the tag, so a typo like #Logistic adds a new list. Reminders you create in a list that has no mapping also move to the default list, so map the lists you use.")
 
             // Mapping priority explanation
             GroupBox {
