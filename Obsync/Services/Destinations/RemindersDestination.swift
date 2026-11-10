@@ -148,6 +148,13 @@ class RemindersDestination: TaskDestination {
         return titles
     }
 
+    /// The reminder as EventKit holds it now, shaped exactly like `fetchAllTasks`
+    /// reports it, so the engine can fingerprint reality instead of a prediction.
+    func currentTask(withId id: String) async -> SyncTask? {
+        guard let reminder = eventStore.calendarItem(withIdentifier: id) as? EKReminder else { return nil }
+        return SyncTask.fromReminder(reminder, listName: reminder.calendar?.title ?? "")
+    }
+
     // MARK: - CRUD
 
     func createTask(from task: SyncTask, inList listName: String, config: SyncConfiguration) async throws -> String {

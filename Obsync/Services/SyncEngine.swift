@@ -605,8 +605,19 @@ class SyncEngine {
                             // The metadata writeback will selectively write enabled
                             // fields back to Obsidian.
                             if rChanged && !oChanged && !completionDiffers {
-                                taskForReminders.dueDate = rTask.dueDate
-                                taskForReminders.startDate = rTask.startDate
+                                // Dates are adopted only when they differ by calendar
+                                // day — the same granularity the writeback below uses.
+                                // A destination that drops the time-of-day (Reminders
+                                // with "Include due time" off) reports midnight for a
+                                // task due at 10:00; adopting that would store a
+                                // fingerprint the vault never matches and manufacture
+                                // an Obsidian-side "change" on the next sync (#99).
+                                if !datesAreEqualByDay(rTask.dueDate, oTask.dueDate) {
+                                    taskForReminders.dueDate = rTask.dueDate
+                                }
+                                if !datesAreEqualByDay(rTask.startDate, oTask.startDate) {
+                                    taskForReminders.startDate = rTask.startDate
+                                }
                                 taskForReminders.priority = rTask.priority
                             }
 
@@ -848,11 +859,19 @@ class SyncEngine {
                                         tags: oTask.tags,
                                         heading: oTask.obsidianSource?.sectionHeading
                                     )
+                                    // Prefer what the destination actually holds over
+                                    // the prediction above. Destinations are lossy (time
+                                    // of day dropped, recurrence rules rewritten, their
+                                    // own completion timestamp), and a prediction that
+                                    // never matches the next fetch makes every sync see a
+                                    // phantom destination-side change — one task was
+                                    // re-pushed 16,500 times in a month this way (#99).
+                                    let observedReminder = await destination.currentTask(withId: mapping.remindersId)
                                     syncState.addOrUpdateMapping(
                                         obsidianId: mapping.obsidianId,
                                         remindersId: mapping.remindersId,
                                         obsidianHash: SyncState.generateTaskHash(taskForReminders),
-                                        remindersHash: SyncState.generateTaskHash(reminderStateAfterSync)
+                                        remindersHash: SyncState.generateTaskHash(observedReminder ?? reminderStateAfterSync)
                                     )
                                 }
                             }
@@ -1238,11 +1257,15 @@ class SyncEngine {
                             debugLog("[SyncEngine] Reconnect updateTask failed for \"\(task.title)\"; storing empty hash to force retry")
                         }
 
+                        // The reminder as it is *after* the push. This used to store
+                        // `matched.task` — the reminder from before the push — so the
+                        // very next sync always saw a destination-side change (#99).
+                        let observedReminder = pushOK == nil ? nil : await destination.currentTask(withId: matched.id)
                         syncState.addOrUpdateMapping(
                             obsidianId: obsidianId,
                             remindersId: matched.id,
                             obsidianHash: pushOK == nil ? "" : SyncState.generateTaskHash(task),
-                            remindersHash: SyncState.generateTaskHash(matched.task)
+                            remindersHash: SyncState.generateTaskHash(observedReminder ?? matched.task)
                         )
                     }
 

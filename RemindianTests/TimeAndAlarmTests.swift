@@ -89,4 +89,55 @@ final class TimeAndAlarmTests: XCTestCase {
         XCTAssertFalse(cfg.addReminderAlarm, "Alarms are opt-in — off by default.")
         XCTAssertEqual(cfg.reminderAlarmHour, 9)
     }
+
+    // MARK: - #99: alarms must follow the due date
+
+    private func day(_ d: Int, hour: Int = 0, minute: Int = 0) -> Date {
+        var c = DateComponents(); c.year = 2026; c.month = 10; c.day = d; c.hour = hour; c.minute = minute
+        return Calendar.current.date(from: c)!
+    }
+
+    /// The reported case: all-day due, 10:00 alarm, due date moved one day later.
+    /// The alarm stayed on the old day, and Reminders shows a reminder at its
+    /// alarm's date — so the change never visibly arrived.
+    func test_99_ourAlarmMovesWithTheDueDate() {
+        let result = SyncTask.rescheduledAlarm(day(14, hour: 10), previousDue: day(14), newDue: day(15),
+                                               includeTime: false, allDayHour: 10)
+        XCTAssertEqual(result, .move(day(15, hour: 10)))
+    }
+
+    func test_99_alarmUntouchedWhenDueDateDidNotMove() {
+        let result = SyncTask.rescheduledAlarm(day(14, hour: 10), previousDue: day(14), newDue: day(14),
+                                               includeTime: false, allDayHour: 10)
+        XCTAssertEqual(result, .keep, "No churn when nothing changed")
+    }
+
+    func test_99_timedAlarmFollowsATimeChangeOnTheSameDay() {
+        let result = SyncTask.rescheduledAlarm(day(14, hour: 14, minute: 30), previousDue: day(14, hour: 14, minute: 30),
+                                               newDue: day(14, hour: 16), includeTime: true, allDayHour: 9)
+        XCTAssertEqual(result, .move(day(14, hour: 16)))
+    }
+
+    /// An alarm someone set at their own time on the due day still belongs to the
+    /// day — it follows the date and keeps its time.
+    func test_99_otherAlarmOnTheDueDayFollowsAndKeepsItsTime() {
+        let result = SyncTask.rescheduledAlarm(day(14, hour: 18, minute: 45), previousDue: day(14), newDue: day(20),
+                                               includeTime: false, allDayHour: 10)
+        XCTAssertEqual(result, .move(day(20, hour: 18, minute: 45)))
+    }
+
+    /// A "day before" nudge is the user's own alarm. It is not ours to move.
+    func test_99_alarmOnAnotherDayIsLeftAlone() {
+        let result = SyncTask.rescheduledAlarm(day(13, hour: 9), previousDue: day(14), newDue: day(15),
+                                               includeTime: false, allDayHour: 10)
+        XCTAssertEqual(result, .keep)
+    }
+
+    func test_99_ourAlarmIsRemovedWhenTheDueDateIsCleared() {
+        XCTAssertEqual(SyncTask.rescheduledAlarm(day(14, hour: 10), previousDue: day(14), newDue: nil,
+                                                 includeTime: false, allDayHour: 10), .remove)
+        XCTAssertEqual(SyncTask.rescheduledAlarm(day(14, hour: 18), previousDue: day(14), newDue: nil,
+                                                 includeTime: false, allDayHour: 10), .keep,
+                       "Only the alarm Remindian created is removed with the due date")
+    }
 }

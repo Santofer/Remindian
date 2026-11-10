@@ -39,6 +39,18 @@ protocol TaskDestination: AnyObject {
     /// then "Fetching Things 3 (Inbox)…"). Destinations that don't implement
     /// granular progress can ignore this.
     var progressCallback: ((String) -> Void)? { get set }
+
+    /// The task as the destination holds it *right now*, in the same shape
+    /// `fetchAllTasks` would report it. Used after a push to record what the
+    /// destination actually stored instead of predicting it.
+    ///
+    /// Destinations are lossy — Apple Reminders drops the time-of-day when "Include
+    /// due time" is off, rewrites recurrence rules, stamps its own completion date —
+    /// so a predicted fingerprint can disagree with reality forever, and the engine
+    /// then sees a phantom destination-side change on every sync (#99). Return nil
+    /// when a cheap single-item read isn't available; the engine falls back to
+    /// its prediction.
+    func currentTask(withId id: String) async -> SyncTask?
 }
 
 /// Default no-op implementation so existing destinations don't need to opt in.
@@ -47,4 +59,6 @@ extension TaskDestination {
         get { nil }
         set { /* default no-op */ }
     }
+
+    func currentTask(withId id: String) async -> SyncTask? { nil }
 }

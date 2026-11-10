@@ -179,4 +179,42 @@ final class SecurityHardeningTests: XCTestCase {
         XCTAssertFalse(OAuthCallbackHandler.constantTimeEquals("abc123", "abc124"))
         XCTAssertFalse(OAuthCallbackHandler.constantTimeEquals("abc", "abcd"))
     }
+
+    // MARK: - #99: the debug log must have a ceiling
+
+    func test_99_debugLogRotatesPastTheCap() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let log = dir.appendingPathComponent("debug.log")
+        let old = dir.appendingPathComponent("debug.old.log")
+
+        try Data(repeating: 0x41, count: 2_000).write(to: log)
+        XCTAssertFalse(DebugLogRotation.rotateIfNeeded(log, maxBytes: 5_000), "Under the cap: leave it alone")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: log.path))
+
+        try Data(repeating: 0x42, count: 9_000).write(to: log)
+        XCTAssertTrue(DebugLogRotation.rotateIfNeeded(log, maxBytes: 5_000), "Over the cap: rotate")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: log.path), "A fresh log starts on the next write")
+        XCTAssertEqual(try Data(contentsOf: old).count, 9_000, "The previous content is kept as .old")
+    }
+
+    func test_99_rotationReplacesThePreviousOldLog() throws {
+        // Only one generation is kept, so disk use is bounded at two caps.
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let log = dir.appendingPathComponent("debug.log")
+        let old = dir.appendingPathComponent("debug.old.log")
+
+        try Data(repeating: 0x41, count: 50_000).write(to: old)
+        try Data(repeating: 0x42, count: 9_000).write(to: log)
+        XCTAssertTrue(DebugLogRotation.rotateIfNeeded(log, maxBytes: 5_000))
+        XCTAssertEqual(try Data(contentsOf: old).count, 9_000)
+    }
+
+    func test_99_rotatingAMissingLogIsHarmless() {
+        let missing = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".log")
+        XCTAssertFalse(DebugLogRotation.rotateIfNeeded(missing))
+    }
 }

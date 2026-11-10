@@ -784,6 +784,46 @@ extension SyncTask {
     ///   URL field as a clickable icon, so the notes-side copy was just
     ///   visual clutter (#69). Older clients that don't surface the URL
     ///   field can opt back in via the corresponding Settings toggle.
+    enum AlarmReschedule: Equatable {
+        case keep
+        case remove
+        case move(Date)
+    }
+
+    /// What should happen to an existing absolute alarm when a reminder's due date
+    /// changes from `previousDue` to `newDue`.
+    ///
+    /// - The alarm Remindian itself would have created for the old due date is
+    ///   re-created for the new one (or removed when the due date is cleared).
+    /// - Any other alarm that sat on the old due *day* follows the date and keeps
+    ///   its own time of day — it was plainly "on the day", whoever added it.
+    /// - Alarms on other days are left alone.
+    static func rescheduledAlarm(
+        _ fireDate: Date,
+        previousDue: Date,
+        newDue: Date?,
+        includeTime: Bool,
+        allDayHour: Int,
+        calendar: Calendar = .current
+    ) -> AlarmReschedule {
+        let ours = alarmFireDate(due: previousDue, includeTime: includeTime, allDayHour: allDayHour, calendar: calendar)
+        let isOurs = abs(fireDate.timeIntervalSince(ours)) < 1
+
+        guard let newDue else { return isOurs ? .remove : .keep }
+
+        if isOurs {
+            let target = alarmFireDate(due: newDue, includeTime: includeTime, allDayHour: allDayHour, calendar: calendar)
+            return abs(target.timeIntervalSince(fireDate)) < 1 ? .keep : .move(target)
+        }
+
+        guard calendar.isDate(fireDate, inSameDayAs: previousDue),
+              !calendar.isDate(previousDue, inSameDayAs: newDue) else { return .keep }
+        let time = calendar.dateComponents([.hour, .minute, .second], from: fireDate)
+        guard let shifted = calendar.date(bySettingHour: time.hour ?? 0, minute: time.minute ?? 0,
+                                          second: time.second ?? 0, of: newDue) else { return .keep }
+        return .move(shifted)
+    }
+
     /// Compute when a reminder's alarm should fire for a given due date. (#6)
     ///
     /// If the due date carries a real time-of-day (and time sync is on), the
@@ -802,6 +842,10 @@ extension SyncTask {
         reminder.title = title
         reminder.isCompleted = isCompleted
         reminder.priority = priority.toRemindersPriority
+
+        // The due date the reminder carried before this push — needed below to
+        // tell which alarms were tied to it (#99).
+        let previousDue = reminder.dueDateComponents.flatMap { Calendar.current.date(from: $0) }
 
         if let dueDate = dueDate {
             if includeDueTime {
@@ -880,6 +924,28 @@ extension SyncTask {
         if addReminderAlarm, !isCompleted, let due = dueDate, (reminder.alarms?.isEmpty ?? true) {
             let fire = SyncTask.alarmFireDate(due: due, includeTime: includeDueTime, allDayHour: allDayAlarmHour)
             reminder.addAlarm(EKAlarm(absoluteDate: fire))
+        } else if !isCompleted, let previousDue {
+            // The reminder already has alarms and its due date just moved. An
+            // absolute alarm doesn't follow the due date on its own, and Reminders
+            // *displays* a reminder at its alarm's date — so the task visibly stayed
+            // on the old day on every device while the sync reported "updated" (#99).
+            // Move the alarms that were tied to the old due date; leave the rest
+            // (a "day before" nudge the user added, a location alarm) alone.
+            for alarm in reminder.alarms ?? [] {
+                guard let fireDate = alarm.absoluteDate else { continue }   // relative alarms already follow
+                switch SyncTask.rescheduledAlarm(
+                    fireDate, previousDue: previousDue, newDue: dueDate,
+                    includeTime: includeDueTime, allDayHour: allDayAlarmHour
+                ) {
+                case .keep:
+                    break
+                case .remove:
+                    reminder.removeAlarm(alarm)
+                case .move(let newFireDate):
+                    reminder.removeAlarm(alarm)
+                    reminder.addAlarm(EKAlarm(absoluteDate: newFireDate))
+                }
+            }
         }
 
         // Recurrence rule (#57 Phase B) — convert our preserved Obsidian-format

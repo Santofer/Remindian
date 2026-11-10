@@ -16,10 +16,43 @@ func remindianAppSupportDir() -> URL? {
     return dir
 }
 
+/// Keeps `debug.log` from growing without bound.
+///
+/// The log had no ceiling at all. A sync that re-logged the same line on every
+/// run took one user's file to 327 MB in a month (#99). Same scheme as the audit
+/// log: past the cap, the current file becomes `debug.old.log` (replacing the
+/// previous one) and a fresh file starts — so at most two caps' worth on disk.
+enum DebugLogRotation {
+    static let maxBytes: UInt64 = 5 * 1024 * 1024
+    /// Checking the size costs a `stat`; do it once every this many lines.
+    static let checkEvery = 200
+    private static var linesSinceCheck = checkEvery   // check on the first line of a launch
+    private static let lock = NSLock()
+
+    /// Rotate `logFile` when it exceeds `maxBytes`. Returns true when it rotated.
+    @discardableResult
+    static func rotateIfNeeded(_ logFile: URL, maxBytes: UInt64 = maxBytes) -> Bool {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: logFile.path),
+              let size = attrs[.size] as? UInt64, size > maxBytes else { return false }
+        let old = logFile.deletingPathExtension().appendingPathExtension("old.log")
+        try? FileManager.default.removeItem(at: old)
+        return (try? FileManager.default.moveItem(at: logFile, to: old)) != nil
+    }
+
+    fileprivate static func tick(_ logFile: URL) {
+        lock.lock(); defer { lock.unlock() }
+        linesSinceCheck += 1
+        guard linesSinceCheck >= checkEvery else { return }
+        linesSinceCheck = 0
+        rotateIfNeeded(logFile)
+    }
+}
+
 /// Write diagnostic logs to a file (since print/NSLog may not be visible from sandboxed GUI apps)
 func debugLog(_ message: String) {
     guard let appDir = remindianAppSupportDir() else { return }
     let logFile = appDir.appendingPathComponent("debug.log")
+    DebugLogRotation.tick(logFile)
     let timestamp = ISO8601DateFormatter().string(from: Date())
     let line = "[\(timestamp)] \(message)\n"
     if let data = line.data(using: .utf8) {

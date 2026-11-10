@@ -84,6 +84,7 @@ enum SecureFile {
         "config.json",      // API tokens
         "profiles.json",    // API tokens, per profile
         "debug.log",        // OAuth callback URLs, sync diagnostics
+        "debug.old.log",
         "audit.log",
         "audit.old.log",
         "sync_log.json",    // task titles
