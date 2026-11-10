@@ -786,7 +786,7 @@ extension SyncTask {
         return calendar.date(bySettingHour: hour, minute: 0, second: 0, of: due) ?? due
     }
 
-    func applyToReminder(_ reminder: EKReminder, includeDueTime: Bool = false, addTaskLink: Bool = false, vaultPath: String = "", appendLinkToNotes: Bool = false, addReminderAlarm: Bool = false, allDayAlarmHour: Int = 9) {
+    func applyToReminder(_ reminder: EKReminder, includeDueTime: Bool = false, addTaskLink: Bool = false, vaultPath: String = "", appendLinkToNotes: Bool = false, addReminderAlarm: Bool = false, allDayAlarmHour: Int = 9, keepUserNotes: Bool = true) {
         reminder.title = title
         reminder.isCompleted = isCompleted
         reminder.priority = priority.toRemindersPriority
@@ -822,7 +822,8 @@ extension SyncTask {
             existing: reminder.notes,
             addTaskLink: addTaskLink,
             vaultPath: vaultPath,
-            appendLinkToNotes: appendLinkToNotes
+            appendLinkToNotes: appendLinkToNotes,
+            keepUserNotes: keepUserNotes
         )
 
         if isCompleted {
@@ -866,7 +867,13 @@ extension SyncTask {
     ///
     /// Pure, so the sync engine can predict what the reminder will contain after
     /// an update (and hash it) without re-fetching it.
-    func reminderNotes(existing: String?, addTaskLink: Bool = false, vaultPath: String = "", appendLinkToNotes: Bool = false) -> String? {
+    ///
+    /// - Parameter keepUserNotes: keep text the user wrote in the reminder's notes
+    ///   (#105). Pass `false` when tag writeback is on: there the notes are a
+    ///   two-way tag channel (#17), and every `#word` in kept prose would be
+    ///   written back to the vault as a tag on every sync, so the notes keep
+    ///   their previous rewrite-from-scratch behaviour.
+    func reminderNotes(existing: String?, addTaskLink: Bool = false, vaultPath: String = "", appendLinkToNotes: Bool = false, keepUserNotes: Bool = true) -> String? {
         // Build notes: client name + tags + task link
         // (EventKit has no native tag API, so tags are stored in notes for visibility)
         var noteParts: [String] = []
@@ -893,32 +900,27 @@ extension SyncTask {
             noteParts.append(summary)
         }
 
-        // The lines built above are Remindian's; everything else in the notes
-        // belongs to someone else and must survive the update (#105).
-        //
-        // - When the source supplies a body (TaskNotes), the source owns it, as
-        //   before. It now follows the generated lines instead of being dropped
-        //   whenever a `Tags:` / `Client:` line was present.
-        // - Otherwise (Obsidian Tasks, Generic Markdown), keep whatever the user
-        //   wrote in Reminders, after removing the generated lines from the
-        //   previous sync so they are replaced rather than duplicated.
-        //   Previously a tagged task's notes were overwritten with just the
-        //   generated lines, and an untagged task's notes were cleared.
-        if noteParts.isEmpty, let body = notes {
-            return body.trimmingCharacters(in: .whitespaces)
-        }
-        let otherText: String? = {
-            if let body = notes {
-                return body.trimmingCharacters(in: .whitespacesAndNewlines)
+        // A source that supplies its own body (TaskNotes) owns the notes:
+        // unchanged behaviour.
+        if notes != nil || !keepUserNotes {
+            if noteParts.isEmpty {
+                return notes?.trimmingCharacters(in: .whitespaces)
             }
-            return SyncTask.userWrittenNotes(
-                in: existing,
-                expectingClient: clientName?.isEmpty == false,
-                expectingSubtaskSummary: subtaskSummary?.isEmpty == false
-            )
-        }()
-        if let otherText = otherText, !otherText.isEmpty {
-            noteParts.append(otherText)
+            return noteParts.joined(separator: "\n")
+        }
+
+        // Otherwise (Obsidian Tasks, Generic Markdown) the lines built above are
+        // Remindian's, and everything else in the notes is the user's and must
+        // survive the update (#105). The previous sync's generated lines are
+        // removed first so they're replaced rather than duplicated. Before this,
+        // a tagged task's notes were overwritten with just the generated lines,
+        // and an untagged task's notes were cleared (`notes` is nil here).
+        if let userText = SyncTask.userWrittenNotes(
+            in: existing,
+            expectingClient: clientName?.isEmpty == false,
+            expectingSubtaskSummary: subtaskSummary?.isEmpty == false
+        ) {
+            noteParts.append(userText)
         }
         return noteParts.isEmpty ? nil : noteParts.joined(separator: "\n")
     }
@@ -944,8 +946,7 @@ extension SyncTask {
     ///   isn't one of ours, so text the user adds below it is kept.
     /// - A `Tags:` or link line further down is also removed, in case the user
     ///   typed above the generated block. Both formats are machine-shaped
-    ///   (`Tags: #a #b`, `obsidian://open?vault=…`), so ordinary prose won't
-    ///   match.
+    ///   (`Tags: #…`, `obsidian://open?vault=…`), so ordinary prose won't match.
     /// - `Client:` and checklist lines are ordinary enough that a user could
     ///   write them, so they are only treated as ours in the leading block, and
     ///   only when the task currently has a client / folds sub-tasks into its
@@ -975,13 +976,17 @@ extension SyncTask {
             return !isGeneratedTagsLine(trimmed) && !isGeneratedLinkLine(trimmed)
         }
 
-        let text = remainder.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-        return text.isEmpty ? nil : text
+        // Drop blank lines at either end, but keep the user's indentation.
+        var kept = Array(remainder)
+        while let first = kept.first, first.trimmingCharacters(in: .whitespaces).isEmpty { kept.removeFirst() }
+        while let last = kept.last, last.trimmingCharacters(in: .whitespaces).isEmpty { kept.removeLast() }
+        return kept.isEmpty ? nil : kept.joined(separator: "\n")
     }
 
-    /// `Tags: #a #b/c +d`, as written by `applyToReminder`.
+    /// `Tags: #a #b/c +d`, as written by `applyToReminder`. Only the first tag is
+    /// checked, because TaskNotes tags can contain spaces (`#my tag`).
     private static func isGeneratedTagsLine(_ line: String) -> Bool {
-        line.range(of: #"^Tags:( [#+]\S+)+$"#, options: .regularExpression) != nil
+        line.range(of: #"^Tags: [#+]\S"#, options: .regularExpression) != nil
     }
 
     /// The `obsidian://open?vault=…` line written when `appendLinkToNotes` is on.
