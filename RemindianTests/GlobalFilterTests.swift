@@ -180,6 +180,84 @@ final class GlobalFilterTests: XCTestCase {
         XCTAssertTrue(onDisk.contains("#task"))
     }
 
+    // MARK: - Inbox lines carry the filter once
+
+    /// Writes `task` to a fresh inbox with `filter` and returns the line.
+    private func appendedLine(_ task: SyncTask, filter: String) throws -> String {
+        let vault = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: vault, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: vault) }
+        return try ObsidianService().appendTaskToInbox(
+            task: task,
+            inboxRelativePath: "Inbox.md",
+            vaultPath: vault.path,
+            globalFilter: filter
+        ).lineContent
+    }
+
+    private func date(_ ymd: String) -> Date {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f.date(from: ymd)!
+    }
+
+    /// With `📅` as the filter, a dated task's `📅 2026-01-15` already satisfies
+    /// it. The extra bare `📅` used to end up in the parsed title, so the
+    /// reminder was renamed "Buy milk 📅" on the next sync.
+    func test_datedTaskWithDateEmojiFilterGetsNoExtraMarker() throws {
+        let line = try appendedLine(
+            SyncTask(title: "Buy milk", dueDate: date("2026-01-15"), targetList: "Errands"),
+            filter: "📅"
+        )
+        XCTAssertEqual(line, "- [ ] Buy milk 📅 2026-01-15 #Errands")
+
+        let reparsed = SyncTask.fromObsidianLine(line, filePath: "/Inbox.md", lineNumber: 1)
+        XCTAssertEqual(reparsed?.title, "Buy milk", "The filter must not leak into the title")
+        XCTAssertTrue(line.contains("📅"), "Still eligible on the next scan")
+    }
+
+    func test_startDatedTaskWithDateEmojiFilterGetsNoExtraMarker() throws {
+        let line = try appendedLine(
+            SyncTask(title: "Go to Bevmo", dueDate: date("2026-11-10"), startDate: date("2026-11-10")),
+            filter: "📅"
+        )
+        XCTAssertEqual(line, "- [ ] Go to Bevmo 🛫 2026-11-10 📅 2026-11-10")
+    }
+
+    /// Undated: the marker is still needed, or the task drops out of the scan
+    /// and its reminder is deleted.
+    func test_undatedTaskStillGetsTheMarker() throws {
+        let line = try appendedLine(SyncTask(title: "Salads", targetList: "Groceries"), filter: "📅")
+        XCTAssertEqual(line, "- [ ] Salads 📅 #Groceries")
+    }
+
+    /// A tag filter the task's own list tag already matches isn't repeated.
+    func test_tagFilterAlreadyPresentAsListTagIsNotRepeated() throws {
+        let line = try appendedLine(SyncTask(title: "Buy milk", targetList: "task"), filter: "#task")
+        XCTAssertEqual(line, "- [ ] Buy milk #task")
+    }
+
+    /// `RecurrenceConverter.format` returns "🔁 every week"; the line used to
+    /// read "🔁 🔁 every week".
+    func test_recurrenceFromRemindersIsNotDoubled() throws {
+        let line = try appendedLine(
+            SyncTask(title: "Clear out podcasts", dueDate: date("2026-11-16"), recurrenceRule: "🔁 every week"),
+            filter: ""
+        )
+        XCTAssertEqual(line, "- [ ] Clear out podcasts 🔁 every week 📅 2026-11-16")
+        let reparsed = SyncTask.fromObsidianLine(line, filePath: "/Inbox.md", lineNumber: 1)
+        XCTAssertEqual(reparsed?.title, "Clear out podcasts")
+        XCTAssertNotNil(reparsed?.recurrenceRule)
+    }
+
+    func test_recurrenceWithoutEmojiStillGetsOne() throws {
+        let line = try appendedLine(
+            SyncTask(title: "Pay rent", dueDate: date("2026-12-01"), recurrenceRule: "every month"),
+            filter: ""
+        )
+        XCTAssertEqual(line, "- [ ] Pay rent 🔁 every month 📅 2026-12-01")
+    }
+
     func test_newTaskWithoutFilterConfiguredIsUnchanged() throws {
         let vault = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: vault, withIntermediateDirectories: true)

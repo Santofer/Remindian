@@ -523,15 +523,6 @@ class ObsidianService {
         parts.append(task.isCompleted ? "- [x]" : "- [ ]")
         parts.append(task.title)
 
-        // Carry the global filter onto the new line. Without it the task we just
-        // wrote fails the eligibility check on the very next scan, the engine
-        // treats it as deleted from Obsidian, and it deletes the reminder that
-        // created it — the task silently disappears from Reminders. (#89-adjacent)
-        let filterMarker = globalFilter.trimmingCharacters(in: .whitespaces)
-        if !filterMarker.isEmpty && !task.title.contains(filterMarker) {
-            parts.append(filterMarker)
-        }
-
         if task.priority != .none {
             parts.append(task.priority.obsidianEmoji)
         }
@@ -540,7 +531,11 @@ class ObsidianService {
         // emoji order. Round-trips back on the next scan and becomes a repeating
         // Apple Reminder via RecurrenceConverter. (Quick-add recurrence)
         if let rule = task.recurrenceRule, !rule.isEmpty {
-            parts.append("🔁 \(rule)")
+            // `RecurrenceConverter.format` already returns "🔁 every week", so
+            // only add the emoji when the rule lacks one. Otherwise the line
+            // reads "🔁 🔁 every week".
+            let hasEmoji = rule.hasPrefix("🔁") || rule.hasPrefix("🔂")
+            parts.append(hasEmoji ? rule : "🔁 \(rule)")
         }
 
         let formatter = DateFormatter()
@@ -564,6 +559,21 @@ class ObsidianService {
             if !parts.contains(tag) {
                 parts.append(tag)
             }
+        }
+
+        // Carry the global filter onto the new line. Without it the task we just
+        // wrote fails the eligibility check on the very next scan, the engine
+        // treats it as deleted from Obsidian, and it deletes the reminder that
+        // created it — the task silently disappears from Reminders. (#89-adjacent)
+        //
+        // Only add it when the line doesn't already contain it. With a filter
+        // like `📅`, a dated task's `📅 2026-01-15` already matches; a second,
+        // bare `📅` is left in the parsed title on the next scan, so the
+        // reminder gets renamed "Title 📅" and the line reads "📅 📅 2026-01-15".
+        let filterMarker = globalFilter.trimmingCharacters(in: .whitespaces)
+        if !filterMarker.isEmpty && !parts.joined(separator: " ").contains(filterMarker) {
+            // Right after the title, where it was always placed.
+            parts.insert(filterMarker, at: 2)
         }
 
         let taskLine = parts.joined(separator: " ")
