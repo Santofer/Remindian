@@ -441,4 +441,75 @@ final class ConfigurationTests: XCTestCase {
         let result = config.resolveTargetList(tag: nil, filePath: "Notes/random.md")
         XCTAssertEqual(result, "Inbox")
     }
+
+    // MARK: - List names containing spaces round-trip (writeback → routing)
+
+    private func spacedListConfig() -> SyncConfiguration {
+        let config = SyncConfiguration()
+        config.defaultList = "Inbox"
+        config.listMappings = [
+            .init(obsidianTag: "JobSearch", remindersList: "Job Leads"),
+            .init(obsidianTag: "Tom Streaming Service", remindersList: "Tom Streaming Service"),
+        ]
+        config.folderPathMappings = [.init(folderPath: "Areas/Health/Mental Health", remindersList: "Mental Health")]
+        return config
+    }
+
+    /// Writes a reminder from `list` to a fresh inbox, reparses the line, and
+    /// returns (line, title, resolved list).
+    private func roundTrip(title: String, list: String, config: SyncConfiguration) throws -> (String, String?, String) {
+        let vault = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: vault, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: vault) }
+        let line = try ObsidianService().appendTaskToInbox(
+            task: SyncTask(title: title, targetList: list),
+            inboxRelativePath: "Inbox.md",
+            vaultPath: vault.path,
+            listTag: config.obsidianTagForWriteback(list: list)
+        ).lineContent
+        let parsed = SyncTask.fromObsidianLine(line, filePath: "/Inbox.md", lineNumber: 1)
+        let resolved = config.resolveTargetList(tag: parsed?.targetList, filePath: "/Inbox.md", tags: parsed?.tags ?? [])
+        return (line, parsed?.title, resolved)
+    }
+
+    func test_spacedListWithTagMappingWritesTheMappedTag() throws {
+        let (line, title, list) = try roundTrip(title: "Call recruiter", list: "Job Leads", config: spacedListConfig())
+        XCTAssertEqual(line, "- [ ] Call recruiter #JobSearch")
+        XCTAssertEqual(title, "Call recruiter")
+        XCTAssertEqual(list, "Job Leads")
+    }
+
+    /// Before: `#Mental Health` → tag `#Mental`, title "Respond to Dory Health",
+    /// routed to a new "Mental" list.
+    func test_spacedListWithoutTagMappingRoundTrips() throws {
+        let (line, title, list) = try roundTrip(title: "Respond to Dory", list: "Mental Health", config: spacedListConfig())
+        XCTAssertEqual(line, "- [ ] Respond to Dory #MentalHealth")
+        XCTAssertEqual(title, "Respond to Dory")
+        XCTAssertEqual(list, "Mental Health")
+    }
+
+    /// A mapping whose tag contains spaces can never match a parsed tag, so it
+    /// isn't used for writeback.
+    func test_unusableMappedTagFallsBackToSpacelessName() throws {
+        let (line, title, list) = try roundTrip(title: "Fix downloads", list: "Tom Streaming Service", config: spacedListConfig())
+        XCTAssertEqual(line, "- [ ] Fix downloads #TomStreamingService")
+        XCTAssertEqual(title, "Fix downloads")
+        XCTAssertEqual(list, "Tom Streaming Service")
+    }
+
+    func test_singleWordListIsUnchanged() throws {
+        let (line, _, list) = try roundTrip(title: "Buy milk", list: "Groceries", config: spacedListConfig())
+        XCTAssertEqual(line, "- [ ] Buy milk #Groceries")
+        XCTAssertEqual(list, "Groceries")
+    }
+
+    /// The spaceless match only applies to unmapped tags: explicit mappings,
+    /// and single-word auto-capitalisation, behave as before.
+    func test_spacelessMatchDoesNotOverrideMappingsOrAutoCapitalise() {
+        let config = spacedListConfig()
+        XCTAssertEqual(config.resolveTargetList(tag: "JobSearch", filePath: "/Inbox.md", tags: ["#JobSearch"]), "Job Leads")
+        XCTAssertEqual(config.resolveTargetList(tag: "groceries", filePath: "/Inbox.md", tags: ["#groceries"]), "Groceries")
+        XCTAssertEqual(config.resolveTargetList(tag: "mentalhealth", filePath: "/Inbox.md", tags: ["#mentalhealth"]), "Mental Health",
+                       "Case-insensitive")
+    }
 }

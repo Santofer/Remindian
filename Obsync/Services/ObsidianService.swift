@@ -507,7 +507,8 @@ class ObsidianService {
         task: SyncTask,
         inboxRelativePath: String,
         vaultPath: String,
-        globalFilter: String = ""
+        globalFilter: String = "",
+        listTag: String? = nil
     ) throws -> (filePath: String, lineNumber: Int, lineContent: String) {
         let relativePath = inboxRelativePath.hasPrefix("/") ? inboxRelativePath : "/" + inboxRelativePath
         let fileURL = URL(fileURLWithPath: vaultPath + relativePath)
@@ -559,7 +560,10 @@ class ObsidianService {
         }
 
         // Add list/tag if available
-        if let targetList = task.targetList, !targetList.isEmpty {
+        // `listTag` is the caller's tag for that list (see
+        // `SyncConfiguration.obsidianTagForWriteback`); the raw list name is the
+        // fallback, which breaks for names containing spaces.
+        if let targetList = listTag ?? task.targetList, !targetList.isEmpty {
             let tag = "#\(targetList)"
             if !parts.contains(tag) {
                 parts.append(tag)

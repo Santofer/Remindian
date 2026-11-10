@@ -837,9 +837,11 @@ struct ListMappingsView: View {
                         .font(.caption2)
                     Text("3. Folder path mapping (folder/ \u{2192} List)")
                         .font(.caption2)
-                    Text("4. Auto-capitalize tag name")
+                    Text("4. Tag naming a list, ignoring spaces (#MentalHealth \u{2192} Mental Health)")
                         .font(.caption2)
-                    Text("5. Default list")
+                    Text("5. Auto-capitalize tag name")
+                        .font(.caption2)
+                    Text("6. Default list")
                         .font(.caption2)
                 }
                 .foregroundColor(.secondary)
