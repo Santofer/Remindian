@@ -838,7 +838,28 @@ extension SyncTask {
         return calendar.date(bySettingHour: hour, minute: 0, second: 0, of: due) ?? due
     }
 
-    func applyToReminder(_ reminder: EKReminder, includeDueTime: Bool = false, addTaskLink: Bool = false, vaultPath: String = "", appendLinkToNotes: Bool = false, addReminderAlarm: Bool = false, allDayAlarmHour: Int = 9) {
+    /// The lines of a reminder's notes that belong to the user — everything except
+    /// what Remindian writes itself (`Client:`, `Tags:`, the obsidian:// link, and,
+    /// when a sub-task checklist is being written, the previous checklist).
+    static func userNoteLines(in existing: String?, replacingChecklist: Bool) -> [String] {
+        guard let existing, !existing.isEmpty else { return [] }
+        var lines = existing.components(separatedBy: "\n").filter { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("Client: ") || trimmed.hasPrefix("Tags: ") || trimmed.hasPrefix("obsidian://") {
+                return false
+            }
+            if replacingChecklist, trimmed.hasPrefix("- [ ] ") || trimmed.hasPrefix("- [x] ") || trimmed.hasPrefix("- [X] ") {
+                return false
+            }
+            return true
+        }
+        // Drop blank lines left at the edges once the managed lines are gone.
+        while let first = lines.first, first.trimmingCharacters(in: .whitespaces).isEmpty { lines.removeFirst() }
+        while let last = lines.last, last.trimmingCharacters(in: .whitespaces).isEmpty { lines.removeLast() }
+        return lines
+    }
+
+    func applyToReminder(_ reminder: EKReminder, includeDueTime: Bool = false, addTaskLink: Bool = false, vaultPath: String = "", appendLinkToNotes: Bool = false, addReminderAlarm: Bool = false, allDayAlarmHour: Int = 9, writeTagsToNotes: Bool = true) {
         reminder.title = title
         reminder.isCompleted = isCompleted
         reminder.priority = priority.toRemindersPriority
@@ -876,7 +897,7 @@ extension SyncTask {
             noteParts.append("Client: \(client)")
         }
 
-        if !tags.isEmpty {
+        if writeTagsToNotes, !tags.isEmpty {
             noteParts.append("Tags: \(tags.joined(separator: " "))")
         }
 
@@ -907,10 +928,18 @@ extension SyncTask {
             noteParts.append(summary)
         }
 
-        if noteParts.isEmpty {
-            reminder.notes = notes?.trimmingCharacters(in: .whitespaces)
+        if let sourceNotes = notes?.trimmingCharacters(in: .whitespaces), !sourceNotes.isEmpty {
+            // The source supplies the note body (TaskNotes): it owns the notes.
+            reminder.notes = noteParts.isEmpty ? sourceNotes : noteParts.joined(separator: "\n")
         } else {
-            reminder.notes = noteParts.joined(separator: "\n")
+            // The source has no notes of its own (Obsidian Tasks, Generic Markdown),
+            // so whatever the user typed into the reminder is theirs. Only the lines
+            // Remindian manages are rewritten; everything else is kept. This used to
+            // assign the whole field, which silently deleted the user's notes on the
+            // next push of any task that had a tag (#105).
+            let kept = SyncTask.userNoteLines(in: reminder.notes, replacingChecklist: subtaskSummary?.isEmpty == false)
+            let all = noteParts + kept
+            reminder.notes = all.isEmpty ? nil : all.joined(separator: "\n")
         }
 
         if isCompleted {

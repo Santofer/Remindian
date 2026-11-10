@@ -1178,6 +1178,9 @@ struct AdvancedSettingsView: View {
                         .padding(.leading, 20)
                 }
 
+                Toggle("Write tags into the reminder's notes", isOn: $syncManager.config.writeTagsToReminderNotes)
+                    .help("Adds a \"Tags: #a #b\" line to each reminder's notes. Apple gives apps no access to Reminders' native tags, so the notes are the only place Remindian can show them. Turning this off also pauses \"Sync tag changes back\", which reads tags from that line.")
+
                 Toggle("Dry run mode", isOn: $syncManager.config.dryRunMode)
                     .help("Shows what would change without making any actual changes")
 

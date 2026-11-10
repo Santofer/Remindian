@@ -746,8 +746,12 @@ class SyncEngine {
                                         changeDescriptions.append("Priority → \(rTask.priority.displayName)")
                                     }
 
-                                    // Tag writeback (#17 — GoodTask support)
-                                    if config.enableTagWriteback {
+                                    // Tag writeback (#17 — GoodTask support). Tags are
+                                    // read back from the `Tags:` line in the notes; when
+                                    // that line isn't written the destination reports no
+                                    // tags at all, and writing *that* back would strip
+                                    // every tag from the vault.
+                                    if config.enableTagWriteback && config.writeTagsToReminderNotes {
                                         let rTags = Set(rTask.tags)
                                         let oTags = Set(oTask.tags)
                                         if rTags != oTags {

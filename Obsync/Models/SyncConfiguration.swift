@@ -129,6 +129,12 @@ class SyncConfiguration: ObservableObject, Codable {
     // still want the notes-side fallback (e.g. for older clients) can re-enable.
     @Published var appendTaskLinkToNotes: Bool
 
+    /// Write a `Tags: #a #b` line into each reminder's notes. On by default — Apple
+    /// exposes no API for Reminders' native tags, so the notes are the only place
+    /// tags can be shown. Turning it off also turns off tag writeback, which reads
+    /// tags *from* that line and would otherwise conclude every tag was removed.
+    @Published var writeTagsToReminderNotes: Bool
+
     /// Where the sync-state mapping table is stored. (#15) See `SyncStateLocation`.
     @Published var syncStateLocation: SyncStateLocation
 
@@ -403,7 +409,7 @@ class SyncConfiguration: ObservableObject, Codable {
         case enableNotifications, globalHotKeyEnabled, globalHotKeyCode, globalHotKeyModifiers
         case taskSourceType, taskDestinationType, things3AuthToken, taskNotesFolder, taskNotesIntegrationMode
         case taskNotesMtnPath, taskNotesApiUrl
-        case launchAtLogin, maxCompletedTaskAgeDays, maxDueDateHorizonDays, subtaskHandling, maxDeletionsPerSync, syncedRemindersLists, excludedRemindersLists, addTaskLinkToReminders, appendTaskLinkToNotes
+        case launchAtLogin, maxCompletedTaskAgeDays, maxDueDateHorizonDays, subtaskHandling, maxDeletionsPerSync, syncedRemindersLists, excludedRemindersLists, addTaskLinkToReminders, appendTaskLinkToNotes, writeTagsToReminderNotes
         case syncStateLocation, genericMarkdown
         case taskNotesCompletedStatuses, taskNotesOpenStatus, taskNotesDoneStatus
         case obsidianTasksOpenMarkers, obsidianTasksCompletedMarkers, obsidianTasksIgnoredMarkers
@@ -475,6 +481,7 @@ class SyncConfiguration: ObservableObject, Codable {
         excludedTags: [String] = [],
         addTaskLinkToReminders: Bool = true,
         appendTaskLinkToNotes: Bool = false,
+        writeTagsToReminderNotes: Bool = true,
         syncStateLocation: SyncStateLocation = .applicationSupport,
         genericMarkdown: GenericMarkdownSettings = GenericMarkdownSettings(),
         taskNotesCompletedStatuses: [String] = ["done", "completed", "cancelled"],
@@ -550,6 +557,7 @@ class SyncConfiguration: ObservableObject, Codable {
         self.excludedTags = excludedTags
         self.addTaskLinkToReminders = addTaskLinkToReminders
         self.appendTaskLinkToNotes = appendTaskLinkToNotes
+        self.writeTagsToReminderNotes = writeTagsToReminderNotes
         self.syncStateLocation = syncStateLocation
         self.genericMarkdown = genericMarkdown
         self.taskNotesCompletedStatuses = taskNotesCompletedStatuses
@@ -637,6 +645,7 @@ class SyncConfiguration: ObservableObject, Codable {
         // URL-in-notes is opt-in going forward. Users who want it can toggle
         // back on; otherwise the next sync rewrites notes without it. (#69)
         appendTaskLinkToNotes = try container.decodeIfPresent(Bool.self, forKey: .appendTaskLinkToNotes) ?? false
+        writeTagsToReminderNotes = try container.decodeIfPresent(Bool.self, forKey: .writeTagsToReminderNotes) ?? true
         taskNotesCompletedStatuses = try container.decodeIfPresent([String].self, forKey: .taskNotesCompletedStatuses) ?? ["done", "completed", "cancelled"]
         taskNotesOpenStatus = try container.decodeIfPresent(String.self, forKey: .taskNotesOpenStatus) ?? "open"
         taskNotesDoneStatus = try container.decodeIfPresent(String.self, forKey: .taskNotesDoneStatus) ?? "done"
@@ -717,6 +726,7 @@ class SyncConfiguration: ObservableObject, Codable {
         try container.encode(excludedTags, forKey: .excludedTags)
         try container.encode(addTaskLinkToReminders, forKey: .addTaskLinkToReminders)
         try container.encode(appendTaskLinkToNotes, forKey: .appendTaskLinkToNotes)
+        try container.encode(writeTagsToReminderNotes, forKey: .writeTagsToReminderNotes)
         try container.encode(syncStateLocation, forKey: .syncStateLocation)
         try container.encode(genericMarkdown, forKey: .genericMarkdown)
         try container.encode(taskNotesCompletedStatuses, forKey: .taskNotesCompletedStatuses)
