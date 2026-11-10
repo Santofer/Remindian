@@ -833,6 +833,9 @@ extension SyncTask {
 
     func applyToReminder(_ reminder: EKReminder, includeDueTime: Bool = false, addTaskLink: Bool = false, vaultPath: String = "", appendLinkToNotes: Bool = false, addReminderAlarm: Bool = false, allDayAlarmHour: Int = 9, writeTagsToNotes: Bool = true) {
         reminder.title = title
+        // Whether this reminder was already history before this push (see the
+        // recurrence handling at the end).
+        let wasAlreadyCompleted = reminder.isCompleted
         reminder.isCompleted = isCompleted
         reminder.priority = priority.toRemindersPriority
 
@@ -914,7 +917,22 @@ extension SyncTask {
         // rule text into an EKRecurrenceRule and set it on the reminder. If the
         // rule string can't be parsed (unsupported grammar), clear any existing
         // rule rather than leaving stale state behind.
-        if let ruleText = recurrenceRule, let rule = RecurrenceConverter.parse(ruleText: ruleText) {
+        //
+        // A *completed* task never puts a rule on a reminder. A completed line
+        // that still carries its rule is the record of one past occurrence, and
+        // Apple never stores "completed" on a recurring reminder: saving one
+        // rolls it forward to the next occurrence and leaves a completed copy
+        // behind. Writing the rule together with the completion therefore turned
+        // every such line into a brand-new live reminder plus a copy — on every
+        // sync, because the reminder never ended up completed.
+        if isCompleted {
+            if wasAlreadyCompleted {
+                // History on both sides: make sure it stays history.
+                for r in reminder.recurrenceRules ?? [] { reminder.removeRecurrenceRule(r) }
+            }
+            // Otherwise this push is completing a live reminder. If that one
+            // recurs, its rule stays so Apple can roll it to the next occurrence.
+        } else if let ruleText = recurrenceRule, let rule = RecurrenceConverter.parse(ruleText: ruleText) {
             reminder.recurrenceRules = [rule]
         } else {
             // Drop any existing rules. (EventKit requires removing by instance.)

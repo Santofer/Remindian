@@ -136,6 +136,46 @@ class SyncEngine {
 
     // MARK: - Filters
 
+    // MARK: - Natively recurring reminders
+
+    /// A completed vault line paired with a natively recurring reminder that is
+    /// already on a later occurrence.
+    ///
+    /// Completing a recurring reminder does not complete *that* reminder: Apple
+    /// keeps its identifier as the next occurrence (new due date, incomplete) and
+    /// leaves a completed copy behind. So when such a pair exists, "the vault says
+    /// done, the reminder says not done" is true forever — and every sync that
+    /// "fixes" it pushes the user's real reminder one period further into the
+    /// future and adds another completed copy. One vault had 16,000 reminders
+    /// from this. The pair is not out of sync, it is mismatched: the line is
+    /// history, the reminder has moved on.
+    ///
+    /// A line and a reminder on the *same* due day are the same occurrence, and
+    /// completing that one is exactly what the user asked for.
+    static func isStaleRecurringPair(obsidian: SyncTask, reminder: SyncTask, calendar: Calendar = .current) -> Bool {
+        guard obsidian.isCompleted, !reminder.isCompleted, reminder.recurrenceRule != nil else { return false }
+        guard let lineDue = obsidian.dueDate, let reminderDue = reminder.dueDate else { return true }
+        return calendar.startOfDay(for: reminderDue) > calendar.startOfDay(for: lineDue)
+    }
+
+    /// Which unmatched same-title reminder a new vault task should be reconnected
+    /// to, or nil to create a fresh one.
+    ///
+    /// Taking simply the first candidate paired completed lines with the live
+    /// occurrence of a recurring reminder (see `isStaleRecurringPair`) and open
+    /// tasks with completed copies, which then got un-completed into duplicates.
+    /// Same completion state wins, then the same list.
+    static func reconnectCandidateIndex(for task: SyncTask, targetList: String, candidates: [SyncTask]) -> Int? {
+        let eligible = candidates.indices.filter { !isStaleRecurringPair(obsidian: task, reminder: candidates[$0]) }
+        return eligible.max { a, b in
+            func score(_ i: Int) -> Int {
+                (candidates[i].isCompleted == task.isCompleted ? 2 : 0) + (candidates[i].targetList == targetList ? 1 : 0)
+            }
+            // `max` keeps the last of equals; prefer the earliest for stable results.
+            return score(a) < score(b) || (score(a) == score(b) && a > b)
+        }
+    }
+
     /// Compute the completed-task age cutoff for this sync. Returns nil when
     /// the filter is disabled (`maxCompletedTaskAgeDays <= 0`).
     ///
@@ -539,6 +579,18 @@ class SyncEngine {
 
                 switch (obsidianTask, remindersTask) {
                 case (.some(let oTask), .some(let rTask)):
+                    // A completed line tied to a recurring reminder that has moved
+                    // on is not something to reconcile — untie them and leave both
+                    // alone. The line is then matched again below like any new
+                    // task, where it can only land on a completed copy.
+                    if SyncEngine.isStaleRecurringPair(obsidian: oTask, reminder: rTask) {
+                        debugLog("[SyncEngine] Detaching completed line \"\(oTask.title)\" from recurring reminder \(mapping.remindersId): the reminder is on a later occurrence")
+                        if !config.dryRunMode {
+                            syncState.removeMapping(obsidianId: mapping.obsidianId)
+                        }
+                        continue
+                    }
+
                     // Both exist - check what changed
                     let oHash = SyncState.generateTaskHash(oTask)
                     let rHash = SyncState.generateTaskHash(rTask)
@@ -1224,17 +1276,11 @@ class SyncEngine {
                 // Before creating a new reminder, check if an unmatched reminder
                 // with the same title already exists (prevents duplicates after
                 // sync state reset or ID format migration).
-                if var candidates = unmatchedRemindersByTitle[task.title], !candidates.isEmpty {
-                    // Pick the best candidate — prefer one in the same list
-                    let targetList = config.resolveTargetList(for: task)
-                    var bestIndex = 0
-                    for (i, candidate) in candidates.enumerated() {
-                        if candidate.task.targetList == targetList {
-                            bestIndex = i
-                            break
-                        }
-                    }
-
+                if var candidates = unmatchedRemindersByTitle[task.title],
+                   let bestIndex = SyncEngine.reconnectCandidateIndex(
+                       for: task,
+                       targetList: config.resolveTargetList(for: task),
+                       candidates: candidates.map { $0.task }) {
                     let matched = candidates.remove(at: bestIndex)
                     unmatchedRemindersByTitle[task.title] = candidates
 
