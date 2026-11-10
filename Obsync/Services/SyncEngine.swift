@@ -585,12 +585,7 @@ class SyncEngine {
                     // destination list explicitly: adding/changing a tag, heading,
                     // file, or folder mapping must relocate existing reminders even
                     // when their Markdown line is otherwise untouched.
-                    let resolvedList = config.resolveTargetList(
-                        tag: oTask.targetList,
-                        filePath: oTask.obsidianSource?.filePath,
-                        tags: oTask.tags,
-                        heading: oTask.obsidianSource?.sectionHeading
-                    )
+                    let resolvedList = config.resolveTargetList(for: oTask)
                     let needsListMove = resolvedList.caseInsensitiveCompare(rTask.targetList ?? "") != .orderedSame
                     if needsListMove {
                         debugLog("[SyncEngine] Routing \"\(oTask.title)\" to \"\(resolvedList)\" (was \"\(rTask.targetList ?? "no list")\")")
@@ -865,12 +860,7 @@ class SyncEngine {
                                     // "N updated every sync with nothing changing" bug.
                                     // Seed it with the resolved list so the two agree.
                                     var reminderStateAfterSync = taskForReminders
-                                    reminderStateAfterSync.targetList = config.resolveTargetList(
-                                        tag: oTask.targetList,
-                                        filePath: oTask.obsidianSource?.filePath,
-                                        tags: oTask.tags,
-                                        heading: oTask.obsidianSource?.sectionHeading
-                                    )
+                                    reminderStateAfterSync.targetList = config.resolveTargetList(for: oTask)
                                     // Prefer what the destination actually holds over
                                     // the prediction above. Destinations are lossy (time
                                     // of day dropped, recurrence rules rewritten, their
@@ -940,7 +930,7 @@ class SyncEngine {
                     if !reconnected {
                         // Truly deleted — recreate from Obsidian
                         do {
-                            let listName = config.resolveTargetList(tag: oTask.targetList, filePath: oTask.obsidianSource?.filePath, tags: oTask.tags, heading: oTask.obsidianSource?.sectionHeading)
+                            let listName = config.resolveTargetList(for: oTask)
                             if !config.dryRunMode {
                                 let newId = try await destination.createTask(
                                     from: oTask,
@@ -1203,7 +1193,7 @@ class SyncEngine {
 
                 // Skip tasks whose target list is not in the allowed lists
                 if !config.syncedRemindersLists.isEmpty {
-                    let targetList = config.resolveTargetList(tag: task.targetList, filePath: task.obsidianSource?.filePath, tags: task.tags, heading: task.obsidianSource?.sectionHeading)
+                    let targetList = config.resolveTargetList(for: task)
                     let allowedLists = Set(config.syncedRemindersLists.map { $0.lowercased() })
                     if !allowedLists.contains(targetList.lowercased()) {
                         result.details.append(SyncLogDetail(
@@ -1218,7 +1208,7 @@ class SyncEngine {
 
                 // Skip tasks whose target list is excluded (#21)
                 if !config.excludedRemindersLists.isEmpty {
-                    let targetList = config.resolveTargetList(tag: task.targetList, filePath: task.obsidianSource?.filePath, tags: task.tags, heading: task.obsidianSource?.sectionHeading)
+                    let targetList = config.resolveTargetList(for: task)
                     let excludedLists = Set(config.excludedRemindersLists.map { $0.lowercased() })
                     if excludedLists.contains(targetList.lowercased()) {
                         result.details.append(SyncLogDetail(
@@ -1236,7 +1226,7 @@ class SyncEngine {
                 // sync state reset or ID format migration).
                 if var candidates = unmatchedRemindersByTitle[task.title], !candidates.isEmpty {
                     // Pick the best candidate — prefer one in the same list
-                    let targetList = config.resolveTargetList(tag: task.targetList, filePath: task.obsidianSource?.filePath, tags: task.tags, heading: task.obsidianSource?.sectionHeading)
+                    let targetList = config.resolveTargetList(for: task)
                     var bestIndex = 0
                     for (i, candidate) in candidates.enumerated() {
                         if candidate.task.targetList == targetList {
@@ -1295,7 +1285,7 @@ class SyncEngine {
                 }
 
                 // Queue for batch creation
-                let listName = config.resolveTargetList(tag: task.targetList, filePath: task.obsidianSource?.filePath, tags: task.tags, heading: task.obsidianSource?.sectionHeading)
+                let listName = config.resolveTargetList(for: task)
                 debugLog("[SyncEngine] Queuing: \"\(task.title)\" → list \"\(listName)\"")
                 newTasksToCreate.append((obsidianId: obsidianId, task: task, listName: listName))
             }

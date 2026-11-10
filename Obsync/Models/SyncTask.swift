@@ -87,12 +87,17 @@ struct SyncTask: Identifiable, Equatable, Codable {
         /// The nearest preceding Markdown heading, without its `#` markers.
         /// Optional so sync state written by earlier versions still decodes.
         let sectionHeading: String?
+        /// Tags of the note the task lives in (frontmatter and body text, not the
+        /// tags on task lines — those belong to their task). Lowercased, no `#`.
+        /// Optional for the same reason as `sectionHeading`.
+        var noteTags: [String]? = nil
 
-        init(filePath: String, lineNumber: Int, originalLine: String, sectionHeading: String? = nil) {
+        init(filePath: String, lineNumber: Int, originalLine: String, sectionHeading: String? = nil, noteTags: [String]? = nil) {
             self.filePath = filePath
             self.lineNumber = lineNumber
             self.originalLine = originalLine
             self.sectionHeading = sectionHeading
+            self.noteTags = noteTags
         }
     }
     

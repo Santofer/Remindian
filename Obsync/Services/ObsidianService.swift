@@ -415,6 +415,13 @@ class ObsidianService {
             tasks.append(task)
         }
 
+        // Note-level tags for note-tag routing (#96). Only notes that actually
+        // yield tasks pay for this, and it depends on nothing but the file's
+        // bytes, so the parse cache needs no extra key. Task lines are left out:
+        // a `#client` on one task must not reroute its untagged neighbours.
+        // Done before sub-tasks are folded away, while every task line is still known.
+        ObsidianService.attachNoteTags(to: &tasks, lines: lines)
+
         // Sub-task handling. Neither EventKit nor Things 3 exposes real
         // parent/child nesting (verified against the SDK headers and the Things
         // AppleScript dictionary), so "nesting" can only be approximated.
@@ -428,6 +435,20 @@ class ObsidianService {
         }
 
         return tasks
+    }
+
+    /// Stamp each task with the tags of the note it came from (see #96 above).
+    /// `lines` is the note's full content; the tasks' own lines are skipped.
+    static func attachNoteTags(to tasks: inout [SyncTask], lines: [String]) {
+        guard !tasks.isEmpty else { return }
+        let taskLines = Set(tasks.compactMap { $0.obsidianSource?.lineNumber })
+        let body = lines.enumerated()
+            .filter { !taskLines.contains($0.offset + 1) }
+            .map { $0.element }
+            .joined(separator: "\n")
+        let noteTags = ObsidianService.noteTags(in: body).sorted()
+        guard !noteTags.isEmpty else { return }
+        for i in tasks.indices { tasks[i].obsidianSource?.noteTags = noteTags }
     }
 
     /// Return the text of an ATX Markdown heading (`# Heading` through

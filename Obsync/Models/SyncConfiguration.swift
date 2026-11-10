@@ -54,6 +54,14 @@ class SyncConfiguration: ObservableObject, Codable {
     @Published var syncOnLaunch: Bool
     @Published var listMappings: [ListMapping]
     @Published var headingMappings: [HeadingMapping]
+    /// Route every task of a note carrying a tag (frontmatter or body text) to a
+    /// list, wherever the note lives (#96). Reuses `ListMapping`: `obsidianTag`
+    /// is the note's tag.
+    @Published var noteTagMappings: [ListMapping]
+    /// When a task's tag has no mapping, use the tag's name as the list (creating
+    /// it if needed). On by default because that is how routing has always worked;
+    /// off sends such tasks to the default list instead (#103).
+    @Published var unmappedTagsCreateLists: Bool
     @Published var defaultList: String
     @Published var taskFilesPattern: String
     @Published var excludedFolders: [String]
@@ -99,6 +107,8 @@ class SyncConfiguration: ObservableObject, Codable {
     @Published var taskNotesIntegrationMode: String  // "cli", "file", or "http"
     @Published var taskNotesMtnPath: String  // User-configured path to mtn binary
     @Published var taskNotesApiUrl: String  // HTTP API base URL (e.g., http://localhost:8080)
+    /// Bearer token for the TaskNotes HTTP API — mandatory since TaskNotes 4.13 (#101).
+    @Published var taskNotesApiToken: String
     @Published var launchAtLogin: Bool
     @Published var maxCompletedTaskAgeDays: Int  // 0 = no limit, >0 = skip completed tasks older than N days
     /// How indented sub-tasks are handled. Defaults to the historic behaviour
@@ -401,14 +411,14 @@ class SyncConfiguration: ObservableObject, Codable {
 
     enum CodingKeys: String, CodingKey {
         case vaultPath, syncIntervalMinutes, enableAutoSync, syncOnLaunch
-        case listMappings, headingMappings, defaultList, taskFilesPattern, excludedFolders, includedFolders, includedNoteTags
+        case listMappings, headingMappings, noteTagMappings, unmappedTagsCreateLists, defaultList, taskFilesPattern, excludedFolders, includedFolders, includedNoteTags
         case syncCompletedTasks, deleteCompletedAfterDays, conflictResolution
         case includeDueTime, addReminderAlarm, reminderAlarmHour, hideDockIcon, forceDarkIcon, showMenuBarTaskCount, dryRunMode, enableCompletionWriteback
         case enableDueDateWriteback, enableStartDateWriteback, enablePriorityWriteback
         case enableNewTaskWriteback, enableTagWriteback, inboxFilePath, enableFileWatcher
         case enableNotifications, globalHotKeyEnabled, globalHotKeyCode, globalHotKeyModifiers
         case taskSourceType, taskDestinationType, things3AuthToken, taskNotesFolder, taskNotesIntegrationMode
-        case taskNotesMtnPath, taskNotesApiUrl
+        case taskNotesMtnPath, taskNotesApiUrl, taskNotesApiToken
         case launchAtLogin, maxCompletedTaskAgeDays, maxDueDateHorizonDays, subtaskHandling, maxDeletionsPerSync, syncedRemindersLists, excludedRemindersLists, addTaskLinkToReminders, appendTaskLinkToNotes, writeTagsToReminderNotes
         case syncStateLocation, genericMarkdown
         case taskNotesCompletedStatuses, taskNotesOpenStatus, taskNotesDoneStatus
@@ -437,6 +447,8 @@ class SyncConfiguration: ObservableObject, Codable {
         syncOnLaunch: Bool = true,
         listMappings: [ListMapping] = [],
         headingMappings: [HeadingMapping] = [],
+        noteTagMappings: [ListMapping] = [],
+        unmappedTagsCreateLists: Bool = true,
         defaultList: String = "Reminders",
         taskFilesPattern: String = "**/*.md",
         excludedFolders: [String] = [".obsidian", ".git", ".trash"],
@@ -471,6 +483,7 @@ class SyncConfiguration: ObservableObject, Codable {
         taskNotesIntegrationMode: String = "cli",
         taskNotesMtnPath: String = "",
         taskNotesApiUrl: String = "http://localhost:8080",
+        taskNotesApiToken: String = "",
         launchAtLogin: Bool = false,
         maxCompletedTaskAgeDays: Int = 0,
         maxDueDateHorizonDays: Int = 0,
@@ -513,6 +526,8 @@ class SyncConfiguration: ObservableObject, Codable {
         self.syncOnLaunch = syncOnLaunch
         self.listMappings = listMappings
         self.headingMappings = headingMappings
+        self.noteTagMappings = noteTagMappings
+        self.unmappedTagsCreateLists = unmappedTagsCreateLists
         self.defaultList = defaultList
         self.taskFilesPattern = taskFilesPattern
         self.excludedFolders = excludedFolders
@@ -547,6 +562,7 @@ class SyncConfiguration: ObservableObject, Codable {
         self.taskNotesIntegrationMode = taskNotesIntegrationMode
         self.taskNotesMtnPath = taskNotesMtnPath
         self.taskNotesApiUrl = taskNotesApiUrl
+        self.taskNotesApiToken = taskNotesApiToken
         self.launchAtLogin = launchAtLogin
         self.maxCompletedTaskAgeDays = maxCompletedTaskAgeDays
         self.maxDueDateHorizonDays = maxDueDateHorizonDays
@@ -595,6 +611,8 @@ class SyncConfiguration: ObservableObject, Codable {
         syncOnLaunch = try container.decode(Bool.self, forKey: .syncOnLaunch)
         listMappings = try container.decode([ListMapping].self, forKey: .listMappings)
         headingMappings = try container.decodeIfPresent([HeadingMapping].self, forKey: .headingMappings) ?? []
+        noteTagMappings = try container.decodeIfPresent([ListMapping].self, forKey: .noteTagMappings) ?? []
+        unmappedTagsCreateLists = try container.decodeIfPresent(Bool.self, forKey: .unmappedTagsCreateLists) ?? true
         defaultList = try container.decode(String.self, forKey: .defaultList)
         taskFilesPattern = try container.decode(String.self, forKey: .taskFilesPattern)
         excludedFolders = try container.decode([String].self, forKey: .excludedFolders)
@@ -629,6 +647,7 @@ class SyncConfiguration: ObservableObject, Codable {
         taskNotesIntegrationMode = try container.decodeIfPresent(String.self, forKey: .taskNotesIntegrationMode) ?? "cli"
         taskNotesMtnPath = try container.decodeIfPresent(String.self, forKey: .taskNotesMtnPath) ?? ""
         taskNotesApiUrl = try container.decodeIfPresent(String.self, forKey: .taskNotesApiUrl) ?? "http://localhost:8080"
+        taskNotesApiToken = try container.decodeIfPresent(String.self, forKey: .taskNotesApiToken) ?? ""
         launchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
         maxCompletedTaskAgeDays = try container.decodeIfPresent(Int.self, forKey: .maxCompletedTaskAgeDays) ?? 0
         maxDueDateHorizonDays = max(0, try container.decodeIfPresent(Int.self, forKey: .maxDueDateHorizonDays) ?? 0)
@@ -682,6 +701,8 @@ class SyncConfiguration: ObservableObject, Codable {
         try container.encode(syncOnLaunch, forKey: .syncOnLaunch)
         try container.encode(listMappings, forKey: .listMappings)
         try container.encode(headingMappings, forKey: .headingMappings)
+        try container.encode(noteTagMappings, forKey: .noteTagMappings)
+        try container.encode(unmappedTagsCreateLists, forKey: .unmappedTagsCreateLists)
         try container.encode(defaultList, forKey: .defaultList)
         try container.encode(taskFilesPattern, forKey: .taskFilesPattern)
         try container.encode(excludedFolders, forKey: .excludedFolders)
@@ -716,6 +737,7 @@ class SyncConfiguration: ObservableObject, Codable {
         try container.encode(taskNotesIntegrationMode, forKey: .taskNotesIntegrationMode)
         try container.encode(taskNotesMtnPath, forKey: .taskNotesMtnPath)
         try container.encode(taskNotesApiUrl, forKey: .taskNotesApiUrl)
+        try container.encode(taskNotesApiToken, forKey: .taskNotesApiToken)
         try container.encode(launchAtLogin, forKey: .launchAtLogin)
         try container.encode(maxCompletedTaskAgeDays, forKey: .maxCompletedTaskAgeDays)
         try container.encode(maxDueDateHorizonDays, forKey: .maxDueDateHorizonDays)
@@ -887,7 +909,7 @@ class SyncConfiguration: ObservableObject, Codable {
     /// outside — #88 was a bug precisely because the winning rule wasn't visible.
     /// This is the single source of truth; `resolveTargetList` is a thin wrapper,
     /// so the explanation can never drift from the actual decision.
-    func explainTargetList(tag: String?, filePath: String?, tags: [String] = [], heading: String? = nil) -> (list: String, reason: String) {
+    func explainTargetList(tag: String?, filePath: String?, tags: [String] = [], heading: String? = nil, noteTags: [String] = []) -> (list: String, reason: String) {
         let cleanTag = {
             guard let tag = tag else { return "" }
             return (tag.hasPrefix("#") || tag.hasPrefix("+")) ? String(tag.dropFirst()) : tag
@@ -994,6 +1016,20 @@ class SyncConfiguration: ObservableObject, Codable {
             }
         }
 
+        // 3b. Note-tag mappings (#96): the note itself carries the tag, so its
+        // tasks follow it into any folder. Below an explicit file mapping (which
+        // names this exact file), above folder mappings (which are broader). A
+        // mapped tag also covers its nested children, like the note-tag filter.
+        if !noteTags.isEmpty {
+            let normalized = noteTags.map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "# ")).lowercased() }
+            if let mapping = noteTagMappings.first(where: { mapping in
+                let want = mapping.obsidianTag.trimmingCharacters(in: CharacterSet(charactersIn: "# ")).lowercased()
+                return !want.isEmpty && normalized.contains { $0 == want || $0.hasPrefix(want + "/") }
+            }) {
+                return (mapping.remindersList, "note tagged “#\(mapping.obsidianTag.trimmingCharacters(in: CharacterSet(charactersIn: "# ")))”")
+            }
+        }
+
         // 4. Check folder path mappings (#40) — most specific folder wins
         if let filePath = filePath, !filePath.isEmpty {
             let normalizedPath = filePath.lowercased()
@@ -1010,9 +1046,14 @@ class SyncConfiguration: ObservableObject, Codable {
 
         // 5. Auto-capitalize tag — but never the global-filter tag, which would
         //    invent a list ("task" → "Task") that the user never asked for (#88).
+        //    Opt-out (#103): with `unmappedTagsCreateLists` off, a tag that isn't
+        //    mapped is just a tag and the task falls through to the default list.
         if !cleanTag.isEmpty && !isFilterTag(cleanTag) {
-            let auto = cleanTag.prefix(1).uppercased() + cleanTag.dropFirst()
-            return (auto, "tag “\(cleanTag)” with no mapping (name used as-is)")
+            if unmappedTagsCreateLists {
+                let auto = cleanTag.prefix(1).uppercased() + cleanTag.dropFirst()
+                return (auto, "tag “\(cleanTag)” with no mapping (name used as-is)")
+            }
+            return (defaultList, "default list (tag “\(cleanTag)” has no mapping)")
         }
 
         // 6. Default list
@@ -1023,8 +1064,18 @@ class SyncConfiguration: ObservableObject, Codable {
     }
 
     /// The destination list for a task. See `explainTargetList` for the reasoning.
-    func resolveTargetList(tag: String?, filePath: String?, tags: [String] = [], heading: String? = nil) -> String {
-        explainTargetList(tag: tag, filePath: filePath, tags: tags, heading: heading).list
+    func resolveTargetList(tag: String?, filePath: String?, tags: [String] = [], heading: String? = nil, noteTags: [String] = []) -> String {
+        explainTargetList(tag: tag, filePath: filePath, tags: tags, heading: heading, noteTags: noteTags).list
+    }
+
+    /// The destination list for a scanned task — every routing input comes from
+    /// the task itself, so a caller cannot forget one.
+    func resolveTargetList(for task: SyncTask) -> String {
+        resolveTargetList(tag: task.targetList,
+                          filePath: task.obsidianSource?.filePath,
+                          tags: task.tags,
+                          heading: task.obsidianSource?.sectionHeading,
+                          noteTags: task.obsidianSource?.noteTags ?? [])
     }
 
     func obsidianTagForList(_ listName: String) -> String? {

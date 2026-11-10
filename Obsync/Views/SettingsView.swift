@@ -549,6 +549,8 @@ struct ListMappingsView: View {
     @EnvironmentObject var syncManager: SyncManager
     @State private var newTag = ""
     @State private var newList = ""
+    @State private var newNoteTag = ""
+    @State private var newNoteTagList = ""
     @State private var newHeading = ""
     @State private var newHeadingList = ""
     @State private var newFilePath = ""
@@ -620,6 +622,62 @@ struct ListMappingsView: View {
                     newList = ""
                 }
                 .disabled(newTag.isEmpty || newList.isEmpty)
+            }
+
+            Toggle("Tags without a mapping get their own list", isOn: $syncManager.config.unmappedTagsCreateLists)
+                .help("On: a task tagged #errands goes to a list called \"Errands\", created if needed. Off: only mapped tags route, everything else goes to the default list.")
+
+            Divider()
+
+            // MARK: - Note Tag Mappings (#96)
+            Text("Notes with these tags \u{2192} List")
+                .font(.headline)
+
+            Text("Every task in a note carrying the tag (in its frontmatter or body) syncs to the mapped list, whatever folder the note is in. A tag or heading mapping on the task itself, or a file mapping, still wins.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            List {
+                ForEach(syncManager.config.noteTagMappings) { mapping in
+                    HStack {
+                        Text("#\(mapping.obsidianTag)")
+                            .fontWeight(.medium)
+                            .foregroundColor(.accentColor)
+                        Image(systemName: "arrow.right")
+                            .foregroundColor(.secondary)
+                        Text(mapping.remindersList)
+                        Spacer()
+                        Button(action: {
+                            syncManager.removeNoteTagMapping(id: mapping.id)
+                        }) {
+                            Image(systemName: "trash").foregroundColor(.red)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            .frame(minHeight: 80)
+
+            HStack {
+                TextField("Note tag (e.g., client13)", text: $newNoteTag)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(minWidth: 120, maxWidth: 250)
+                Image(systemName: "arrow.right").foregroundColor(.secondary)
+                Picker("List", selection: $newNoteTagList) {
+                    Text("Select list...").tag("")
+                    ForEach(syncManager.availableLists, id: \.self) { list in
+                        Text(list).tag(list)
+                    }
+                }
+                .frame(minWidth: 120, maxWidth: 200)
+                Button("Add") {
+                    guard !newNoteTag.isEmpty && !newNoteTagList.isEmpty else { return }
+                    syncManager.addNoteTagMapping(tag: newNoteTag, remindersList: newNoteTagList)
+                    newNoteTag = ""
+                    newNoteTagList = ""
+                }
+                .disabled(newNoteTag.isEmpty || newNoteTagList.isEmpty)
             }
 
             Divider()
@@ -922,6 +980,18 @@ struct TaskNotesSettingsView: View {
                                 .frame(maxWidth: .infinity)
                         }
                         .onChange(of: syncManager.config.taskNotesApiUrl) { _ in
+                            syncManager.updateSourceAndDestination()
+                        }
+
+                        HStack {
+                            Text("API token:")
+                                .foregroundColor(.secondary)
+                            SecureField("From TaskNotes settings > HTTP API", text: $syncManager.config.taskNotesApiToken)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .help("Required since TaskNotes 4.13 — every API request must carry it.")
+                        .onChange(of: syncManager.config.taskNotesApiToken) { _ in
                             syncManager.updateSourceAndDestination()
                         }
                     }
@@ -1601,7 +1671,7 @@ extension View {
 
 // MARK: - Routing Tester
 //
-// List routing is a four-level cascade, and when a task lands in an unexpected
+// List routing is a multi-level cascade, and when a task lands in an unexpected
 // list there is no way to see *which* rule won — that opacity is what made #88
 // hard to diagnose from the outside. Type a task's file path and tags here and
 // the app reports the resolved list and the rule responsible, using the exact
@@ -1611,6 +1681,14 @@ struct RoutingTester: View {
     @State private var filePath: String = ""
     @State private var tagsText: String = ""
     @State private var headingText: String = ""
+    @State private var noteTagsText: String = ""
+
+    private var parsedNoteTags: [String] {
+        noteTagsText
+            .split(whereSeparator: { $0 == "," || $0 == " " })
+            .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "# ")) }
+            .filter { !$0.isEmpty }
+    }
 
     private var parsedTags: [String] {
         tagsText
@@ -1628,12 +1706,13 @@ struct RoutingTester: View {
     }
 
     private var result: (list: String, reason: String)? {
-        guard !filePath.isEmpty || !parsedTags.isEmpty || !headingText.isEmpty else { return nil }
+        guard !filePath.isEmpty || !parsedTags.isEmpty || !headingText.isEmpty || !parsedNoteTags.isEmpty else { return nil }
         return syncManager.config.explainTargetList(
             tag: primaryTag,
             filePath: filePath.isEmpty ? nil : filePath,
             tags: parsedTags,
-            heading: headingText.isEmpty ? nil : headingText
+            heading: headingText.isEmpty ? nil : headingText,
+            noteTags: parsedNoteTags
         )
     }
 
@@ -1654,6 +1733,8 @@ struct RoutingTester: View {
                     TextField("Tags (e.g. #task, #work)", text: $tagsText)
                         .textFieldStyle(.roundedBorder)
                     TextField("Heading (e.g. ## Work)", text: $headingText)
+                        .textFieldStyle(.roundedBorder)
+                    TextField("Note tags (e.g. client13)", text: $noteTagsText)
                         .textFieldStyle(.roundedBorder)
                 }
                 .font(.system(size: 12))

@@ -36,6 +36,7 @@ class GenericMarkdownSource: TaskSource {
             let relativePath = fileURL.path.replacingOccurrences(of: config.vaultPath, with: "")
             let lines = content.components(separatedBy: "\n")
             var currentHeading: String?
+            var fileTasks: [SyncTask] = []
             for (index, line) in lines.enumerated() {
                 if let heading = ObsidianService.markdownHeading(in: line) {
                     currentHeading = heading
@@ -49,9 +50,11 @@ class GenericMarkdownSource: TaskSource {
                             sectionHeading: currentHeading
                         )
                     }
-                    tasks.append(task)
+                    fileTasks.append(task)
                 }
             }
+            ObsidianService.attachNoteTags(to: &fileTasks, lines: lines)
+            tasks.append(contentsOf: fileTasks)
         }
 
         // Global filter (#42) — same opt-in semantics as the Obsidian source:

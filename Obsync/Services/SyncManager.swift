@@ -200,6 +200,7 @@ class SyncManager: ObservableObject {
                 if !config.taskNotesApiUrl.isEmpty {
                     source.apiBaseUrl = config.taskNotesApiUrl
                 }
+                source.apiToken = config.taskNotesApiToken
                 // Custom status mapping (#10)
                 source.completedStatuses = config.taskNotesCompletedStatuses
                 source.openStatus = config.taskNotesOpenStatus
@@ -1232,6 +1233,16 @@ class SyncManager: ObservableObject {
     /// and redraw immediately. See #62.3.
     func removeListMapping(id: UUID) {
         config.listMappings.removeAll { $0.id == id }
+    }
+
+    func addNoteTagMapping(tag: String, remindersList: String) {
+        let cleaned = tag.trimmingCharacters(in: CharacterSet(charactersIn: "# "))
+        guard !cleaned.isEmpty else { return }
+        config.noteTagMappings.append(.init(obsidianTag: cleaned, remindersList: remindersList))
+    }
+
+    func removeNoteTagMapping(id: UUID) {
+        config.noteTagMappings.removeAll { $0.id == id }
     }
 
     func addHeadingMapping(heading: String, remindersList: String) {

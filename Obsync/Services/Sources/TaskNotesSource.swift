@@ -140,6 +140,9 @@ class TaskNotesSource: TaskSource {
 
     /// HTTP API base URL (default: TaskNotes plugin local server)
     var apiBaseUrl: String = "http://localhost:8080"
+    /// Bearer token for the HTTP API. TaskNotes 4.13+ rejects every request
+    /// without one (#101). Never logged.
+    var apiToken: String = ""
 
     /// Path to the mtn binary (user-configured via file picker for sandbox access)
     var mtnPath: String = ""
@@ -1034,9 +1037,7 @@ class TaskNotesSource: TaskSource {
             throw TaskNotesError.invalidApiUrl
         }
 
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 8
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let request = TaskNotesSource.apiRequest(url: url, token: apiToken)
 
         let semaphore = DispatchSemaphore(value: 0)
         var responseData: Data?
@@ -1061,10 +1062,33 @@ class TaskNotesSource: TaskSource {
         }
 
         if let statusCode = httpStatusCode, !(200...299).contains(statusCode) {
-            throw TaskNotesError.apiError("HTTP \(statusCode): \(responseSnippet(from: data))")
+            throw TaskNotesError.apiError(TaskNotesSource.apiFailureMessage(
+                status: statusCode, hasToken: !apiToken.trimmingCharacters(in: .whitespaces).isEmpty,
+                body: responseSnippet(from: data)))
         }
 
         return try decodeApiTasks(from: data)
+    }
+
+    /// Every HTTP API request goes through here so the token can't be forgotten
+    /// on one of them.
+    static func apiRequest(url: URL, token: String) -> URLRequest {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 8
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            request.setValue("Bearer \(trimmed)", forHTTPHeaderField: "Authorization")
+        }
+        return request
+    }
+
+    /// 401/403 get an instruction instead of the server's raw JSON.
+    static func apiFailureMessage(status: Int, hasToken: Bool, body: String) -> String {
+        guard status == 401 || status == 403 else { return "HTTP \(status): \(body)" }
+        return hasToken
+            ? "TaskNotes rejected the API token (HTTP \(status)). Copy the current token from Obsidian → TaskNotes settings → HTTP API into Settings → TaskNotes."
+            : "TaskNotes requires an API token (HTTP \(status)). Copy it from Obsidian → TaskNotes settings → HTTP API into Settings → TaskNotes."
     }
 
     // MARK: - Frontmatter Helpers
