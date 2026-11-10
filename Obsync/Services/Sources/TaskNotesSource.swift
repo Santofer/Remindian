@@ -793,7 +793,7 @@ class TaskNotesSource: TaskSource {
     private func parseTaskNotesFile(_ fileURL: URL, vaultPath: String) throws -> SyncTask {
         let content = try String(contentsOf: fileURL, encoding: .utf8)
         let lines = content.components(separatedBy: "\n")
-        let relativePath = fileURL.path.replacingOccurrences(of: vaultPath, with: "")
+        let relativePath = ObsidianService.vaultRelativePath(of: fileURL, vaultPath: vaultPath)
 
         // Parse YAML frontmatter
         guard lines.first?.trimmingCharacters(in: .whitespaces) == "---" else {

@@ -96,6 +96,7 @@
 		NTT /* NoteTagFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = NTU; };
 		MDT /* MassDeletionGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MDU; };
 		VCT /* VaultCleanupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = VCU; };
+		SVTB /* SymlinkedVaultTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SVTR; };
 		PCLB /* PhantomChangeLoopTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PCLR; };
 		RNPT /* ReminderNotesPreservationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = RNPU; };
 /* End PBXBuildFile section */
@@ -204,6 +205,7 @@
 		NTU /* NoteTagFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteTagFilterTests.swift; sourceTree = "<group>"; };
 		MDU /* MassDeletionGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MassDeletionGuardTests.swift; sourceTree = "<group>"; };
 		VCU /* VaultCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultCleanupTests.swift; sourceTree = "<group>"; };
+		SVTR /* SymlinkedVaultTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SymlinkedVaultTests.swift; sourceTree = "<group>"; };
 		PCLR /* PhantomChangeLoopTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhantomChangeLoopTests.swift; sourceTree = "<group>"; };
 		RNPU /* ReminderNotesPreservationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderNotesPreservationTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -393,6 +395,7 @@
 				NTU /* NoteTagFilterTests.swift */,
 				MDU /* MassDeletionGuardTests.swift */,
 				VCU /* VaultCleanupTests.swift */,
+				SVTR /* SymlinkedVaultTests.swift */,
 				PCLR /* PhantomChangeLoopTests.swift */,
 				RNPU /* ReminderNotesPreservationTests.swift */,
 			);
@@ -585,6 +588,7 @@
 				NTT /* NoteTagFilterTests.swift in Sources */,
 				MDT /* MassDeletionGuardTests.swift in Sources */,
 				VCT /* VaultCleanupTests.swift in Sources */,
+				SVTB /* SymlinkedVaultTests.swift in Sources */,
 				PCLB /* PhantomChangeLoopTests.swift in Sources */,
 				RNPT /* ReminderNotesPreservationTests.swift in Sources */,
 			);

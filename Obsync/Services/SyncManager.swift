@@ -1517,7 +1517,8 @@ class SyncManager: ObservableObject {
         guard !vaultPath.isEmpty,
               FileManager.default.fileExists(atPath: vaultPath) else { return (0, []) }
 
-        let vaultURL = URL(fileURLWithPath: vaultPath)
+        // Resolved: an enumerator does not descend into a vault that is a symlink.
+        let vaultURL = URL(fileURLWithPath: vaultPath).resolvingSymlinksInPath()
         guard let enumerator = FileManager.default.enumerator(
             at: vaultURL, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
         ) else { return (0, []) }

@@ -33,7 +33,7 @@ class GenericMarkdownSource: TaskSource {
         var tasks: [SyncTask] = []
         for fileURL in files {
             guard let content = try? String(contentsOf: fileURL, encoding: .utf8) else { continue }
-            let relativePath = fileURL.path.replacingOccurrences(of: config.vaultPath, with: "")
+            let relativePath = ObsidianService.vaultRelativePath(of: fileURL, vaultPath: config.vaultPath)
             let lines = content.components(separatedBy: "\n")
             var currentHeading: String?
             var fileTasks: [SyncTask] = []
@@ -199,6 +199,8 @@ class GenericMarkdownSource: TaskSource {
     /// folders. Mirrors the Obsidian scanner's filtering semantics.
     private func findFiles(in directory: URL, extensions: Set<String>, excluding excludedFolders: [String], including includedFolders: [String], inboxRelativePath: String = "") throws -> [URL] {
         let vaultPath = directory.path
+        // See ObsidianService.findMarkdownFiles: a symlinked vault enumerates as empty.
+        let directory = directory.resolvingSymlinksInPath()
         let whitelist = includedFolders.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         let useWhitelist = !whitelist.isEmpty
 
@@ -223,7 +225,7 @@ class GenericMarkdownSource: TaskSource {
             let values = try fileURL.resourceValues(forKeys: Set(resourceKeys))
             let name = values.name ?? ""
             if values.isDirectory == true {
-                let relativePath = String(fileURL.path.dropFirst(vaultPath.count))
+                let relativePath = ObsidianService.vaultRelativePath(of: fileURL, vaultPath: vaultPath)
                     .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
                 let shouldExclude = excludedFolders.contains { excluded in
                     let trimmed = excluded.trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
@@ -235,7 +237,7 @@ class GenericMarkdownSource: TaskSource {
             }
             guard extensions.contains(fileURL.pathExtension.lowercased()) else { continue }
             if useWhitelist {
-                let relativePath = String(fileURL.path.dropFirst(vaultPath.count))
+                let relativePath = ObsidianService.vaultRelativePath(of: fileURL, vaultPath: vaultPath)
                     .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
                 let isRoot = !relativePath.contains("/")
                 let inWhitelist = (!inboxRel.isEmpty && relativePath == inboxRel)

@@ -127,9 +127,11 @@ class ObsidianService {
                 // reason it is exempt from the folder whitelist: tasks written
                 // there by the destination→vault direction would otherwise look
                 // deleted on the next scan and their reminders would be removed.
-                let isInbox = !inboxRelativePath.isEmpty
-                    && fileURL.standardizedFileURL.path == URL(fileURLWithPath: path)
-                        .appendingPathComponent(inboxRelativePath).standardizedFileURL.path
+                let slashes = CharacterSet(charactersIn: "/ ")
+                let inboxRel = inboxRelativePath.trimmingCharacters(in: slashes)
+                let isInbox = !inboxRel.isEmpty
+                    && ObsidianService.vaultRelativePath(of: fileURL, vaultPath: path)
+                        .trimmingCharacters(in: slashes) == inboxRel
 
                 let fileTasks = try parseTasksFromFile(
                     fileURL,
@@ -339,7 +341,7 @@ class ObsidianService {
         }
 
         let lines = content.components(separatedBy: "\n")
-        let relativePath = fileURL.path.replacingOccurrences(of: vaultPath, with: "")
+        let relativePath = ObsidianService.vaultRelativePath(of: fileURL, vaultPath: vaultPath)
 
         // Extract client name from YAML frontmatter
         let clientName = extractFrontmatterClient(from: content)
@@ -1542,8 +1544,44 @@ class ObsidianService {
 
     // MARK: - File Discovery
 
+    /// A file's (or folder's) path relative to the vault, with a leading `/`.
+    ///
+    /// The file URL and the configured vault path do not always spell the vault
+    /// the same way: `FileManager`'s enumerator hands back *resolved* paths, so a
+    /// vault reached through a symlink (or under `/var`, `/tmp`) yields files that
+    /// don't start with the configured path at all. The string surgery this
+    /// replaces then produced garbage — an absolute path, or `/private/note.md` —
+    /// and every folder filter, the inbox exemption and all writeback (which
+    /// rebuilds `vaultPath + relativePath`) silently broke.
+    static func vaultRelativePath(of fileURL: URL, vaultPath: String) -> String {
+        func strip(_ path: String, _ base: String) -> String? {
+            guard !base.isEmpty, path.hasPrefix(base) else { return nil }
+            let rest = path.dropFirst(base.count)
+            // Must end on a path boundary. A link named `Vault` pointing at
+            // `Vault-2024` yields files under `…/Vault-2024/`, which *start with*
+            // the configured path without being inside it.
+            guard base.hasSuffix("/") || rest.isEmpty || rest.hasPrefix("/") else { return nil }
+            return String(rest)
+        }
+        // Same spelling on both sides — the normal case, and no filesystem access.
+        if let direct = strip(fileURL.path, vaultPath) { return direct }
+
+        // Different spelling: compare what both actually point at. Only the
+        // file's *folder* is resolved, so a note that is itself a symlink keeps
+        // its place in the vault instead of jumping to wherever it points.
+        let vault = URL(fileURLWithPath: vaultPath).resolvingSymlinksInPath().path
+        let file = fileURL.deletingLastPathComponent().resolvingSymlinksInPath()
+            .appendingPathComponent(fileURL.lastPathComponent).path
+        if let resolved = strip(file, vault) { return resolved }
+
+        return fileURL.path.replacingOccurrences(of: vaultPath, with: "")
+    }
+
     private func findMarkdownFiles(in directory: URL, excluding excludedFolders: [String], including includedFolders: [String] = [], inboxRelativePath: String = "") throws -> [URL] {
         let vaultPath = directory.path
+        // A directory enumerator does not descend into a symlink, so a vault that
+        // *is* one would scan as empty. Walk what it points at.
+        let directory = directory.resolvingSymlinksInPath()
         let useWhitelist = !includedFolders.filter({ !$0.trimmingCharacters(in: .whitespaces).isEmpty }).isEmpty
 
         // If whitelist mode, scan only the specified folders (+ opt-in root + the inbox)
@@ -1600,7 +1638,7 @@ class ObsidianService {
 
             // De-duplicate — the inbox or a root sentinel file may also be reached via a folder.
             var seen = Set<String>()
-            return files.filter { seen.insert($0.standardizedFileURL.path).inserted }
+            return files.filter { seen.insert($0.resolvingSymlinksInPath().path).inserted }
         }
 
         // Default mode: scan everything, excluding specified folders
@@ -1620,7 +1658,7 @@ class ObsidianService {
             let name = resourceValues.name ?? ""
 
             if resourceValues.isDirectory == true {
-                let relativePath = String(fileURL.path.dropFirst(vaultPath.count))
+                let relativePath = ObsidianService.vaultRelativePath(of: fileURL, vaultPath: vaultPath)
                     .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
 
                 let shouldExclude = excludedFolders.contains(where: { excluded in
