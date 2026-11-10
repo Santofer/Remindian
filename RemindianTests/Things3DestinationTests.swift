@@ -103,4 +103,42 @@ final class Things3DestinationTests: XCTestCase {
         XCTAssertTrue(msg.contains("Automation"), "Must name the Automation section.")
         XCTAssertTrue(msg.lowercased().contains("tccutil"), "Must include the reset fallback for when the toggle is missing.")
     }
+
+    // MARK: - #100 / #102: project and area placement
+
+    /// Things rejects `move … to project` ("Cannot move to-do"). The project has to
+    /// be assigned through the `project` property.
+    func test_100_projectIsAssignedByPropertyNotMove() {
+        let script = Things3Destination.placementScriptLines(for: "\u{1F4C1} Spike Work").joined(separator: "\n")
+        XCTAssertTrue(script.contains("set project of newTodo to project \"Spike Work\""), "Got:\n\(script)")
+    }
+
+    func test_100_areasArePlacedToo() {
+        // Area targets used to be ignored on create, leaving the to-do in the Inbox.
+        let script = Things3Destination.placementScriptLines(for: "\u{1F4C2} Family").joined(separator: "\n")
+        XCTAssertTrue(script.contains("set area of newTodo to area \"Family\""), "Got:\n\(script)")
+    }
+
+    /// The to-do already exists when placement runs. If placement could abort the
+    /// script, the ID was lost, no mapping was saved, and every later sync created
+    /// the task again — the Inbox duplicates in #100 / #102.
+    func test_102_placementCanNeverAbortTheScript() {
+        let lines = Things3Destination.placementScriptLines(for: "\u{1F4C1} Work")
+        XCTAssertEqual(lines.first?.trimmingCharacters(in: .whitespaces), "try")
+        XCTAssertEqual(lines.last?.trimmingCharacters(in: .whitespaces), "end try")
+        XCTAssertEqual(lines.filter { $0.trimmingCharacters(in: .whitespaces) == "try" }.count,
+                       lines.filter { $0.trimmingCharacters(in: .whitespaces) == "end try" }.count,
+                       "Every try must be closed")
+    }
+
+    func test_100_builtInListsNeedNoPlacement() {
+        XCTAssertTrue(Things3Destination.placementScriptLines(for: "Inbox").isEmpty)
+        XCTAssertTrue(Things3Destination.placementScriptLines(for: "Today").isEmpty)
+    }
+
+    func test_100_projectNameIsEscaped() {
+        // Project names come from Things, but they still land inside a string literal.
+        let script = Things3Destination.placementScriptLines(for: "\u{1F4C1} My \"Big\" Project\\").joined(separator: "\n")
+        XCTAssertTrue(script.contains("My \\\"Big\\\" Project\\\\"), "Quote and backslash must be escaped. Got:\n\(script)")
+    }
 }

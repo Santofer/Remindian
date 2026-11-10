@@ -308,14 +308,46 @@ class Things3Destination: TaskDestination {
             .replacingOccurrences(of: "\"", with: "\\\"")
     }
 
+    // MARK: - Project / area placement
+
+    /// AppleScript lines that file `newTodo` under a project (📁) or an area (📂).
+    /// Empty for built-in lists, where the to-do simply stays in the Inbox.
+    ///
+    /// Two things matter here, both learned from #100 / #102:
+    ///
+    /// - Things rejects `move … to project` ("Cannot move to-do"). Its AppleScript
+    ///   guide assigns a project through the `project` property instead. `move` is
+    ///   kept only as a fallback for older Things builds.
+    /// - The placement is wrapped in `try`. By the time it runs, `make new to do`
+    ///   has already created the to-do; if the script errored here the ID was never
+    ///   returned, no mapping was saved, and every later sync created the task
+    ///   again — one more Inbox copy per attempt, per retry. A to-do left in the
+    ///   Inbox but tracked is a nuisance; an untracked one is a duplicate factory.
+    static func placementScriptLines(for listName: String, indent: String = "    ") -> [String] {
+        let kind: String
+        if listName.hasPrefix("\u{1F4C1} ") {
+            kind = "project"
+        } else if listName.hasPrefix("\u{1F4C2} ") {
+            kind = "area"
+        } else {
+            return []
+        }
+        let name = appleScriptEscape(String(listName.dropFirst(2)))
+        return [
+            "\(indent)try",
+            "\(indent)    set \(kind) of newTodo to \(kind) \"\(name)\"",
+            "\(indent)on error",
+            "\(indent)    try",
+            "\(indent)        move newTodo to \(kind) \"\(name)\"",
+            "\(indent)    end try",
+            "\(indent)end try",
+        ]
+    }
+
     // MARK: - CRUD
 
     func createTask(from task: SyncTask, inList listName: String, config: SyncConfiguration) async throws -> String {
         // Use AppleScript to create task — more reliable than URL scheme for getting the task ID back
-        let cleanList = listName
-            .replacingOccurrences(of: "\u{1F4C1} ", with: "")
-            .replacingOccurrences(of: "\u{1F4C2} ", with: "")
-
         let escapedTitle = Things3Destination.appleScriptEscape(task.title)
         let fullNotes = notesWithObsidianLink(task: task, config: config)
         let escapedNotes = Things3Destination.appleScriptEscape(fullNotes)
@@ -354,28 +386,17 @@ class Things3Destination: TaskDestination {
             """
         }
 
-        // Build the creation script
-        var scriptSource: String
-        if listName.hasPrefix("\u{1F4C1} ") {
-            // Create in a project
-            let escapedProject = Things3Destination.appleScriptEscape(cleanList)
-            scriptSource = """
-                tell application id "com.culturedcode.ThingsMac"
-                    set newTodo to make new to do with properties {\(properties)}
-                    move newTodo to project "\(escapedProject)"
-                \(dueDateScript)
-                    return id of newTodo
-                end tell
-            """
-        } else {
-            scriptSource = """
-                tell application id "com.culturedcode.ThingsMac"
-                    set newTodo to make new to do with properties {\(properties)}
-                \(dueDateScript)
-                    return id of newTodo
-                end tell
-            """
-        }
+        // Build the creation script. Placement comes last-but-one and can never
+        // abort the script, so a created to-do always reports its ID.
+        let placement = Things3Destination.placementScriptLines(for: listName, indent: "        ").joined(separator: "\n")
+        let scriptSource = """
+            tell application id "com.culturedcode.ThingsMac"
+                set newTodo to make new to do with properties {\(properties)}
+            \(placement)
+            \(dueDateScript)
+                return id of newTodo
+            end tell
+        """
 
         // Execute with retry + 30s timeout — sandbox AppleScript can race against app initialization
         guard let result = try await executeAppleScriptWithRetryAndTimeout(source: scriptSource),
@@ -423,14 +444,8 @@ class Things3Destination: TaskDestination {
 
             scriptLines.append("    set newTodo to make new to do with properties {\(properties)}")
 
-            // Move to project if needed
-            let cleanList = listName
-                .replacingOccurrences(of: "\u{1F4C1} ", with: "")
-                .replacingOccurrences(of: "\u{1F4C2} ", with: "")
-            if listName.hasPrefix("\u{1F4C1} ") {
-                let escapedProject = Things3Destination.appleScriptEscape(cleanList)
-                scriptLines.append("    move newTodo to project \"\(escapedProject)\"")
-            }
+            // File under its project or area (never aborts the script — see helper).
+            scriptLines.append(contentsOf: Things3Destination.placementScriptLines(for: listName))
 
             // Set due date using locale-independent date components
             if let dueDate = task.dueDate {
