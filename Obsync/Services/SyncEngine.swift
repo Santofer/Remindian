@@ -848,6 +848,22 @@ class SyncEngine {
                                         tags: oTask.tags,
                                         heading: oTask.obsidianSource?.sectionHeading
                                     )
+                                    // Apple Reminders reads tags back from the whole
+                                    // notes field, and the user's own text in the notes
+                                    // is now kept (#105). Text like `#3` or `+1 555…`
+                                    // reads as tags, so hash the tags the reminder will
+                                    // actually report — otherwise it looks changed on
+                                    // every sync and is re-pushed forever.
+                                    if config.taskDestinationType == .appleReminders, needsDestinationUpdate {
+                                        reminderStateAfterSync.tags = SyncTask.tagsInReminderNotes(
+                                            taskForReminders.reminderNotes(
+                                                existing: rTask.notes,
+                                                addTaskLink: config.addTaskLinkToReminders,
+                                                vaultPath: config.vaultPath,
+                                                appendLinkToNotes: config.appendTaskLinkToNotes
+                                            )
+                                        )
+                                    }
                                     syncState.addOrUpdateMapping(
                                         obsidianId: mapping.obsidianId,
                                         remindersId: mapping.remindersId,
