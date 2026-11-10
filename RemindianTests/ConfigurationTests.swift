@@ -441,4 +441,44 @@ final class ConfigurationTests: XCTestCase {
         let result = config.resolveTargetList(tag: nil, filePath: "Notes/random.md")
         XCTAssertEqual(result, "Inbox")
     }
+
+    // MARK: - Unmapped tags → default list (opt-in)
+
+    func test_unmappedTagCreatesItsOwnListByDefault() {
+        let config = SyncConfiguration()
+        config.defaultList = "Inbox"
+        XCTAssertFalse(config.unmappedTagsUseDefaultList)
+        XCTAssertEqual(config.resolveTargetList(tag: "Logistic", filePath: "/Inbox.md", tags: ["#Logistic"]), "Logistic")
+    }
+
+    func test_unmappedTagUsesDefaultListWhenEnabled() {
+        let config = SyncConfiguration()
+        config.defaultList = "Inbox"
+        config.unmappedTagsUseDefaultList = true
+        XCTAssertEqual(config.resolveTargetList(tag: "Logistic", filePath: "/Inbox.md", tags: ["#Logistic"]), "Inbox")
+        XCTAssertTrue(config.explainTargetList(tag: "Logistic", filePath: "/Inbox.md", tags: ["#Logistic"]).reason.contains("no mapping"))
+    }
+
+    func test_mappingsStillWinWhenUnmappedTagsUseDefaultList() {
+        let config = SyncConfiguration()
+        config.defaultList = "Inbox"
+        config.unmappedTagsUseDefaultList = true
+        config.listMappings = [.init(obsidianTag: "Errands", remindersList: "Errands")]
+        config.folderPathMappings = [.init(folderPath: "Areas/Health", remindersList: "Exercise")]
+        XCTAssertEqual(config.resolveTargetList(tag: "Errands", filePath: "/Inbox.md", tags: ["#Errands"]), "Errands")
+        XCTAssertEqual(config.resolveTargetList(tag: "misc", filePath: "/Areas/Health/Run.md", tags: ["#misc"]), "Exercise")
+    }
+
+    func test_unmappedTagsUseDefaultListRoundTripsAndDefaultsOff() throws {
+        let config = SyncConfiguration()
+        config.unmappedTagsUseDefaultList = true
+        let decoded = try JSONDecoder().decode(SyncConfiguration.self, from: JSONEncoder().encode(config))
+        XCTAssertTrue(decoded.unmappedTagsUseDefaultList)
+
+        // A config saved before the setting existed decodes with it off.
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(SyncConfiguration())) as! [String: Any]
+        json.removeValue(forKey: "unmappedTagsUseDefaultList")
+        let legacy = try JSONDecoder().decode(SyncConfiguration.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertFalse(legacy.unmappedTagsUseDefaultList)
+    }
 }

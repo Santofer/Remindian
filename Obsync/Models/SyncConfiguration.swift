@@ -190,6 +190,12 @@ class SyncConfiguration: ObservableObject, Codable {
     /// asked. The source Markdown line is never modified.
     @Published var stripGlobalFilterFromTitle: Bool
 
+    /// Send tasks whose tag has no mapping to the default list, instead of to a
+    /// list named after the tag. Off by default (the long-standing behaviour).
+    /// With it on, a typo (`#Logistic`) or a one-off tag no longer creates a new
+    /// list in the destination.
+    @Published var unmappedTagsUseDefaultList: Bool
+
     // MARK: - Todoist
     @Published var todoistApiToken: String
 
@@ -413,6 +419,7 @@ class SyncConfiguration: ObservableObject, Codable {
         case enableDataviewFormat
         case excludedTags
         case globalFilter, stripGlobalFilterFromTitle
+        case unmappedTagsUseDefaultList
         case todoistApiToken
         case tickTickAccessToken, tickTickRefreshToken, tickTickTokenExpiry
         case asanaApiToken
@@ -491,6 +498,7 @@ class SyncConfiguration: ObservableObject, Codable {
         enableDataviewFormat: Bool = false,
         globalFilter: String = "",
         stripGlobalFilterFromTitle: Bool = false,
+        unmappedTagsUseDefaultList: Bool = false,
         todoistApiToken: String = "",
         tickTickAccessToken: String = "",
         tickTickRefreshToken: String = "",
@@ -566,6 +574,7 @@ class SyncConfiguration: ObservableObject, Codable {
         self.enableDataviewFormat = enableDataviewFormat
         self.globalFilter = globalFilter
         self.stripGlobalFilterFromTitle = stripGlobalFilterFromTitle
+        self.unmappedTagsUseDefaultList = unmappedTagsUseDefaultList
         self.todoistApiToken = todoistApiToken
         self.tickTickAccessToken = tickTickAccessToken
         self.tickTickRefreshToken = tickTickRefreshToken
@@ -655,6 +664,7 @@ class SyncConfiguration: ObservableObject, Codable {
         enableDataviewFormat = try container.decodeIfPresent(Bool.self, forKey: .enableDataviewFormat) ?? false
         globalFilter = try container.decodeIfPresent(String.self, forKey: .globalFilter) ?? ""
         stripGlobalFilterFromTitle = try container.decodeIfPresent(Bool.self, forKey: .stripGlobalFilterFromTitle) ?? false
+        unmappedTagsUseDefaultList = try container.decodeIfPresent(Bool.self, forKey: .unmappedTagsUseDefaultList) ?? false
         todoistApiToken = try container.decodeIfPresent(String.self, forKey: .todoistApiToken) ?? ""
         tickTickAccessToken = try container.decodeIfPresent(String.self, forKey: .tickTickAccessToken) ?? ""
         tickTickRefreshToken = try container.decodeIfPresent(String.self, forKey: .tickTickRefreshToken) ?? ""
@@ -733,6 +743,7 @@ class SyncConfiguration: ObservableObject, Codable {
         try container.encode(enableDataviewFormat, forKey: .enableDataviewFormat)
         try container.encode(globalFilter, forKey: .globalFilter)
         try container.encode(stripGlobalFilterFromTitle, forKey: .stripGlobalFilterFromTitle)
+        try container.encode(unmappedTagsUseDefaultList, forKey: .unmappedTagsUseDefaultList)
         try container.encode(todoistApiToken, forKey: .todoistApiToken)
         try container.encode(tickTickAccessToken, forKey: .tickTickAccessToken)
         try container.encode(tickTickRefreshToken, forKey: .tickTickRefreshToken)
@@ -1000,7 +1011,8 @@ class SyncConfiguration: ObservableObject, Codable {
 
         // 5. Auto-capitalize tag — but never the global-filter tag, which would
         //    invent a list ("task" → "Task") that the user never asked for (#88).
-        if !cleanTag.isEmpty && !isFilterTag(cleanTag) {
+        //    Skipped entirely when unmapped tags should use the default list.
+        if !cleanTag.isEmpty && !isFilterTag(cleanTag) && !unmappedTagsUseDefaultList {
             let auto = cleanTag.prefix(1).uppercased() + cleanTag.dropFirst()
             return (auto, "tag “\(cleanTag)” with no mapping (name used as-is)")
         }
@@ -1009,7 +1021,10 @@ class SyncConfiguration: ObservableObject, Codable {
         let filterNote = isFilterTag(cleanTag) && !cleanTag.isEmpty
             ? " (the global filter tag is not used for routing)"
             : ""
-        return (defaultList, "default list\(filterNote)")
+        let unmappedNote = !cleanTag.isEmpty && !isFilterTag(cleanTag) && unmappedTagsUseDefaultList
+            ? " (tag “\(cleanTag)” has no mapping)"
+            : ""
+        return (defaultList, "default list\(filterNote)\(unmappedNote)")
     }
 
     /// The destination list for a task. See `explainTargetList` for the reasoning.

@@ -825,6 +825,9 @@ struct ListMappingsView: View {
                 .font(.caption2)
                 .foregroundColor(.secondary)
 
+            Toggle("Send tags without a mapping to the default list", isOn: $syncManager.config.unmappedTagsUseDefaultList)
+                .help("Otherwise a tag with no mapping creates a list named after the tag, so a typo like #Logistic adds a new list.")
+
             // Mapping priority explanation
             GroupBox {
                 VStack(alignment: .leading, spacing: 4) {
@@ -837,7 +840,9 @@ struct ListMappingsView: View {
                         .font(.caption2)
                     Text("3. Folder path mapping (folder/ \u{2192} List)")
                         .font(.caption2)
-                    Text("4. Auto-capitalize tag name")
+                    Text(syncManager.config.unmappedTagsUseDefaultList
+                         ? "4. (Tags without a mapping use the default list)"
+                         : "4. Auto-capitalize tag name")
                         .font(.caption2)
                     Text("5. Default list")
                         .font(.caption2)
