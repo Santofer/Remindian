@@ -3,9 +3,28 @@ import SwiftUI
 import Combine
 import ServiceManagement
 
+/// Where everything is persisted while the test suite runs: a throwaway folder,
+/// never the real one.
+///
+/// The tests are hosted in the app, so they share its sandbox container — and
+/// anything a test persisted landed in the developer's *live* data. An engine
+/// test that ran one sync replaced the real `sync_state.json` with its single
+/// mock mapping, so the installed app came back from every test run having
+/// forgotten every task it had synced. The hosted app instance also started up
+/// on the real configuration. Redirecting at the one function all persistence
+/// goes through makes that impossible however a test is written.
+let remindianTestDataDir: URL? = {
+    guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil else { return nil }
+    let dir = FileManager.default.temporaryDirectory
+        .appendingPathComponent("RemindianTestData-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    return dir
+}()
+
 /// Safe application support directory — returns nil instead of crashing.
 /// All persistence code should use this instead of force-unwrapping `.first!`.
 func remindianAppSupportDir() -> URL? {
+    if let remindianTestDataDir { return remindianTestDataDir }
     guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return nil }
     let dir = appSupport.appendingPathComponent("Remindian", isDirectory: true)
     try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -1459,9 +1478,7 @@ class SyncManager: ObservableObject {
         debugLog("[SyncManager] Full sync state reset: mappings, log, and history cleared")
 
         // Also clear the debug log to remove any stale references (#30)
-        let logURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("Remindian", isDirectory: true)
-            .appendingPathComponent("debug.log")
+        let logURL = remindianAppSupportDir()?.appendingPathComponent("debug.log")
         if let logURL = logURL {
             try? "".write(to: logURL, atomically: true, encoding: .utf8)
         }

@@ -30,6 +30,26 @@ final class SyncStateLocationTests: XCTestCase {
         super.tearDown()
     }
 
+    // MARK: - Tests must never reach the real app data
+
+    /// The suite is hosted in the app and shares its container. Before this
+    /// guard, any engine test that ran a sync overwrote the developer's real
+    /// `sync_state.json` — every test run wiped the installed app's mappings.
+    func test_persistenceIsRedirectedAwayFromTheRealAppSupportFolder() throws {
+        let dir = try XCTUnwrap(remindianAppSupportDir())
+        XCTAssertFalse(dir.path.contains("Application Support"),
+                       "Under XCTest nothing may be persisted next to real user data. Got: \(dir.path)")
+
+        let real = try XCTUnwrap(FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first)
+            .appendingPathComponent("Remindian/sync_state.json")
+        let before = try? Data(contentsOf: real)
+
+        makeState(3).save()          // the "back-compat" save every engine test ends with
+
+        XCTAssertEqual(try? Data(contentsOf: real), before, "The real sync state must be untouched")
+        XCTAssertEqual(SyncState.load().mappings.count, 3, "…while the redirected one round-trips")
+    }
+
     private func makeState(_ mappingCount: Int) -> SyncState {
         let state = SyncState()
         for i in 0..<mappingCount {
