@@ -210,6 +210,8 @@ extension SyncTask {
         static let url = make("https?://[^\\s)\\]]+")
         static let wikilink = make("\\[\\[[^\\]]*\\]\\]")
         static let codeSpan = make("`[^`]*`")
+        /// The destination of an inline Markdown link: `](Notes/Page#heading)`.
+        static let markdownLinkTarget = make("\\]\\([^)\\s]*\\)")
 
         // Dataview inline fields (#41).
         static let dataviewField = make("[\\[\\(]([\\w-]+)::\\s*([^\\]\\)]+)[\\]\\)]")
@@ -719,6 +721,11 @@ extension SyncTask {
         // Inline code spans. Single backticks; we don't need to handle the
         // pathological double-backtick case for our purposes.
         ranges.append(contentsOf: Rx.codeSpan.matches(in: content, options: [], range: nsRange).map(\.range))
+
+        // Inline Markdown link destinations: `[text](Notes/Page#heading)`. A
+        // relative link to a heading carries `#heading`, which isn't a tag. The
+        // URL rule above only covers `http(s)://` links.
+        ranges.append(contentsOf: Rx.markdownLinkTarget.matches(in: content, options: [], range: nsRange).map(\.range))
 
         return ranges
     }

@@ -244,6 +244,32 @@ final class V5_9_0_RegressionTests: XCTestCase {
         XCTAssertEqual(task?.tags, ["#work"])
     }
 
+    /// A relative Markdown link to a heading (`[text](Note#heading)`) isn't a
+    /// URL, so it wasn't protected: `#heading` became a tag and the reminder was
+    /// routed to an auto-created list named after the heading.
+    func test_relativeMarkdownLinkWithHeadingNotParsedAsTag() {
+        let task = SyncTask.fromObsidianLine(
+            "- [ ] Stair Stepping — Workout goal 2 📅 2026-09-30 · [Change day](Journal/Weeklies/2026-W40#workout-goal-date-wg-2026-w40-g2) ^wg-2026-w40-g2",
+            filePath: "/Journal/Dailies/2026-09-30.md",
+            lineNumber: 1
+        )
+        XCTAssertNotNil(task)
+        XCTAssertEqual(task?.tags, [], "The link's heading anchor must not be a tag")
+        XCTAssertNil(task?.targetList)
+        XCTAssertTrue(task?.title.contains("[Change day](Journal/Weeklies/2026-W40#workout-goal-date-wg-2026-w40-g2)") ?? false,
+                      "The link stays in the title intact. Got: \(task?.title ?? "nil")")
+    }
+
+    func test_realTagNextToRelativeMarkdownLinkStillParses() {
+        let task = SyncTask.fromObsidianLine(
+            "- [ ] Review [notes](Projects/Plan#Goals) #work",
+            filePath: "/test.md",
+            lineNumber: 1
+        )
+        XCTAssertEqual(task?.tags, ["#work"])
+        XCTAssertEqual(task?.targetList, "work")
+    }
+
     func test_65_wikilinkWithHeaderAnchorNotParsedAsTag() {
         let task = SyncTask.fromObsidianLine(
             "- [ ] Review [[My Note#section]] #work",
