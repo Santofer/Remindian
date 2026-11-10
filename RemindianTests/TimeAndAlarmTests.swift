@@ -1,5 +1,4 @@
 import XCTest
-import EventKit
 @testable import Remindian
 
 /// Tests for due-time parsing and reminder alarm computation (#6, v5.20.0).
@@ -140,56 +139,5 @@ final class TimeAndAlarmTests: XCTestCase {
         XCTAssertEqual(SyncTask.rescheduledAlarm(day(14, hour: 18), previousDue: day(14), newDue: nil,
                                                  includeTime: false, allDayHour: 10), .keep,
                        "Only the alarm Remindian created is removed with the due date")
-    }
-}
-
-// MARK: - #105: notes typed in Reminders must survive a push
-
-final class ReminderNotesPreservationTests: XCTestCase {
-
-    func test_105_userLinesSurviveManagedLinesDoNot() {
-        let existing = "Tags: #proj/alpha\nmy own note\nobsidian://open?vault=v&file=f\nClient: Acme\nsecond line"
-        XCTAssertEqual(SyncTask.userNoteLines(in: existing, replacingChecklist: false),
-                       ["my own note", "second line"])
-    }
-
-    func test_105_userChecklistIsKeptUnlessOursIsBeingWritten() {
-        let existing = "- [ ] buy milk\n- [x] call Bob\nnote"
-        XCTAssertEqual(SyncTask.userNoteLines(in: existing, replacingChecklist: false).count, 3)
-        XCTAssertEqual(SyncTask.userNoteLines(in: existing, replacingChecklist: true), ["note"])
-    }
-
-    func test_105_emptyAndManagedOnlyNotesLeaveNothing() {
-        XCTAssertEqual(SyncTask.userNoteLines(in: nil, replacingChecklist: false), [])
-        XCTAssertEqual(SyncTask.userNoteLines(in: "Tags: #a\n\n", replacingChecklist: false), [])
-    }
-
-    /// The reporter's exact case, end to end through `applyToReminder`.
-    func test_105_pushKeepsTheUsersNoteAndRefreshesTheTagsLine() {
-        let reminder = EKReminder(eventStore: EKEventStore())
-        reminder.notes = "Tags: #proj/alpha\nmy own note"
-        var task = SyncTask(title: "T", tags: ["#proj/beta"])
-
-        task.applyToReminder(reminder)
-        XCTAssertEqual(reminder.notes, "Tags: #proj/beta\nmy own note")
-
-        // Idempotent: a second push must not stack anything.
-        task.applyToReminder(reminder)
-        XCTAssertEqual(reminder.notes, "Tags: #proj/beta\nmy own note")
-
-        // #104: with the tags line switched off, only the user's text remains.
-        task.applyToReminder(reminder, writeTagsToNotes: false)
-        XCTAssertEqual(reminder.notes, "my own note")
-
-        // No tags and no user text → the field is cleared, not left stale.
-        task.tags = []
-        reminder.notes = "Tags: #proj/beta"
-        task.applyToReminder(reminder)
-        XCTAssertNil(reminder.notes)
-    }
-
-    func test_105_blankLinesInsideTheUsersNoteAreKept() {
-        XCTAssertEqual(SyncTask.userNoteLines(in: "Tags: #a\n\npara 1\n\npara 2\n", replacingChecklist: false),
-                       ["para 1", "", "para 2"])
     }
 }

@@ -734,20 +734,8 @@ extension SyncTask {
 extension SyncTask {
     /// Create SyncTask from Apple Reminder
     static func fromReminder(_ reminder: EKReminder, listName: String) -> SyncTask {
-        var tags: [String] = []
-        
         // Parse tags from notes if present (supports both # and + prefixes)
-        if let notes = reminder.notes {
-            let range = NSRange(notes.startIndex..., in: notes)
-            do {
-                let matches = Rx.tag.matches(in: notes, options: [], range: range)
-                for match in matches {
-                    if let tagRange = Range(match.range, in: notes) {
-                        tags.append(String(notes[tagRange]))
-                    }
-                }
-            }
-        }
+        let tags = tagsInReminderNotes(reminder.notes)
         
         // Get start date from reminder's start date component
         var startDate: Date? = nil
@@ -843,27 +831,6 @@ extension SyncTask {
         return calendar.date(bySettingHour: hour, minute: 0, second: 0, of: due) ?? due
     }
 
-    /// The lines of a reminder's notes that belong to the user — everything except
-    /// what Remindian writes itself (`Client:`, `Tags:`, the obsidian:// link, and,
-    /// when a sub-task checklist is being written, the previous checklist).
-    static func userNoteLines(in existing: String?, replacingChecklist: Bool) -> [String] {
-        guard let existing, !existing.isEmpty else { return [] }
-        var lines = existing.components(separatedBy: "\n").filter { line in
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("Client: ") || trimmed.hasPrefix("Tags: ") || trimmed.hasPrefix("obsidian://") {
-                return false
-            }
-            if replacingChecklist, trimmed.hasPrefix("- [ ] ") || trimmed.hasPrefix("- [x] ") || trimmed.hasPrefix("- [X] ") {
-                return false
-            }
-            return true
-        }
-        // Drop blank lines left at the edges once the managed lines are gone.
-        while let first = lines.first, first.trimmingCharacters(in: .whitespaces).isEmpty { lines.removeFirst() }
-        while let last = lines.last, last.trimmingCharacters(in: .whitespaces).isEmpty { lines.removeLast() }
-        return lines
-    }
-
     func applyToReminder(_ reminder: EKReminder, includeDueTime: Bool = false, addTaskLink: Bool = false, vaultPath: String = "", appendLinkToNotes: Bool = false, addReminderAlarm: Bool = false, allDayAlarmHour: Int = 9, writeTagsToNotes: Bool = true) {
         reminder.title = title
         reminder.isCompleted = isCompleted
@@ -894,58 +861,19 @@ extension SyncTask {
             reminder.startDateComponents = nil
         }
 
-        // Build notes: client name + tags + task link
-        // (EventKit has no native tag API, so tags are stored in notes for visibility)
-        var noteParts: [String] = []
-
-        if let client = clientName, !client.isEmpty {
-            noteParts.append("Client: \(client)")
-        }
-
-        if writeTagsToNotes, !tags.isEmpty {
-            noteParts.append("Tags: \(tags.joined(separator: " "))")
-        }
-
-        // Add obsidian:// link to the reminder's URL field and notes
-        if addTaskLink, let source = obsidianSource, !vaultPath.isEmpty {
-            let vaultName = URL(fileURLWithPath: vaultPath).lastPathComponent
-            let filePath = source.filePath.hasPrefix("/") ? String(source.filePath.dropFirst()) : source.filePath
-            let encodedVault = vaultName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? vaultName
-            let encodedFile = filePath.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? filePath
-            let obsidianURL = "obsidian://open?vault=\(encodedVault)&file=\(encodedFile)"
-
-            // Set the URL field (clickable in Reminders.app and GoodTask).
-            // Apple Reminders surfaces this as a single clickable icon.
+        // Set the URL field (clickable in Reminders.app and GoodTask).
+        // Apple Reminders surfaces this as a single clickable icon.
+        if addTaskLink, let obsidianURL = obsidianURL(vaultPath: vaultPath) {
             reminder.url = URL(string: obsidianURL)
-
-            // Optionally also append into notes as a fallback for older
-            // clients that don't display the URL field. Opt-in since v5.10.0
-            // (#69) — the historical default was always-append, which created
-            // a long percent-encoded line of noise in every reminder.
-            if appendLinkToNotes {
-                noteParts.append(obsidianURL)
-            }
         }
 
-        // Sub-tasks, when folded in. Apple Reminders has no sub-task API, so the
-        // nesting is shown as a checklist in the notes — read-only by nature.
-        if let summary = subtaskSummary, !summary.isEmpty {
-            noteParts.append(summary)
-        }
-
-        if let sourceNotes = notes?.trimmingCharacters(in: .whitespaces), !sourceNotes.isEmpty {
-            // The source supplies the note body (TaskNotes): it owns the notes.
-            reminder.notes = noteParts.isEmpty ? sourceNotes : noteParts.joined(separator: "\n")
-        } else {
-            // The source has no notes of its own (Obsidian Tasks, Generic Markdown),
-            // so whatever the user typed into the reminder is theirs. Only the lines
-            // Remindian manages are rewritten; everything else is kept. This used to
-            // assign the whole field, which silently deleted the user's notes on the
-            // next push of any task that had a tag (#105).
-            let kept = SyncTask.userNoteLines(in: reminder.notes, replacingChecklist: subtaskSummary?.isEmpty == false)
-            let all = noteParts + kept
-            reminder.notes = all.isEmpty ? nil : all.joined(separator: "\n")
-        }
+        reminder.notes = reminderNotes(
+            existing: reminder.notes,
+            addTaskLink: addTaskLink,
+            vaultPath: vaultPath,
+            appendLinkToNotes: appendLinkToNotes,
+            writeTagsToNotes: writeTagsToNotes
+        )
 
         if isCompleted {
             reminder.completionDate = completedDate ?? Date()
@@ -994,5 +922,149 @@ extension SyncTask {
                 for r in existing { reminder.removeRecurrenceRule(r) }
             }
         }
+    }
+
+    /// The obsidian:// link to this task's note, or nil when there is no vault.
+    func obsidianURL(vaultPath: String) -> String? {
+        guard let source = obsidianSource, !vaultPath.isEmpty else { return nil }
+        let vaultName = URL(fileURLWithPath: vaultPath).lastPathComponent
+        let filePath = source.filePath.hasPrefix("/") ? String(source.filePath.dropFirst()) : source.filePath
+        let encodedVault = vaultName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? vaultName
+        let encodedFile = filePath.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? filePath
+        return "obsidian://open?vault=\(encodedVault)&file=\(encodedFile)"
+    }
+
+    /// The notes `applyToReminder` writes, given the reminder's current notes.
+    ///
+    /// Pure, so the sync engine can predict what the reminder will contain after
+    /// an update (and hash it) without re-fetching it.
+    func reminderNotes(existing: String?, addTaskLink: Bool = false, vaultPath: String = "", appendLinkToNotes: Bool = false, writeTagsToNotes: Bool = true) -> String? {
+        // Build notes: client name + tags + task link
+        // (EventKit has no native tag API, so tags are stored in notes for visibility)
+        var noteParts: [String] = []
+
+        if let client = clientName, !client.isEmpty {
+            noteParts.append("Client: \(client)")
+        }
+
+        // Optional since #104 — a previous `Tags:` line is still stripped below,
+        // so switching it off removes the line on the next push.
+        if writeTagsToNotes, !tags.isEmpty {
+            noteParts.append("Tags: \(tags.joined(separator: " "))")
+        }
+
+        // Optionally also append the link into notes as a fallback for older
+        // clients that don't display the URL field. Opt-in since v5.10.0
+        // (#69) — the historical default was always-append, which created
+        // a long percent-encoded line of noise in every reminder.
+        if addTaskLink, appendLinkToNotes, let obsidianURL = obsidianURL(vaultPath: vaultPath) {
+            noteParts.append(obsidianURL)
+        }
+
+        // Sub-tasks, when folded in. Apple Reminders has no sub-task API, so the
+        // nesting is shown as a checklist in the notes — read-only by nature.
+        if let summary = subtaskSummary, !summary.isEmpty {
+            noteParts.append(summary)
+        }
+
+        // The lines built above are Remindian's; everything else in the notes
+        // belongs to someone else and must survive the update (#105).
+        //
+        // - When the source supplies a body (TaskNotes), the source owns it, as
+        //   before. It now follows the generated lines instead of being dropped
+        //   whenever a `Tags:` / `Client:` line was present.
+        // - Otherwise (Obsidian Tasks, Generic Markdown), keep whatever the user
+        //   wrote in Reminders, after removing the generated lines from the
+        //   previous sync so they are replaced rather than duplicated.
+        //   Previously a tagged task's notes were overwritten with just the
+        //   generated lines, and an untagged task's notes were cleared.
+        if noteParts.isEmpty, let body = notes {
+            return body.trimmingCharacters(in: .whitespaces)
+        }
+        let otherText: String? = {
+            if let body = notes {
+                return body.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            return SyncTask.userWrittenNotes(
+                in: existing,
+                expectingClient: clientName?.isEmpty == false,
+                expectingSubtaskSummary: subtaskSummary?.isEmpty == false
+            )
+        }()
+        if let otherText = otherText, !otherText.isEmpty {
+            noteParts.append(otherText)
+        }
+        return noteParts.isEmpty ? nil : noteParts.joined(separator: "\n")
+    }
+
+    /// Tags read back from a reminder's notes: the generated `Tags:` line, plus
+    /// any `#tag` written elsewhere in the notes (e.g. by GoodTask, #17).
+    static func tagsInReminderNotes(_ notes: String?) -> [String] {
+        guard let notes = notes else { return [] }
+        let range = NSRange(notes.startIndex..., in: notes)
+        return Rx.tag.matches(in: notes, options: [], range: range).compactMap { match in
+            Range(match.range, in: notes).map { String(notes[$0]) }
+        }
+    }
+
+    /// The part of a reminder's notes that Remindian did not generate (#105).
+    ///
+    /// `applyToReminder` writes its lines at the top of the notes: `Client: …`,
+    /// `Tags: …`, the optional `obsidian://` link, and the folded sub-task
+    /// checklist. This removes that leading block so the next sync can replace
+    /// it, and returns the rest unchanged. Returns `nil` when nothing is left.
+    ///
+    /// - The leading block is removed line by line until the first line that
+    ///   isn't one of ours, so text the user adds below it is kept.
+    /// - A `Tags:` or link line further down is also removed, in case the user
+    ///   typed above the generated block. Both formats are machine-shaped
+    ///   (`Tags: #a #b`, `obsidian://open?vault=…`), so ordinary prose won't
+    ///   match.
+    /// - `Client:` and checklist lines are ordinary enough that a user could
+    ///   write them, so they are only treated as ours in the leading block, and
+    ///   only when the task currently has a client / folds sub-tasks into its
+    ///   notes. Otherwise they are kept.
+    static func userWrittenNotes(in existing: String?, expectingClient: Bool, expectingSubtaskSummary: Bool) -> String? {
+        guard let existing = existing, !existing.isEmpty else { return nil }
+
+        let lines = existing
+            .components(separatedBy: "\n")
+            .map { $0.hasSuffix("\r") ? String($0.dropLast()) : $0 }
+
+        var index = 0
+        while index < lines.count {
+            let line = lines[index]
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            let isOurs = trimmed.isEmpty
+                || (expectingClient && trimmed.hasPrefix("Client: "))
+                || isGeneratedTagsLine(trimmed)
+                || isGeneratedLinkLine(trimmed)
+                || (expectingSubtaskSummary && isChecklistLine(line))
+            guard isOurs else { break }
+            index += 1
+        }
+
+        let remainder = lines[index...].filter { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            return !isGeneratedTagsLine(trimmed) && !isGeneratedLinkLine(trimmed)
+        }
+
+        let text = remainder.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : text
+    }
+
+    /// `Tags: #a #b/c +d`, as written by `applyToReminder`.
+    private static func isGeneratedTagsLine(_ line: String) -> Bool {
+        line.range(of: #"^Tags:( [#+]\S+)+$"#, options: .regularExpression) != nil
+    }
+
+    /// The `obsidian://open?vault=…` line written when `appendLinkToNotes` is on.
+    private static func isGeneratedLinkLine(_ line: String) -> Bool {
+        line.range(of: #"^obsidian://open\?vault=\S+$"#, options: .regularExpression) != nil
+    }
+
+    /// A folded sub-task line: `- [ ] title` / `  - [x] title`.
+    private static func isChecklistLine(_ line: String) -> Bool {
+        line.range(of: #"^\s*- \[[ xX]\] "#, options: .regularExpression) != nil
     }
 }

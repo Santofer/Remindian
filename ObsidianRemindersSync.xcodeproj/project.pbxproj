@@ -97,6 +97,7 @@
 		MDT /* MassDeletionGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MDU; };
 		VCT /* VaultCleanupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = VCU; };
 		PCLB /* PhantomChangeLoopTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PCLR; };
+		RNPT /* ReminderNotesPreservationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = RNPU; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -204,6 +205,7 @@
 		MDU /* MassDeletionGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MassDeletionGuardTests.swift; sourceTree = "<group>"; };
 		VCU /* VaultCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultCleanupTests.swift; sourceTree = "<group>"; };
 		PCLR /* PhantomChangeLoopTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhantomChangeLoopTests.swift; sourceTree = "<group>"; };
+		RNPU /* ReminderNotesPreservationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderNotesPreservationTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -392,6 +394,7 @@
 				MDU /* MassDeletionGuardTests.swift */,
 				VCU /* VaultCleanupTests.swift */,
 				PCLR /* PhantomChangeLoopTests.swift */,
+				RNPU /* ReminderNotesPreservationTests.swift */,
 			);
 			path = RemindianTests;
 			sourceTree = "<group>";
@@ -583,6 +586,7 @@
 				MDT /* MassDeletionGuardTests.swift in Sources */,
 				VCT /* VaultCleanupTests.swift in Sources */,
 				PCLB /* PhantomChangeLoopTests.swift in Sources */,
+				RNPT /* ReminderNotesPreservationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
