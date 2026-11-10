@@ -1382,6 +1382,10 @@ struct AdvancedSettingsView: View {
                 } label: {
                     Text("Exclude lists")
                 }
+                if !syncManager.config.excludedRemindersLists.isEmpty {
+                    Toggle("Ignore excluded lists completely", isOn: $syncManager.config.ignoreExcludedListsCompletely)
+                        .help("Also leave alone reminders in these lists that were synced before you excluded them: Remindian won't update, move or complete them, or write their completion back. Useful for shared lists.")
+                }
                 LabeledContent {
                     TextField("e.g. Routine, SomeDay", text: Binding(
                         get: { syncManager.config.excludedTags.joined(separator: ", ") },

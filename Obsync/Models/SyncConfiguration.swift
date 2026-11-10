@@ -119,6 +119,11 @@ class SyncConfiguration: ObservableObject, Codable {
     @Published var maxDueDateHorizonDays: Int
     @Published var syncedRemindersLists: [String]  // Empty = sync all lists, non-empty = only these lists
     @Published var excludedRemindersLists: [String]  // Lists to always exclude from sync (e.g., Groceries)
+    /// Also skip reminders in excluded lists that were synced before the list
+    /// was excluded. Off by default: those keep syncing (so completions still
+    /// write back), which also means Remindian keeps updating and re-routing
+    /// them. Turn on to leave excluded lists, e.g. shared ones, untouched.
+    @Published var ignoreExcludedListsCompletely: Bool
     @Published var addTaskLinkToReminders: Bool  // Add obsidian:// link to Reminders URL field
     // Whether to ALSO append the obsidian:// URL into the reminder's notes
     // body. Pre-v5.10 always did this as a "fallback for clients that don't
@@ -404,6 +409,7 @@ class SyncConfiguration: ObservableObject, Codable {
         case taskSourceType, taskDestinationType, things3AuthToken, taskNotesFolder, taskNotesIntegrationMode
         case taskNotesMtnPath, taskNotesApiUrl
         case launchAtLogin, maxCompletedTaskAgeDays, maxDueDateHorizonDays, subtaskHandling, maxDeletionsPerSync, syncedRemindersLists, excludedRemindersLists, addTaskLinkToReminders, appendTaskLinkToNotes
+        case ignoreExcludedListsCompletely
         case syncStateLocation, genericMarkdown
         case taskNotesCompletedStatuses, taskNotesOpenStatus, taskNotesDoneStatus
         case obsidianTasksOpenMarkers, obsidianTasksCompletedMarkers, obsidianTasksIgnoredMarkers
@@ -472,6 +478,7 @@ class SyncConfiguration: ObservableObject, Codable {
         subtaskHandling: SubtaskHandling = .separate,
         syncedRemindersLists: [String] = [],
         excludedRemindersLists: [String] = [],
+        ignoreExcludedListsCompletely: Bool = false,
         excludedTags: [String] = [],
         addTaskLinkToReminders: Bool = true,
         appendTaskLinkToNotes: Bool = false,
@@ -547,6 +554,7 @@ class SyncConfiguration: ObservableObject, Codable {
         self.subtaskHandling = subtaskHandling
         self.syncedRemindersLists = syncedRemindersLists
         self.excludedRemindersLists = excludedRemindersLists
+        self.ignoreExcludedListsCompletely = ignoreExcludedListsCompletely
         self.excludedTags = excludedTags
         self.addTaskLinkToReminders = addTaskLinkToReminders
         self.appendTaskLinkToNotes = appendTaskLinkToNotes
@@ -628,6 +636,7 @@ class SyncConfiguration: ObservableObject, Codable {
         subtaskHandling = try container.decodeIfPresent(SubtaskHandling.self, forKey: .subtaskHandling) ?? .separate
         syncedRemindersLists = try container.decodeIfPresent([String].self, forKey: .syncedRemindersLists) ?? []
         excludedRemindersLists = try container.decodeIfPresent([String].self, forKey: .excludedRemindersLists) ?? []
+        ignoreExcludedListsCompletely = try container.decodeIfPresent(Bool.self, forKey: .ignoreExcludedListsCompletely) ?? false
         excludedTags = try container.decodeIfPresent([String].self, forKey: .excludedTags) ?? []
         addTaskLinkToReminders = try container.decodeIfPresent(Bool.self, forKey: .addTaskLinkToReminders) ?? true
         syncStateLocation = try container.decodeIfPresent(SyncStateLocation.self, forKey: .syncStateLocation) ?? .applicationSupport
@@ -714,6 +723,7 @@ class SyncConfiguration: ObservableObject, Codable {
         try container.encode(subtaskHandling, forKey: .subtaskHandling)
         try container.encode(syncedRemindersLists, forKey: .syncedRemindersLists)
         try container.encode(excludedRemindersLists, forKey: .excludedRemindersLists)
+        try container.encode(ignoreExcludedListsCompletely, forKey: .ignoreExcludedListsCompletely)
         try container.encode(excludedTags, forKey: .excludedTags)
         try container.encode(addTaskLinkToReminders, forKey: .addTaskLinkToReminders)
         try container.encode(appendTaskLinkToNotes, forKey: .appendTaskLinkToNotes)

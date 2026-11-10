@@ -96,6 +96,7 @@
 		NTT /* NoteTagFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = NTU; };
 		MDT /* MassDeletionGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MDU; };
 		VCT /* VaultCleanupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = VCU; };
+		IELT /* IgnoreExcludedListsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = IELU; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -202,6 +203,7 @@
 		NTU /* NoteTagFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteTagFilterTests.swift; sourceTree = "<group>"; };
 		MDU /* MassDeletionGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MassDeletionGuardTests.swift; sourceTree = "<group>"; };
 		VCU /* VaultCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultCleanupTests.swift; sourceTree = "<group>"; };
+		IELU /* IgnoreExcludedListsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IgnoreExcludedListsTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -389,6 +391,7 @@
 				NTU /* NoteTagFilterTests.swift */,
 				MDU /* MassDeletionGuardTests.swift */,
 				VCU /* VaultCleanupTests.swift */,
+				IELU /* IgnoreExcludedListsTests.swift */,
 			);
 			path = RemindianTests;
 			sourceTree = "<group>";
@@ -579,6 +582,7 @@
 				NTT /* NoteTagFilterTests.swift in Sources */,
 				MDT /* MassDeletionGuardTests.swift in Sources */,
 				VCT /* VaultCleanupTests.swift in Sources */,
+				IELT /* IgnoreExcludedListsTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

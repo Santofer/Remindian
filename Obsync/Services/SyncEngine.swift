@@ -341,6 +341,10 @@ class SyncEngine {
             // to a different list (e.g. Things 3 Logbook) — they must still be
             // visible to the sync engine for completion writeback to work.
             let mappedDestinationIds = Set(syncState.mappings.map { $0.remindersId })
+            // Mapped reminders in an excluded list, when those are ignored
+            // completely. Their mappings are skipped below, not treated as
+            // deleted, so nothing is recreated elsewhere.
+            var ignoredMappedReminderIds: Set<String> = []
 
             // Filter by synced Reminders lists if configured (whitelist)
             if !config.syncedRemindersLists.isEmpty {
@@ -360,10 +364,17 @@ class SyncEngine {
                 let excludedLists = Set(config.excludedRemindersLists.map { $0.lowercased() })
                 let beforeCount = remindersTasks.count
                 remindersTasks = remindersTasks.filter { task in
-                    // Always keep already-mapped tasks (completion writeback needs them)
-                    if let id = task.remindersId, mappedDestinationIds.contains(id) { return true }
-                    guard let list = task.targetList else { return true }
-                    return !excludedLists.contains(list.lowercased())
+                    let isExcluded = task.targetList.map { excludedLists.contains($0.lowercased()) } ?? false
+                    // Keep already-mapped tasks (completion writeback needs them),
+                    // unless excluded lists are ignored completely.
+                    if let id = task.remindersId, mappedDestinationIds.contains(id) {
+                        if isExcluded && config.ignoreExcludedListsCompletely {
+                            ignoredMappedReminderIds.insert(id)
+                            return false
+                        }
+                        return true
+                    }
+                    return !isExcluded
                 }
                 debugLog("[SyncEngine] Filtered out excluded lists: \(beforeCount) → \(remindersTasks.count)")
             }
@@ -526,6 +537,13 @@ class SyncEngine {
 
             var pendingDeletions: [(obsidianId: String, remindersId: String, title: String)] = []
             for mapping in syncState.mappings {
+                // Leave a reminder in an ignored excluded list alone: no update,
+                // move, completion writeback, delete or recreate. Marking its
+                // source task processed keeps it from being treated as new.
+                if ignoredMappedReminderIds.contains(mapping.remindersId) {
+                    processedObsidianIds.insert(mapping.obsidianId)
+                    continue
+                }
                 let obsidianTask = obsidianMap[mapping.obsidianId]
                 let remindersTask = remindersMap[mapping.remindersId]
 
