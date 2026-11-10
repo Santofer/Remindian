@@ -4,6 +4,28 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.33.0 (November 2026)
+
+Nine reports closed: a sync that could wedge itself, notes that vanished from Reminders, Things 3 projects, and three new routing options.
+
+### New
+
+- **Route a whole note by its tag (#96).** **Settings → Mappings → "Notes with these tags → List"** sends every task of a note carrying a tag — in its frontmatter `tags:` or its body text — to a list, whatever folder the note lives in. A tag on a single task line stays that task's tag; it does not re-route its neighbours. A mapped tag on the task itself, a heading mapping or a file mapping still wins; folder mappings come after. Works with Obsidian Tasks and Generic Markdown.
+- **Unmapped tags can stay "just tags" (#103).** A task tagged `#errands` with no mapping has always gone to a list called "Errands", created on the spot. Turn off **Settings → Mappings → "Tags without a mapping get their own list"** and such tasks go to your default list instead. On by default, so nothing moves unless you change it.
+- **TaskNotes HTTP API token (#101).** TaskNotes 4.13 made authentication mandatory on its HTTP API, so every sync failed with a raw `HTTP 401`. There is now a token field in **Settings → TaskNotes** (HTTP API mode), sent as a Bearer header — and a 401 tells you where to paste the token instead of printing JSON.
+- **The `Tags:` line in reminder notes is optional (#104).** Apple gives apps no access to Reminders' native tags — EventKit has no tag API at all — so the notes are the only place Remindian can show them. If you'd rather not have the line, turn off **Settings → Advanced → "Write tags into the reminder's notes"**. "Sync tag changes back" reads tags from that line, so it pauses while the line is off.
+
+### Bug fixes
+
+- **Notes you type into a reminder are no longer erased (#105).** Any task with a tag had its whole notes field rewritten on every push, deleting whatever you had added in Reminders. Only the lines Remindian manages (`Tags:`, `Client:`, the Obsidian link, a sub-task checklist) are rewritten now; everything else is yours and is kept.
+- **Deleting tasks in Obsidian no longer blocks the sync (#98).** A pre-flight check aborted the whole sync whenever the vault held fewer than half as many tasks as were already synced. Deleting several tasks from a small vault tripped it — and because it stopped before the leftovers could be cleaned up, it then blocked *every* later sync until you reset the sync state. It now only fires when the scan comes back completely empty (an unreadable vault). Real deletions are judged by the deletion limit introduced in 5.32, which counts what would actually be removed.
+- **Things 3: tasks land in their project or area, without duplicates (#100, #102).** Things rejects `move … to project`, and the failure came *after* the to-do had been created — so it stayed in the Inbox, its ID was lost, and the next sync created it again. Projects and areas are now assigned by property, areas are handled at all, and a placement problem can no longer abort the creation. Copies left in your Things Inbox by earlier versions need deleting by hand once.
+- **"Reminders changed" on every sync, forever (#99).** After a push the engine stored what it *expected* the reminder to look like. Reminders doesn't store everything it is given (a timed due date becomes all-day when "Include due time" is off), so the expectation never matched and the task was re-pushed on every sync — 16,500 times for one reporter. The engine now records what the destination actually holds.
+- **Alarms follow the due date (#99).** Moving a task's due date left the old alarm behind, so the reminder fired on the old day. The alarm Remindian added, and any alarm on the old due day, now move with it; alarms you set for other days are left alone.
+- **The debug log has a ceiling (#99).** `debug.log` grew without bound — 327 MB in one report. It now rotates at 5 MB, keeping one previous file.
+
+---
+
 ## v5.32.0 (September 2026)
 
 Stops recurring duplicates at the source, and refuses to delete your reminders en masse.
