@@ -869,8 +869,10 @@ class SyncConfiguration: ObservableObject, Codable {
     /// 2. Heading mapping (HeadingMapping)
     /// 3. File path mapping (FileMapping, #37)
     /// 4. Folder path mapping (FolderMapping, #40)
-    /// 5. Auto-capitalize tag name
-    /// 6. Default list
+    /// 5. Unmapped tag naming a configured list, ignoring spaces
+    ///    (`#MentalHealth` → "Mental Health")
+    /// 6. Auto-capitalize tag name
+    /// 7. Default list
     ///
     /// - Parameters:
     ///   - tag: The first-segment tag from a task (e.g. `task` for `#task/work`).
@@ -1044,7 +1046,19 @@ class SyncConfiguration: ObservableObject, Codable {
             }
         }
 
-        // 5. Auto-capitalize tag — but never the global-filter tag, which would
+        // 5. An unmapped tag that names a configured list once spaces are
+        //    ignored routes there. A tag can't contain spaces, so this is how a
+        //    reminder from "Mental Health" round-trips: writeback writes
+        //    `#MentalHealth` (see `obsidianTagForWriteback`), not `#Mental Health`,
+        //    which would parse as `#Mental` and invent a "Mental" list.
+        if !cleanTag.isEmpty && !isFilterTag(cleanTag),
+           let list = configuredListNames.first(where: {
+               $0.contains(" ") && Self.spaceless($0).caseInsensitiveCompare(cleanTag) == .orderedSame
+           }) {
+            return (list, "tag “\(cleanTag)” matches the list “\(list)”")
+        }
+
+        // 6. Auto-capitalize tag — but never the global-filter tag, which would
         //    invent a list ("task" → "Task") that the user never asked for (#88).
         //    Opt-out (#103): with `unmappedTagsCreateLists` off, a tag that isn't
         //    mapped is just a tag and the task falls through to the default list.
@@ -1056,7 +1070,7 @@ class SyncConfiguration: ObservableObject, Codable {
             return (defaultList, "default list (tag “\(cleanTag)” has no mapping)")
         }
 
-        // 6. Default list
+        // 7. Default list
         let filterNote = isFilterTag(cleanTag) && !cleanTag.isEmpty
             ? " (the global filter tag is not used for routing)"
             : ""
@@ -1080,6 +1094,37 @@ class SyncConfiguration: ObservableObject, Codable {
 
     func obsidianTagForList(_ listName: String) -> String? {
         return listMappings.first { $0.remindersList.lowercased() == listName.lowercased() }?.obsidianTag
+    }
+
+    /// The tag (without `#`) to write on a vault line for a reminder that lives
+    /// in `listName`, so the task routes back to the same list.
+    ///
+    /// - The list's tag mapping wins when its tag is usable (`Job Leads` with a
+    ///   `JobSearch` mapping → `JobSearch`).
+    /// - Otherwise the list name with spaces removed (`Mental Health` →
+    ///   `MentalHealth`), which `explainTargetList` maps back to the list.
+    ///   Writing `#Mental Health` would parse as the tag `#Mental` plus the
+    ///   word "Health" in the title, and route the task to a new "Mental" list.
+    func obsidianTagForWriteback(list listName: String) -> String {
+        if let mapped = obsidianTagForList(listName) {
+            let tag = (mapped.hasPrefix("#") || mapped.hasPrefix("+")) ? String(mapped.dropFirst()) : mapped
+            if !tag.isEmpty, !tag.contains(where: { $0.isWhitespace }) { return tag }
+        }
+        return Self.spaceless(listName)
+    }
+
+    /// Every destination list named somewhere in the configuration.
+    var configuredListNames: [String] {
+        listMappings.map(\.remindersList)
+            + headingMappings.map(\.remindersList)
+            + filePathMappings.map(\.remindersList)
+            + noteTagMappings.map(\.remindersList)
+            + folderPathMappings.map(\.remindersList)
+            + [defaultList]
+    }
+
+    static func spaceless(_ name: String) -> String {
+        name.filter { !$0.isWhitespace }
     }
 
     /// Check if a TaskNotes status value represents a completed task.

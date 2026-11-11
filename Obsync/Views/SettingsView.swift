@@ -625,7 +625,7 @@ struct ListMappingsView: View {
             }
 
             Toggle("Tags without a mapping get their own list", isOn: $syncManager.config.unmappedTagsCreateLists)
-                .help("On: a task tagged #errands goes to a list called \"Errands\", created if needed. Off: only mapped tags route, everything else goes to the default list.")
+                .help("On: a task tagged #errands goes to a list called \"Errands\", created if needed — so a typo like #erands adds a list too. Off: only mapped tags route, everything else goes to the default list. That includes reminders you create in a list that has no mapping: they come back tagged with the list's name and move to the default list, so map the lists you use.")
 
             Divider()
 
@@ -889,15 +889,24 @@ struct ListMappingsView: View {
                     Text("Mapping Priority (highest to lowest):")
                         .font(.caption)
                         .fontWeight(.semibold)
-                    Text("1. Explicit tag mapping (#tag \u{2192} List)")
+                    // Kept in step with `SyncConfiguration.explainTargetList`.
+                    Text("1. Tag mapping on the task (#tag \u{2192} List)")
                         .font(.caption2)
-                    Text("2. File path mapping (file.md \u{2192} List)")
+                    Text("2. Heading mapping (## Heading \u{2192} List)")
                         .font(.caption2)
-                    Text("3. Folder path mapping (folder/ \u{2192} List)")
+                    Text("3. File mapping (file.md \u{2192} List)")
                         .font(.caption2)
-                    Text("4. Auto-capitalize tag name")
+                    Text("4. Note tag mapping (note tagged #tag \u{2192} List)")
                         .font(.caption2)
-                    Text("5. Default list")
+                    Text("5. Folder mapping (folder/ \u{2192} List)")
+                        .font(.caption2)
+                    Text("6. Tag naming a list, ignoring spaces (#MentalHealth \u{2192} Mental Health)")
+                        .font(.caption2)
+                    Text(syncManager.config.unmappedTagsCreateLists
+                         ? "7. Tag without a mapping \u{2192} a list named after the tag"
+                         : "7. (Tags without a mapping use the default list)")
+                        .font(.caption2)
+                    Text("8. Default list")
                         .font(.caption2)
                 }
                 .foregroundColor(.secondary)

@@ -127,7 +127,8 @@ class ObsidianTasksSource: TaskSource {
             task: task,
             inboxRelativePath: config.inboxFilePath,
             vaultPath: config.vaultPath,
-            globalFilter: config.globalFilter
+            globalFilter: config.globalFilter,
+            listTag: task.targetList.map { config.obsidianTagForWriteback(list: $0) }
         )
         return SyncTask.ObsidianSource(
             filePath: result.filePath,
