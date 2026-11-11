@@ -99,6 +99,7 @@
 		SVTB /* SymlinkedVaultTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SVTR; };
 		PCLB /* PhantomChangeLoopTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PCLR; };
 		RNPT /* ReminderNotesPreservationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = RNPU; };
+		RLPT /* RelinkPushRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = RLPU; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -208,6 +209,7 @@
 		SVTR /* SymlinkedVaultTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SymlinkedVaultTests.swift; sourceTree = "<group>"; };
 		PCLR /* PhantomChangeLoopTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhantomChangeLoopTests.swift; sourceTree = "<group>"; };
 		RNPU /* ReminderNotesPreservationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderNotesPreservationTests.swift; sourceTree = "<group>"; };
+		RLPU /* RelinkPushRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelinkPushRegressionTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -398,6 +400,7 @@
 				SVTR /* SymlinkedVaultTests.swift */,
 				PCLR /* PhantomChangeLoopTests.swift */,
 				RNPU /* ReminderNotesPreservationTests.swift */,
+				RLPU /* RelinkPushRegressionTests.swift */,
 			);
 			path = RemindianTests;
 			sourceTree = "<group>";
@@ -591,6 +594,7 @@
 				SVTB /* SymlinkedVaultTests.swift in Sources */,
 				PCLB /* PhantomChangeLoopTests.swift in Sources */,
 				RNPT /* ReminderNotesPreservationTests.swift in Sources */,
+				RLPT /* RelinkPushRegressionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

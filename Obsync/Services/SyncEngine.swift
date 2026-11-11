@@ -1078,11 +1078,21 @@ class SyncEngine {
                         // Found a matching Obsidian task — re-link the mapping
                         debugLog("[SyncEngine] Re-linking mapping for \"\(rTask.title)\": old obsidianId changed, remapping to new ID (score=\(bestScore))")
                         if !config.dryRunMode {
+                            // The ID changes because the task's title or tags changed
+                            // in the source (or "strip global filter from titles" was
+                            // turned on, #89). Storing the candidate's own hash would
+                            // record it as already pushed, so the reminder would keep
+                            // its old title/tags until some unrelated edit. When they
+                            // differ, store an empty source hash so the next sync
+                            // sees a source change and pushes it — the same retry
+                            // signal the dedup reconnect path uses.
+                            let reminderIsStale = candidateTask.title != rTask.title
+                                || Set(candidateTask.tags) != Set(rTask.tags)
                             syncState.removeMapping(obsidianId: mapping.obsidianId)
                             syncState.addOrUpdateMapping(
                                 obsidianId: candidateId,
                                 remindersId: mapping.remindersId,
-                                obsidianHash: SyncState.generateTaskHash(candidateTask),
+                                obsidianHash: reminderIsStale ? "" : SyncState.generateTaskHash(candidateTask),
                                 remindersHash: SyncState.generateTaskHash(rTask)
                             )
                         }
