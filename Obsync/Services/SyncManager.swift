@@ -1497,14 +1497,31 @@ class SyncManager: ObservableObject {
     func previewDuplicateReminders(ignoreDueDate: Bool = false) async -> [String] {
         updateSourceAndDestination()
         guard let dest = taskDestination as? RemindersDestination else { return [] }
-        return (try? await dest.removeDuplicateReminders(dryRun: true, ignoreDueDate: ignoreDueDate)) ?? []
+        return (try? await dest.removeDuplicateReminders(dryRun: true, ignoreDueDate: ignoreDueDate, mappedIds: allMappedReminderIds())) ?? []
+    }
+
+    /// Every reminder some profile has tied to a vault task. A duplicate cleanup
+    /// never deletes these, and only looks at groups that contain one (or an
+    /// Obsidian-linked reminder).
+    private func allMappedReminderIds() -> Set<String> {
+        var ids = Set<String>()
+        for profile in profileStore.profiles {
+            // The active profile's live settings, not its last saved copy.
+            let cfg = profile.id == profileStore.activeProfileId ? config : profile.config
+            let state = SyncState.load(location: cfg.syncStateLocation,
+                                       vaultPath: cfg.vaultPath,
+                                       seedFromAppSupportIfMissing: false,
+                                       profileKey: profile.stateKey)
+            ids.formUnion(state.mappings.map { $0.remindersId })
+        }
+        return ids
     }
 
     /// Delete duplicate reminders. Returns the number removed.
     @discardableResult
     func removeDuplicateReminders(ignoreDueDate: Bool = false) async -> Int {
         guard let dest = taskDestination as? RemindersDestination else { return 0 }
-        let removed = ((try? await dest.removeDuplicateReminders(dryRun: false, ignoreDueDate: ignoreDueDate)) ?? []).count
+        let removed = ((try? await dest.removeDuplicateReminders(dryRun: false, ignoreDueDate: ignoreDueDate, mappedIds: allMappedReminderIds())) ?? []).count
         statusMessage = "Removed \(removed) duplicate reminder\(removed == 1 ? "" : "s")"
         debugLog("[SyncManager] Removed \(removed) duplicate reminders (ignoreDueDate=\(ignoreDueDate))")
         return removed

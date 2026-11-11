@@ -4,6 +4,19 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## v5.34.1 (November 2026)
+
+A safer "Remove Duplicate Reminders".
+
+### Changed
+
+- **The duplicate cleanup only touches reminders Remindian manages.** It used to group *every* reminder in *every* list by title. With "Also match copies with different due dates" on, that made the completion history of your own repeating reminders — and anything in a shared list or created by another app — "duplicates" to be deleted. A group is now considered only when at least one of its members is tied to a vault task or carries an Obsidian link.
+- **A reminder tied to a vault task is never deleted by the cleanup.** Removing one only made the next sync re-create it.
+- **The full plan is written to the debug log** before anything is removed — every title, its list, how many copies, how many would go. The confirmation dialog can show six titles; a pile-up left by the recurring-task bug fixed in 5.33.0 runs to thousands.
+- Removal is committed in batches of 500.
+
+---
+
 ## v5.34.0 (November 2026)
 
 Four fixes and one new option, all contributed by **@TomBunting1243**.

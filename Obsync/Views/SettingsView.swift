@@ -1629,7 +1629,7 @@ struct AdvancedSettingsView: View {
                     .map { "• \($0.key)\($0.value > 1 ? " ×\($0.value)" : "")" }
                     .joined(separator: "\n")
                 let more = counts.count > 6 ? "\n…and \(counts.count - 6) more title\(counts.count - 6 == 1 ? "" : "s")." : ""
-                Text("Found \(n) duplicate reminder\(n == 1 ? "" : "s") to remove, keeping one of each:\n\n\(sample)\(more)\n\nThis can't be undone — but Obsidian stays your source of truth, so the next sync re-creates anything still in your vault.")
+                Text("Found \(n) duplicate reminder\(n == 1 ? "" : "s") to remove, keeping one of each:\n\n\(sample)\(more)\n\nOnly reminders Remindian manages are considered — ones tied to a vault task or carrying an Obsidian link, and their copies. The full list is in the debug log.\n\nThis can't be undone — but Obsidian stays your source of truth, so the next sync re-creates anything still in your vault.")
             } else {
                 Text("No duplicate reminders found 🎉")
             }
