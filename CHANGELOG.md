@@ -4,9 +4,9 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
-## Unreleased
+## v5.34.0 (November 2026)
 
-Six contributions from **@TomBunting1243**.
+Four fixes and one new option, all contributed by **@TomBunting1243**.
 
 ### Bug fixes
 
