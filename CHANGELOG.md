@@ -4,6 +4,23 @@ All notable changes to Remindian (formerly Obsync) are documented here.
 
 ---
 
+## Unreleased
+
+Six contributions from **@TomBunting1243**.
+
+### Bug fixes
+
+- **Inbox lines no longer repeat the global filter or the 🔁 emoji (#107).** With `📅` as the global filter, a dated reminder created in Reminders was written as `Title 📅 🛫 … 📅 2026-11-10`; the stray `📅` then became part of the title and the reminder was renamed "Title 📅". Recurring reminders were written as `🔁 🔁 every week`, which never matched what Reminders reported and re-pushed the task on every sync. Lines already written this way are left as they are.
+- **A title or tag change in the vault now reaches the reminder (#108).** Either one changes the task's sync ID; the mapping was re-linked but the new state was recorded as already pushed. This is also why turning on "Remove the filter text from synced titles" never renamed existing reminders.
+- **Lists with spaces in their name round-trip (#109).** A reminder created in "Mental Health" came back as `#Mental Health` — parsed as the tag `#Mental` plus the word "Health" in the title, so it was renamed and moved to a new "Mental" list. It is now written with the list's mapped tag, or the name without spaces (`#MentalHealth`), and such a tag routes back to a list named in your mappings. A spaced list that appears in no mapping still needs one to route back.
+- **A Markdown link's heading anchor is no longer read as a tag (#110).** `[Change day](Weeklies/2026-W40#workout-goal)` produced the tag `#workout-goal` and a list of that name. **Heads-up:** the link now stays intact in the title, so the titles of such tasks change; their reminders are replaced rather than renamed on the first sync.
+
+### New
+
+- **Ignore excluded lists completely (#112).** Excluding a list only stopped *new* reminders in it from syncing; ones synced earlier kept being updated and re-routed — which fails forever on a shared list. **Settings → Advanced → "Ignore excluded lists completely"** leaves them untouched. Off by default.
+
+---
+
 ## v5.33.0 (November 2026)
 
 Nine reports closed: a sync that could wedge itself, notes that vanished from Reminders, Things 3 projects, and three new routing options.

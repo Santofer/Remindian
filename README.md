@@ -46,6 +46,10 @@ To upgrade:
 brew update && brew upgrade --cask santofer/tap/remindian
 ```
 
+> **"Refusing to load cask … from untrusted tap"?** Recent Homebrew versions
+> only load casks from taps you have approved. Approve this one once, then run
+> the install again: `brew trust santofer/tap`.
+
 > **Which tap?** `santofer/tap` is the canonical one — use it. An older
 > `santofer/remindian` tap also exists and is kept in sync, but having both
 > tapped makes Homebrew ask for a fully-qualified name (`Cask remindian exists
