@@ -169,7 +169,8 @@ class RemindersDestination: TaskDestination {
             appendLinkToNotes: config.appendTaskLinkToNotes,
             addReminderAlarm: config.addReminderAlarm,
             allDayAlarmHour: config.reminderAlarmHour,
-            writeTagsToNotes: config.writeTagsToReminderNotes
+            writeTagsToNotes: config.writeTagsToReminderNotes,
+            keepUserNotes: !(config.enableTagWriteback && config.writeTagsToReminderNotes)
         )
         try await retryEventKitOperation(label: "create '\(task.title)'") {
             try self.eventStore.save(reminder, commit: true)
@@ -189,7 +190,8 @@ class RemindersDestination: TaskDestination {
             appendLinkToNotes: config.appendTaskLinkToNotes,
             addReminderAlarm: config.addReminderAlarm,
             allDayAlarmHour: config.reminderAlarmHour,
-            writeTagsToNotes: config.writeTagsToReminderNotes
+            writeTagsToNotes: config.writeTagsToReminderNotes,
+            keepUserNotes: !(config.enableTagWriteback && config.writeTagsToReminderNotes)
         )
         try await retryEventKitOperation(label: "update '\(task.title)'") {
             try self.eventStore.save(reminder, commit: true)

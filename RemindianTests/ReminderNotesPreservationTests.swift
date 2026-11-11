@@ -11,7 +11,8 @@ import EventKit
 /// Obsidian Tasks and Generic Markdown tasks, so the notes were cleared.
 ///
 /// **Fix.** The generated lines are rebuilt at the top of the notes and
-/// everything else in the notes is kept.
+/// everything else in the notes is kept. Sources that supply their own body
+/// (TaskNotes) and tag-writeback mode keep the previous behaviour.
 ///
 /// Like `ObsidianURIHandlingTests`, these use an in-memory `EKReminder` and need
 /// no Reminders access.
@@ -192,7 +193,40 @@ final class ReminderNotesPreservationTests: XCTestCase {
         XCTAssertEqual(reminder.notes, "Tags: #a\nTags: still need to decide on these")
     }
 
-    // MARK: - Sources that supply their own body (TaskNotes)
+    func test_indentationOfUserTextIsKept() {
+        let reminder = makeReminder(notes: "Tags: #a\n\n    indented line\nnext")
+        makeTask(tags: ["#a"]).applyToReminder(reminder)
+        XCTAssertEqual(reminder.notes, "Tags: #a\n    indented line\nnext")
+    }
+
+    /// TaskNotes tags can contain spaces. The old line must still be recognised,
+    /// or a new `Tags:` line is added on every sync.
+    func test_tagsLineWithSpacesIsReplacedNotDuplicated() {
+        let task = makeTask(tags: ["#my tag"])
+        let reminder = makeReminder()
+
+        task.applyToReminder(reminder)
+        task.applyToReminder(reminder)
+
+        XCTAssertEqual(reminder.notes, "Tags: #my tag")
+    }
+
+    // MARK: - Tag writeback keeps the previous behaviour
+
+    /// With tag writeback on, the notes are a two-way tag channel (#17). Kept
+    /// prose such as "order #3" would be written back to the vault as a tag on
+    /// every sync, so the notes are rewritten from scratch as before.
+    func test_tagWritebackModeRewritesNotesAsBefore() {
+        let tagged = makeReminder(notes: "Tags: #a\norder #3")
+        makeTask(tags: ["#a"]).applyToReminder(tagged, keepUserNotes: false)
+        XCTAssertEqual(tagged.notes, "Tags: #a")
+
+        let untagged = makeReminder(notes: "Gate code 4512")
+        makeTask().applyToReminder(untagged, keepUserNotes: false)
+        XCTAssertNil(untagged.notes)
+    }
+
+    // MARK: - Sources that supply their own body (TaskNotes): unchanged
 
     func test_sourceBodyWithoutGeneratedLinesIsUnchanged() {
         let reminder = makeReminder(notes: "stale text in Reminders")
@@ -200,11 +234,10 @@ final class ReminderNotesPreservationTests: XCTestCase {
         XCTAssertEqual(reminder.notes, "Body from TaskNotes")
     }
 
-    /// The body used to be dropped whenever a `Tags:` line was written.
-    func test_sourceBodyFollowsTheTagsLine() {
+    func test_sourceBodyWithGeneratedLinesIsUnchanged() {
         let reminder = makeReminder(notes: "stale text in Reminders")
         makeTask(tags: ["#a"], notes: "Body from TaskNotes").applyToReminder(reminder)
-        XCTAssertEqual(reminder.notes, "Tags: #a\nBody from TaskNotes")
+        XCTAssertEqual(reminder.notes, "Tags: #a")
     }
 
     // MARK: - Hash prediction used by the sync engine
