@@ -158,6 +158,49 @@ class SyncEngine {
         return calendar.startOfDay(for: reminderDue) > calendar.startOfDay(for: lineDue)
     }
 
+    /// The vault task that a mapped task was renamed to, or nil.
+    ///
+    /// A task's ID includes its title, so a rename looks like one task deleted
+    /// and another created (#113). A candidate counts as the renamed task only
+    /// when it is identical to the task last synced except for the title:
+    ///
+    /// - Its hash, ignoring the title, equals the mapping's last source hash:
+    ///   same done state, priority, dates, list, tags, repeat and sub-tasks.
+    /// - Its ID with the old title equals the mapping's old ID: same file and
+    ///   tags, and for repeating tasks the same line.
+    ///
+    /// Exactly one candidate must qualify. Two identical tasks renamed in the
+    /// same sync are ambiguous, so neither is matched and the old behaviour
+    /// (delete and create) applies. So does a rename made together with another
+    /// change, such as a new due date, since the hashes then differ.
+    static func renamedTaskId(
+        lastObsidianId: String,
+        lastObsidianHash: String,
+        candidates: [String: SyncTask],
+        generateId: (SyncTask) -> String
+    ) -> String? {
+        guard let lastHashData = Data(base64Encoded: lastObsidianHash),
+              let lastHash = String(data: lastHashData, encoding: .utf8) else { return nil }
+        var found: String?
+        for (id, task) in candidates where id != lastObsidianId {
+            guard let hashData = Data(base64Encoded: SyncState.generateTaskHash(task)),
+                  let hash = String(data: hashData, encoding: .utf8),
+                  hash.hasPrefix(task.title + "|") else { continue }
+            // Everything after the title. The last hash must end with exactly
+            // this, after its own (old) title.
+            let rest = String(hash.dropFirst(task.title.count + 1))
+            guard lastHash.hasSuffix("|" + rest) else { continue }
+            let oldTitle = String(lastHash.dropLast(rest.count + 1))
+            guard oldTitle != task.title else { continue }
+            var asBefore = task
+            asBefore.title = oldTitle
+            guard generateId(asBefore) == lastObsidianId else { continue }
+            if found != nil { return nil }   // ambiguous
+            found = id
+        }
+        return found
+    }
+
     /// Which unmatched same-title reminder a new vault task should be reconnected
     /// to, or nil to create a fresh one.
     ///
@@ -1090,6 +1133,23 @@ class SyncEngine {
                             bestCandidateId = candidateId
                             bestCandidateTask = candidateTask
                         }
+                    }
+
+                    // No same-title task: the task may have been renamed (#113).
+                    // Without this the reminder was deleted and a new one created,
+                    // losing what the user added in Reminders (notes, subtasks,
+                    // attachments, sharing).
+                    if bestCandidateId == nil,
+                       let renamedId = SyncEngine.renamedTaskId(
+                           lastObsidianId: mapping.obsidianId,
+                           lastObsidianHash: mapping.lastObsidianHash,
+                           candidates: obsidianMap.filter {
+                               !processedObsidianIds.contains($0.key) && !syncState.hasMapping(obsidianId: $0.key)
+                           },
+                           generateId: { source.generateTaskId(for: $0) }) {
+                        debugLog("[SyncEngine] Rename detected for \"\(rTask.title)\" → \"\(obsidianMap[renamedId]?.title ?? "")\"")
+                        bestCandidateId = renamedId
+                        bestCandidateTask = obsidianMap[renamedId]
                     }
 
                     if let candidateId = bestCandidateId, let candidateTask = bestCandidateTask {

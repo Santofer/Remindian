@@ -102,6 +102,7 @@
 		RNPT /* ReminderNotesPreservationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = RNPU; };
 		RLPT /* RelinkPushRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = RLPU; };
 		IELT /* IgnoreExcludedListsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = IELU; };
+		RKRT /* RenameKeepsReminderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = RKRU; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -214,6 +215,7 @@
 		RNPU /* ReminderNotesPreservationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderNotesPreservationTests.swift; sourceTree = "<group>"; };
 		RLPU /* RelinkPushRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelinkPushRegressionTests.swift; sourceTree = "<group>"; };
 		IELU /* IgnoreExcludedListsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IgnoreExcludedListsTests.swift; sourceTree = "<group>"; };
+		RKRU /* RenameKeepsReminderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenameKeepsReminderTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -407,6 +409,7 @@
 				RNPU /* ReminderNotesPreservationTests.swift */,
 				RLPU /* RelinkPushRegressionTests.swift */,
 				IELU /* IgnoreExcludedListsTests.swift */,
+				RKRU /* RenameKeepsReminderTests.swift */,
 			);
 			path = RemindianTests;
 			sourceTree = "<group>";
@@ -603,6 +606,7 @@
 				RNPT /* ReminderNotesPreservationTests.swift in Sources */,
 				RLPT /* RelinkPushRegressionTests.swift in Sources */,
 				IELT /* IgnoreExcludedListsTests.swift in Sources */,
+				RKRT /* RenameKeepsReminderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
