@@ -166,7 +166,13 @@ class SyncEngine {
     /// tasks with completed copies, which then got un-completed into duplicates.
     /// Same completion state wins, then the same list.
     static func reconnectCandidateIndex(for task: SyncTask, targetList: String, candidates: [SyncTask]) -> Int? {
-        let eligible = candidates.indices.filter { !isStaleRecurringPair(obsidian: task, reminder: candidates[$0]) }
+        let eligible = candidates.indices.filter {
+            // An open task is new work. A completed reminder with the same title
+            // is history (often a past occurrence of a routine); reopening it
+            // would rewrite that history, so a fresh reminder is created instead.
+            if !task.isCompleted && candidates[$0].isCompleted { return false }
+            return !isStaleRecurringPair(obsidian: task, reminder: candidates[$0])
+        }
         return eligible.max { a, b in
             func score(_ i: Int) -> Int {
                 (candidates[i].isCompleted == task.isCompleted ? 2 : 0) + (candidates[i].targetList == targetList ? 1 : 0)
@@ -515,8 +521,13 @@ class SyncEngine {
                     let bHasMapping = syncState.hasMapping(obsidianId: b.id) ? 0 : 1
                     return aHasMapping < bHasMapping
                 }
-                // Keep first (best), remove the Inbox duplicates
+                // Keep first (best), remove the Inbox duplicates. A completed
+                // copy that is already mapped stays: it is history with its own
+                // (completed) reminder. Removing it orphans that mapping, and the
+                // re-link pass would then pair the completed reminder with the
+                // open copy, which "completed in Reminders" would tick off.
                 for entry in sorted.dropFirst() {
+                    if entry.task.isCompleted && syncState.hasMapping(obsidianId: entry.id) { continue }
                     idsToRemove.insert(entry.id)
                     debugLog("[SyncEngine] Dedup: cross-file → skipping \"\(title)\" in \(entry.task.obsidianSource?.filePath ?? "?")")
                 }
@@ -1059,6 +1070,11 @@ class SyncEngine {
                         let candidateTitle = SyncConfiguration.removingGlobalFilter(candidateTask.title, filter: config.globalFilter)
                         let reminderTitle = SyncConfiguration.removingGlobalFilter(rTask.title, filter: config.globalFilter)
                         guard candidateTitle == reminderTitle else { continue }
+                        // A completed reminder is history. Re-linking it to an open
+                        // line with the same title (a new occurrence of a routine)
+                        // would tick that line off, since completion in Reminders
+                        // wins. Leave it unmatched instead.
+                        if rTask.isCompleted && !candidateTask.isCompleted { continue }
                         score += 10
 
                         // Bonus: same target list / tag
@@ -1381,9 +1397,22 @@ class SyncEngine {
                 // Used to skip the inbox append for reminders whose title already
                 // exists somewhere in Obsidian — this is the recurrence-history bug
                 // fix described below. Cheap to compute once vs. per-iteration scans.
-                var titleIndex: [String: String] = [:]
+                //
+                // Split by completion state: a reminder only attaches to a vault
+                // task in the same state. An open reminder is new work; attaching
+                // it to a completed line (a past occurrence of a routine) made the
+                // next sync tick the reminder off, strip its repeat and move it to
+                // the old line's list. A completed reminder is history; attaching
+                // it to an open task made the next sync tick that task off, since
+                // completion in Reminders wins.
+                var openTitleIndex: [String: String] = [:]
+                var completedTitleIndex: [String: String] = [:]
                 for (id, task) in obsidianMap {
-                    titleIndex[task.title] = id
+                    if task.isCompleted {
+                        completedTitleIndex[task.title] = id
+                    } else {
+                        openTitleIndex[task.title] = id
+                    }
                 }
 
                 // Cutoff computed once per sync — keeps filter decisions stable
@@ -1427,7 +1456,7 @@ class SyncEngine {
                     // a vault task would skip via age every sync without ever getting
                     // a syncState mapping, and the noisy "Skipped N" count would
                     // include it perpetually.
-                    if let existingObsidianId = titleIndex[rTask.title] {
+                    if let existingObsidianId = (rTask.isCompleted ? completedTitleIndex : openTitleIndex)[rTask.title] {
                         if !config.dryRunMode,
                            let matchedObsidianTask = obsidianMap[existingObsidianId] {
                             syncState.addOrUpdateMapping(
