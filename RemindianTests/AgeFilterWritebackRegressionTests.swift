@@ -188,14 +188,18 @@ final class AgeFilterWritebackRegressionTests: XCTestCase {
         defer { vault.cleanup() }
 
         let matchingTitle = "weekly standup"
+        // The vault copy is completed too. A completed reminder only attaches
+        // to a completed vault task: linked to an open one, the next sync would
+        // tick that task off (see HistoryTitleMatchingTests).
         let existingVaultTask = SyncTask(
             title: matchingTitle,
-            isCompleted: false,
+            isCompleted: true,
+            completedDate: try daysAgo(1),
             tags: ["#work"],
             obsidianSource: SyncTask.ObsidianSource(
                 filePath: "/Work.md",
                 lineNumber: 3,
-                originalLine: "- [ ] \(matchingTitle) #work"
+                originalLine: "- [x] \(matchingTitle) #work"
             )
         )
 
