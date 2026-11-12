@@ -3,6 +3,57 @@ import Foundation
 /// Service for reading Obsidian vault files and performing safe surgical edits.
 /// IMPORTANT: This service NEVER reconstructs task lines. All writes are surgical
 /// modifications to the original line content, preserving all metadata verbatim.
+/// Parsed tasks per file, shared by every `ObsidianService`.
+///
+/// Remindian builds a new task source (and so a new `ObsidianService`) at the
+/// start of every sync, and the menu-bar agenda builds its own off the main
+/// actor. A per-instance cache was therefore always empty: every sync and
+/// every agenda refresh re-read the whole vault. One shared cache fixes that.
+/// Entries are still validated against the file's modification date, size
+/// and parse signature, so sharing never serves a stale parse.
+final class ObsidianParseCache {
+    static let shared = ObsidianParseCache()
+
+    private var entries: [String: Any] = [:]
+    private let lock = NSLock()
+
+    func get(_ key: String) -> Any? {
+        lock.lock(); defer { lock.unlock() }
+        return entries[key]
+    }
+
+    func set(_ key: String, _ value: Any?) {
+        lock.lock(); defer { lock.unlock() }
+        entries[key] = value
+    }
+
+    /// Files each vault's latest scan saw, for pruning.
+    private var keysByVault: [String: Set<String>] = [:]
+
+    /// Drop entries that `vaultPath`'s previous scan saw but its latest scan
+    /// didn't (deleted, moved or newly excluded files), so the cache can't grow
+    /// without bound. Other vaults' entries are kept, so two profiles on
+    /// different vaults don't evict each other.
+    func prune(vaultPath: String, keeping liveKeys: Set<String>) {
+        lock.lock(); defer { lock.unlock() }
+        for key in (keysByVault[vaultPath] ?? []).subtracting(liveKeys) {
+            entries.removeValue(forKey: key)
+        }
+        keysByVault[vaultPath] = liveKeys
+    }
+
+    func removeAll() {
+        lock.lock(); defer { lock.unlock() }
+        entries.removeAll()
+        keysByVault.removeAll()
+    }
+
+    var count: Int {
+        lock.lock(); defer { lock.unlock() }
+        return entries.count
+    }
+}
+
 class ObsidianService {
     private let fileManager = FileManager.default
     private let backupService = FileBackupService.shared
@@ -42,12 +93,19 @@ class ObsidianService {
         let tasks: [SyncTask]
     }
 
-    /// Keyed by absolute file path. Persists across syncs for the lifetime of
-    /// this service instance (the source is recreated when the vault/config
-    /// changes, so a new instance starts cold). The big win is a
-    /// file-watcher-triggered re-sync: only the one edited file re-parses, the
-    /// rest of a large vault comes straight from cache.
-    private var parseCache: [String: CachedParse] = [:]
+    /// Keyed by absolute file path. Shared across service instances (see
+    /// `ObsidianParseCache`), so it persists across syncs even though the
+    /// source is rebuilt for each one. The big win is that a sync re-parses
+    /// only the files that changed; the rest of a large vault comes straight
+    /// from cache.
+    private let parseCache: ObsidianParseCache
+
+    /// - Parameter parseCache: where parsed files are cached. Defaults to the
+    ///   shared cache so a freshly built service benefits from earlier scans;
+    ///   tests pass their own to start cold.
+    init(parseCache: ObsidianParseCache = .shared) {
+        self.parseCache = parseCache
+    }
 
     /// Drop the incremental-scan cache. Not required for correctness (the
     /// signature check already invalidates on parameter changes and the
@@ -113,7 +171,7 @@ class ObsidianService {
             let preAttrs = try? fileManager.attributesOfItem(atPath: key)
             if let modDate = preAttrs?[.modificationDate] as? Date,
                let size = preAttrs?[.size] as? Int,
-               let cached = parseCache[key],
+               let cached = parseCache.get(key) as? CachedParse,
                cached.modificationDate == modDate,
                cached.size == size,
                cached.signature == signature {
@@ -151,23 +209,21 @@ class ObsidianService {
                 if let postAttrs = try? fileManager.attributesOfItem(atPath: key),
                    let postMod = postAttrs[.modificationDate] as? Date,
                    let postSize = postAttrs[.size] as? Int {
-                    parseCache[key] = CachedParse(modificationDate: postMod, size: postSize, signature: signature, tasks: fileTasks)
+                    parseCache.set(key, CachedParse(modificationDate: postMod, size: postSize, signature: signature, tasks: fileTasks))
                 } else {
-                    parseCache.removeValue(forKey: key)
+                    parseCache.set(key, nil)
                 }
             } catch {
                 // Skip files that can't be read (e.g., deleted between scan and read,
                 // permission issues, or broken symlinks). Drop any stale cache entry.
-                parseCache.removeValue(forKey: key)
+                parseCache.set(key, nil)
                 debugLog("[ObsidianService] Skipping unreadable file: \(fileURL.lastPathComponent) — \(error.localizedDescription)")
             }
         }
 
         // Prune cache entries for files that no longer appear in the scan
         // (deleted, moved, or newly excluded) so the cache can't grow unbounded.
-        if parseCache.count > liveKeys.count {
-            parseCache = parseCache.filter { liveKeys.contains($0.key) }
-        }
+        parseCache.prune(vaultPath: vaultURL.path, keeping: liveKeys)
 
         lastScanCacheHits = cacheHits
         debugLog("[ObsidianService] Total tasks found: \(tasks.count) (\(cacheHits)/\(markdownFiles.count) files served from cache)")

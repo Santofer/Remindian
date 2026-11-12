@@ -20,7 +20,9 @@ final class ObsidianServiceParseCacheTests: XCTestCase {
         vaultURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("remindian-cache-test-\(UUID().uuidString)")
         try! FileManager.default.createDirectory(at: vaultURL, withIntermediateDirectories: true)
-        service = ObsidianService()
+        // A private cache, so each test starts cold and other tests' scans
+        // can't warm it.
+        service = ObsidianService(parseCache: ObsidianParseCache())
     }
 
     override func tearDown() {
@@ -57,7 +59,7 @@ final class ObsidianServiceParseCacheTests: XCTestCase {
     /// A from-scratch scan with a fresh service instance — the cold-path oracle
     /// that the cached scan must match exactly.
     private func coldScan() throws -> [SyncTask] {
-        try ObsidianService().scanVault(at: vaultURL.path, excludedFolders: [])
+        try ObsidianService(parseCache: ObsidianParseCache()).scanVault(at: vaultURL.path, excludedFolders: [])
     }
 
     private func sortedKeys(_ tasks: [SyncTask]) -> [String] {
@@ -177,6 +179,84 @@ final class ObsidianServiceParseCacheTests: XCTestCase {
         let after = try scan()
         XCTAssertEqual(service.lastScanCacheHits, 0, "After clearParseCache, every file must re-parse.")
         try assertMatchesColdScan(after)
+    }
+
+    // MARK: - Shared across service instances
+
+    /// Remindian builds a new source, and so a new `ObsidianService`, for every
+    /// sync and every agenda refresh. The cache must outlive the instance, or
+    /// every sync re-reads the whole vault.
+    func test_newServiceInstance_reusesEarlierScanFromSharedCache() throws {
+        writeFile("a.md", "- [ ] Alpha\n")
+        writeFile("b.md", "- [ ] Beta\n")
+        let cache = ObsidianParseCache()
+
+        let first = ObsidianService(parseCache: cache)
+        _ = try first.scanVault(at: vaultURL.path, excludedFolders: [])
+        XCTAssertEqual(first.lastScanCacheHits, 0)
+
+        let second = ObsidianService(parseCache: cache)
+        let tasks = try second.scanVault(at: vaultURL.path, excludedFolders: [])
+        XCTAssertEqual(second.lastScanCacheHits, 2, "A fresh instance must hit entries cached by an earlier one.")
+        try assertMatchesColdScan(tasks)
+
+        writeFile("a.md", "- [ ] Alpha edited\n")
+        let third = ObsidianService(parseCache: cache)
+        let afterEdit = try third.scanVault(at: vaultURL.path, excludedFolders: [])
+        XCTAssertEqual(third.lastScanCacheHits, 1, "Only the edited file re-parses.")
+        try assertMatchesColdScan(afterEdit)
+    }
+
+    func test_defaultInitUsesTheSharedCache() throws {
+        writeFile("a.md", "- [ ] Alpha\n")
+        _ = try ObsidianService().scanVault(at: vaultURL.path, excludedFolders: [])
+        let again = ObsidianService()
+        _ = try again.scanVault(at: vaultURL.path, excludedFolders: [])
+        XCTAssertEqual(again.lastScanCacheHits, 1)
+    }
+
+    /// Two profiles on different vaults share the cache. Scanning one must not
+    /// evict the other's entries.
+    func test_scanningOneVaultDoesNotPruneAnother() throws {
+        let otherVault = FileManager.default.temporaryDirectory
+            .appendingPathComponent("remindian-cache-test-other-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: otherVault, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: otherVault) }
+        try "- [ ] Other\n".write(to: otherVault.appendingPathComponent("o.md"), atomically: true, encoding: .utf8)
+        writeFile("a.md", "- [ ] Alpha\n")
+
+        let cache = ObsidianParseCache()
+        _ = try ObsidianService(parseCache: cache).scanVault(at: vaultURL.path, excludedFolders: [])
+        _ = try ObsidianService(parseCache: cache).scanVault(at: otherVault.path, excludedFolders: [])
+        let back = ObsidianService(parseCache: cache)
+        _ = try back.scanVault(at: vaultURL.path, excludedFolders: [])
+        XCTAssertEqual(back.lastScanCacheHits, 1, "The first vault's entry survived the other vault's scan.")
+        XCTAssertEqual(cache.count, 2)
+    }
+
+    func test_deletedFileIsPrunedFromSharedCache() throws {
+        writeFile("a.md", "- [ ] Alpha\n")
+        writeFile("b.md", "- [ ] Beta\n")
+        let cache = ObsidianParseCache()
+        _ = try ObsidianService(parseCache: cache).scanVault(at: vaultURL.path, excludedFolders: [])
+        XCTAssertEqual(cache.count, 2)
+        deleteFile("b.md")
+        _ = try ObsidianService(parseCache: cache).scanVault(at: vaultURL.path, excludedFolders: [])
+        XCTAssertEqual(cache.count, 1)
+    }
+
+    /// The sync and the menu-bar agenda can scan at the same time.
+    func test_concurrentScansMatchColdScan() throws {
+        for i in 0..<40 { writeFile("f\(i).md", "- [ ] task \(i)\n- [x] done \(i)\n") }
+        let cache = ObsidianParseCache()
+        let path = vaultURL.path
+        var results = [[SyncTask]](repeating: [], count: 8)
+        let lock = NSLock()
+        DispatchQueue.concurrentPerform(iterations: 8) { i in
+            let tasks = (try? ObsidianService(parseCache: cache).scanVault(at: path, excludedFolders: [])) ?? []
+            lock.lock(); results[i] = tasks; lock.unlock()
+        }
+        for tasks in results { try assertMatchesColdScan(tasks) }
     }
 
     // MARK: - Fuzz: random edits must always match a cold scan
